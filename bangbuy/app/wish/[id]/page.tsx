@@ -10,10 +10,9 @@ export default function WishDetailPage() {
   const router = useRouter();
   const [wish, setWish] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [showContact, setShowContact] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   
-  // 🔽 新增：收藏狀態
+  // 收藏與使用者狀態
   const [isFavorited, setIsFavorited] = useState(false);
   const [user, setUser] = useState<any>(null);
 
@@ -38,7 +37,7 @@ export default function WishDetailPage() {
         setWish(wishData);
       }
 
-      // 3. 檢查是否已收藏 (如果有登入的話)
+      // 3. 檢查是否已收藏
       if (user && wishData) {
         const { data: favData } = await supabase
           .from('favorites')
@@ -63,7 +62,6 @@ export default function WishDetailPage() {
     }
 
     if (isFavorited) {
-      // 取消收藏 (刪除資料)
       await supabase
         .from('favorites')
         .delete()
@@ -71,7 +69,6 @@ export default function WishDetailPage() {
         .eq('wish_id', wish.id);
       setIsFavorited(false);
     } else {
-      // 加入收藏 (新增資料)
       await supabase
         .from('favorites')
         .insert([{ user_id: user.id, wish_id: wish.id }]);
@@ -79,6 +76,7 @@ export default function WishDetailPage() {
     }
   };
 
+  // 🗑️ 刪除功能
   const handleDelete = async () => {
     const confirmDelete = window.confirm('確定要刪除這個許願單嗎？');
     if (!confirmDelete) return;
@@ -98,7 +96,7 @@ export default function WishDetailPage() {
   if (loading) return <div className="p-10 text-center text-gray-500">載入中...</div>;
   if (!wish) return <div className="p-10 text-center text-red-500">找不到這個許願單 😭</div>;
 
-  // 判斷是否為自己的文章 (如果是自己，顯示刪除按鈕；不是自己，顯示收藏按鈕)
+  // 判斷是否為自己的文章
   const isOwner = user && user.id === wish.buyer_id;
 
   return (
@@ -142,7 +140,7 @@ export default function WishDetailPage() {
               <div className="flex items-center gap-4">
                 <h1 className="text-3xl font-bold text-gray-900">{wish.title}</h1>
                 
-                {/* ❤️ 愛心按鈕 (只有不是自己的文章才顯示) */}
+                {/* ❤️ 愛心按鈕 */}
                 {!isOwner && (
                   <button 
                     onClick={toggleFavorite}
@@ -162,7 +160,7 @@ export default function WishDetailPage() {
                 NT$ {wish.budget}
               </div>
               
-              {/* 🗑️ 刪除按鈕 (只有作者本人看得到) */}
+              {/* 🗑️ 刪除按鈕 */}
               {isOwner && (
                 <button 
                   onClick={handleDelete}
@@ -183,27 +181,44 @@ export default function WishDetailPage() {
           </div>
 
           <div className="border-t border-gray-100 pt-8 text-center">
-            {/* 只有非作者本人，才顯示接單按鈕 */}
-            {!isOwner ? (
-              !showContact ? (
+            
+            {/* 接單報價區域 */}
+            {!isOwner && user && (
+              <div className="flex flex-col items-center gap-3">
                 <button 
-                  onClick={() => setShowContact(true)}
-                  className="bg-blue-600 text-white px-10 py-4 rounded-full text-lg font-bold hover:bg-blue-700 transition shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                  onClick={async () => {
+                    const price = prompt('請輸入您想報價的金額 (包含代購費):', wish.budget);
+                    if (!price) return;
+                    
+                    const { error } = await supabase.from('orders').insert([{
+                      wish_id: wish.id,
+                      buyer_id: wish.buyer_id,
+                      shopper_id: user.id,
+                      price: Number(price),
+                      status: 'pending'
+                    }]);
+
+                    if (error) alert('接單失敗: ' + error.message);
+                    else alert('🎉 報價成功！請等待買家確認。');
+                  }}
+                  className="bg-orange-500 text-white px-10 py-4 rounded-full text-lg font-bold hover:bg-orange-600 transition shadow-lg hover:shadow-xl transform hover:-translate-y-1"
                 >
-                  ✋ 我可以幫忙代購
+                  ✋ 我要接單報價
                 </button>
-              ) : (
-                <div className="animate-fade-in bg-blue-50 p-6 rounded-xl inline-block w-full max-w-lg">
-                  <p className="text-sm text-gray-500 mb-2">已取得買家聯絡方式：</p>
-                  <div className="text-4xl font-bold text-gray-800 mb-2 select-all">
-                    {wish.buyer_contact_value}
-                  </div>
-                  <p className="text-blue-600 font-medium">(請使用 LINE 搜尋 ID)</p>
-                </div>
-              )
-            ) : (
-              <p className="text-gray-400">這您自己的許願單，等待有緣人來接單吧！</p>
+                <Link href={`/chat?target=${wish.buyer_id}`} className="text-gray-500 hover:text-blue-600 text-sm underline">
+                  先私訊聊聊
+                </Link>
+              </div>
             )}
+            
+            {!isOwner && !user && (
+              <p className="text-gray-400">請先登入以進行接單。</p>
+            )}
+
+            {isOwner && (
+              <p className="text-gray-400">這是您自己的許願單，請去「會員中心 &gt; 我的訂單」查看有沒有人接單喔！</p>
+            )}
+
           </div>
         </div>
       </div>
