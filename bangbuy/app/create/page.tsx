@@ -5,9 +5,10 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-export default function CreateTripPage() {
+export default function CreatePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
   const [user, setUser] = useState<any>(null);
 
   // 1. 檢查登入
@@ -15,7 +16,7 @@ export default function CreateTripPage() {
     async function checkUser() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        alert('請先登入才能發布行程喔！');
+        alert('請先登入才能許願喔！');
         router.push('/login');
       } else {
         setUser(user);
@@ -25,14 +26,24 @@ export default function CreateTripPage() {
   }, [router]);
   
   const [formData, setFormData] = useState({
-    destination: '',
-    date: '',
+    title: '',
     description: '',
+    budget: '',
+    target_country: 'JP',
+    category: 'food',
+    deadline: '',
+    contact_line: '',
   });
 
   const handleChange = (e: any) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (e: any) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+    }
   };
 
   const handleSubmit = async (e: any) => {
@@ -41,29 +52,42 @@ export default function CreateTripPage() {
     setLoading(true);
 
     try {
-      // 2. 確保 Profile 存在 (如果是新用戶)
-      const userName = user.email?.split('@')[0] || '代購夥伴';
+      let imageUrl = null;
+      if (file) {
+        const fileName = `${Date.now()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage.from('wish-images').upload(fileName, file);
+        if (uploadError) throw uploadError;
+        const { data: publicUrlData } = supabase.storage.from('wish-images').getPublicUrl(fileName);
+        imageUrl = publicUrlData.publicUrl;
+      }
+
+      // 確保 Profile 存在
       await supabase.from('profiles').upsert({
         id: user.id,
-        name: userName,
-        role: 'shopper', // 這裡標記為代購者
+        name: user.user_metadata?.name || user.email?.split('@')[0],
+        role: 'buyer',
       }, { onConflict: 'id' });
 
-      // 3. 寫入行程 (用真正的 ID)
-      const { error } = await supabase.from('trips').insert([
+      // 寫入許願單 (wish_requests)
+      const { error } = await supabase.from('wish_requests').insert([
         {
-          destination: formData.destination,
-          date: formData.date,
+          title: formData.title,
           description: formData.description,
-          shopper_id: user.id, // 👈 真正的 ID
-          shopper_name: userName, // 暫時存名字，之後可以用關聯查
+          budget: Number(formData.budget),
+          target_country: formData.target_country,
+          category: formData.category,
+          deadline: formData.deadline,
+          buyer_contact_type: 'line',
+          buyer_contact_value: formData.contact_line,
+          buyer_id: user.id,
+          status: 'open',
+          images: imageUrl ? [imageUrl] : [],
         },
       ]);
 
       if (error) throw error;
-
-      alert('🎉 行程發布成功！');
-      router.push('/trips');
+      alert('🎉 許願成功！');
+      router.push('/');
 
     } catch (error: any) {
       console.error(error);
@@ -76,65 +100,72 @@ export default function CreateTripPage() {
   if (!user) return <div className="p-10 text-center">檢查權限中...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl p-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-          ✈️ 發布我的行程
+          📝 我要發布許願單
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          
-          <div>
-            <label className="block text-sm font-medium text-gray-700">我要去哪裡？</label>
-            <input
-              name="destination"
-              required
-              placeholder="例如：日本東京、韓國首爾..."
-              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              onChange={handleChange}
-            />
+          <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+            <label className="block text-sm font-medium text-blue-800 mb-2">上傳商品參考圖</label>
+            <input type="file" accept="image/*" onChange={handleFileChange} className="block w-full text-sm text-gray-500 file:bg-blue-600 file:text-white file:rounded-full file:px-4 file:py-2 file:border-0 hover:file:bg-blue-700"/>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">出發/連線日期</label>
-            <input
-              name="date"
-              type="date"
-              required
-              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm"
-              onChange={handleChange}
-            />
+            <label className="block text-sm font-medium text-gray-700">商品名稱</label>
+            <input name="title" required placeholder="例如：日本限定星巴克杯" className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm" onChange={handleChange} />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">代購說明</label>
-            <textarea
-              name="description"
-              required
-              rows={4}
-              placeholder="例如：主要去迪士尼樂園，只接輕便物品，不接電器..."
-              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm"
-              onChange={handleChange}
-            />
+            <label className="block text-sm font-medium text-gray-700">商品分類</label>
+            <select name="category" className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm" onChange={handleChange}>
+              <option value="food">🍪 零食 / 伴手禮</option>
+              <option value="beauty">💄 藥妝 / 美保</option>
+              <option value="clothes">👕 服飾 / 包包</option>
+              <option value="digital">📷 3C / 家電</option>
+              <option value="other">📦 其他</option>
+            </select>
           </div>
 
-          <div className="flex gap-4 pt-2">
-            <Link 
-              href="/trips"
-              className="w-1/3 flex justify-center py-3 px-4 border border-gray-300 rounded-md text-gray-700 font-medium hover:bg-gray-50"
-            >
-              取消
-            </Link>
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-2/3 flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white 
-                ${loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
-            >
-              {loading ? '發布中...' : '確認發布'}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">購買國家</label>
+              <select name="target_country" className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm" onChange={handleChange}>
+                <option value="JP">🇯🇵 日本</option>
+                <option value="KR">🇰🇷 韓國</option>
+                <option value="US">🇺🇸 美國</option>
+                <option value="UK">🇬🇧 英國</option>
+                <option value="TW">🇹🇼 台灣</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">預算 (台幣)</label>
+              <input name="budget" type="number" required className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm" onChange={handleChange} />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">詳細描述 / 網址</label>
+            <textarea name="description" required rows={3} placeholder="請描述顏色、尺寸、數量..." className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm" onChange={handleChange} />
+          </div>
+
+          <div>
+             <label className="block text-sm font-medium text-gray-700">希望截止日期</label>
+             <input name="deadline" type="date" required className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm" onChange={handleChange} />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">您的 LINE ID</label>
+            <input name="contact_line" required className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm" onChange={handleChange} />
+          </div>
+
+          <div className="flex gap-4">
+            <Link href="/" className="w-1/3 py-3 border border-gray-300 text-center rounded-md text-gray-600 font-medium hover:bg-gray-50">取消</Link>
+            <button type="submit" disabled={loading} className="w-2/3 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium shadow-sm">
+              {loading ? '發布中...' : '送出許願單'}
             </button>
           </div>
-
         </form>
       </div>
     </div>
