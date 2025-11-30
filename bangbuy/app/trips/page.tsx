@@ -3,13 +3,14 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Calculator from '@/components/Calculator';
 import Link from 'next/link';
+import { useLanguage } from '@/components/LanguageProvider';
 
 export default function TripsPage() {
+  const { t } = useLanguage();
   const [trips, setTrips] = useState<any[]>([]);
 
   useEffect(() => {
     async function fetchTrips() {
-      // 這次我們用 created_at 倒序排列，讓新的行程在最上面
       const { data } = await supabase
         .from('trips')
         .select('*')
@@ -55,6 +56,7 @@ export default function TripsPage() {
                     {trip.description}
                   </p>
 
+                  {/* 點頭像也可以連去個人頁 */}
                   <Link 
                     href={`/profile/${trip.shopper_id}`} 
                     className="flex items-center gap-2 group w-fit cursor-pointer"
@@ -68,9 +70,13 @@ export default function TripsPage() {
                   </Link>
                 </div>
 
-                <button className="w-full sm:w-auto bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm whitespace-nowrap">
+                {/* 🔽 這裡！按鈕現在會連去聊天室了 */}
+                <Link 
+                  href={`/chat?target=${trip.shopper_id}`}
+                  className="w-full sm:w-auto bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm whitespace-nowrap text-center block"
+                >
                   私訊委託
-                </button>
+                </Link>
               </div>
             ))}
           </div>
@@ -85,7 +91,6 @@ export default function TripsPage() {
                 <p className="text-sm text-blue-600 mb-3">
                   如果你是留學生，發布行程可以賺取額外收入喔！
                 </p>
-                {/* 🔽 這裡改成真的按鈕了！ */}
                 <Link 
                   href="/trips/create"
                   className="block w-full bg-white border border-blue-200 text-blue-600 py-2 rounded-lg text-sm hover:bg-blue-50 text-center font-medium"

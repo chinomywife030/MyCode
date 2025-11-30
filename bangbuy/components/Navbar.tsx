@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { useLanguage } from '@/components/LanguageProvider';
-import { useUserMode } from '@/components/UserModeProvider'; // 1. 引入身分管家
+import { useUserMode } from '@/components/UserModeProvider';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
 export default function Navbar() {
   const { t, lang, changeLanguage } = useLanguage();
-  const { mode, toggleMode } = useUserMode(); // 2. 取得目前的模式和切換功能
+  const { mode, toggleMode } = useUserMode();
   
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
@@ -48,17 +48,15 @@ export default function Navbar() {
     <nav className="bg-white shadow-sm sticky top-0 z-50">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
         
-        {/* 左邊區域：Logo + 身分切換 + 選單 */}
+        {/* 左邊區域 */}
         <div className="flex items-center gap-4 sm:gap-6">
           
-          {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <span className={`text-xl sm:text-2xl font-bold transition-colors ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>
               {t.siteName}
             </span>
           </Link>
 
-          {/* 🔽 新增：身分切換膠囊按鈕 */}
           <button 
             onClick={toggleMode}
             className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border transition-all shadow-sm active:scale-95
@@ -72,19 +70,13 @@ export default function Navbar() {
             <span className="text-gray-400 text-[10px]">⇄</span>
           </button>
 
-          {/* 功能連結 (電腦版顯示) */}
           <div className="hidden md:flex items-center gap-4">
-            <Link href="/trips" className="text-gray-600 font-medium hover:text-blue-600 transition whitespace-nowrap">
-              {/* @ts-ignore */}
-              {t.trips || '✈️ 找行程'}
-            </Link>
             <Link href="/calculator" className="text-gray-600 font-medium hover:text-blue-600 transition whitespace-nowrap">
               {/* @ts-ignore */}
               {t.calculator || '💰 計算機'}
             </Link>
           </div>
 
-          {/* 語言選單 */}
           <div className="relative">
             <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center gap-1 text-gray-500 hover:text-gray-800 transition p-2 rounded-full hover:bg-gray-100">
               <span className="text-xl">🌍</span>
@@ -105,11 +97,22 @@ export default function Navbar() {
           </div>
         </div>
 
-        {/* 右邊區域：登入狀態/按鈕 */}
+        {/* 右邊區域 */}
         <div className="flex items-center gap-4">
           {user ? (
             <div className="flex items-center gap-3">
-              {/* 頭像連到 Dashboard */}
+              
+              {/* 🔽 新增：聊天室按鈕 (登入才看得到) */}
+              <Link 
+                href="/chat" 
+                className="p-2 text-gray-500 hover:text-blue-600 transition hover:bg-blue-50 rounded-full relative group"
+                title="我的訊息"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                </svg>
+              </Link>
+
               <Link href="/dashboard" title="會員中心">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold cursor-pointer hover:ring-2 transition text-white
                   ${mode === 'shopper' ? 'bg-orange-500 hover:ring-orange-300' : 'bg-blue-600 hover:ring-blue-300'}
@@ -125,7 +128,6 @@ export default function Navbar() {
                 登出
               </button>
               
-              {/* 根據模式顯示不同的按鈕 */}
               {mode === 'requester' ? (
                 <Link href="/create" className="hidden sm:block bg-blue-600 text-white px-4 py-2 rounded-full font-medium hover:bg-blue-700 transition shadow-md text-sm whitespace-nowrap">
                   {t.createButton}

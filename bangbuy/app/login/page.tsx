@@ -9,8 +9,9 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [name, setName] = useState(''); // 🔽 新增：名字狀態
   const [loading, setLoading] = useState(false);
-  const [isSignUp, setIsSignUp] = useState(false); // 控制是登入還是註冊
+  const [isSignUp, setIsSignUp] = useState(false);
 
   const handleAuth = async (e: any) => {
     e.preventDefault();
@@ -18,21 +19,29 @@ export default function LoginPage() {
 
     try {
       if (isSignUp) {
-        // 註冊
+        // 註冊邏輯：把名字一起傳過去
         const { error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              name: name || email.split('@')[0], // 如果沒填名字，就用 Email 前綴
+            },
+          },
         });
         if (error) throw error;
-        alert('🎉 註冊成功！請去信箱收取驗證信，然後就可以登入了！');
+        alert('🎉 註冊成功！');
+        // 註冊成功後通常會自動登入，直接重新整理或跳轉
+        router.push('/'); 
+        router.refresh();
       } else {
-        // 登入
+        // 登入邏輯
         const { error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
-        router.push('/'); // 登入成功回首頁
+        router.push('/');
         router.refresh();
       }
     } catch (error: any) {
@@ -53,6 +62,22 @@ export default function LoginPage() {
         </p>
 
         <form onSubmit={handleAuth} className="space-y-4">
+          
+          {/* 🔽 新增：只有註冊時才顯示「暱稱」輸入框 */}
+          {isSignUp && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">暱稱 (顯示名稱)</label>
+              <input
+                type="text"
+                required
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                placeholder="例如：小明 (日本連線)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
