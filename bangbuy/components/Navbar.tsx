@@ -2,12 +2,15 @@
 
 import Link from 'next/link';
 import { useLanguage } from '@/components/LanguageProvider';
+import { useUserMode } from '@/components/UserModeProvider'; // 1. 引入身分管家
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 
 export default function Navbar() {
   const { t, lang, changeLanguage } = useLanguage();
+  const { mode, toggleMode } = useUserMode(); // 2. 取得目前的模式和切換功能
+  
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
   const router = useRouter();
@@ -45,22 +48,43 @@ export default function Navbar() {
     <nav className="bg-white shadow-sm sticky top-0 z-50">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
         
+        {/* 左邊區域：Logo + 身分切換 + 選單 */}
         <div className="flex items-center gap-4 sm:gap-6">
-          <Link href="/" className="text-xl sm:text-2xl font-bold text-blue-600">
-            {t.siteName}
+          
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2">
+            <span className={`text-xl sm:text-2xl font-bold transition-colors ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>
+              {t.siteName}
+            </span>
           </Link>
 
+          {/* 🔽 新增：身分切換膠囊按鈕 */}
+          <button 
+            onClick={toggleMode}
+            className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border transition-all shadow-sm active:scale-95
+              ${mode === 'requester' 
+                ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' 
+                : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100'
+              }`}
+            title="點擊切換身分"
+          >
+            {mode === 'requester' ? '🛍️ 買家模式' : '✈️ 留學生模式'}
+            <span className="text-gray-400 text-[10px]">⇄</span>
+          </button>
+
+          {/* 功能連結 (電腦版顯示) */}
           <div className="hidden md:flex items-center gap-4">
-            <Link href="/trips" className="text-gray-600 font-medium hover:text-blue-600 transition">
+            <Link href="/trips" className="text-gray-600 font-medium hover:text-blue-600 transition whitespace-nowrap">
               {/* @ts-ignore */}
               {t.trips || '✈️ 找行程'}
             </Link>
-            <Link href="/calculator" className="text-gray-600 font-medium hover:text-blue-600 transition">
+            <Link href="/calculator" className="text-gray-600 font-medium hover:text-blue-600 transition whitespace-nowrap">
               {/* @ts-ignore */}
               {t.calculator || '💰 計算機'}
             </Link>
           </div>
 
+          {/* 語言選單 */}
           <div className="relative">
             <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center gap-1 text-gray-500 hover:text-gray-800 transition p-2 rounded-full hover:bg-gray-100">
               <span className="text-xl">🌍</span>
@@ -81,24 +105,36 @@ export default function Navbar() {
           </div>
         </div>
 
+        {/* 右邊區域：登入狀態/按鈕 */}
         <div className="flex items-center gap-4">
           {user ? (
             <div className="flex items-center gap-3">
-              {/* 🔽 關鍵修改：這裡連去 /dashboard (會員中心) */}
-              <Link href="/dashboard" title="會員中心/我的收藏">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold cursor-pointer hover:ring-2 hover:ring-blue-300 transition">
+              {/* 頭像連到 Dashboard */}
+              <Link href="/dashboard" title="會員中心">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold cursor-pointer hover:ring-2 transition text-white
+                  ${mode === 'shopper' ? 'bg-orange-500 hover:ring-orange-300' : 'bg-blue-600 hover:ring-blue-300'}
+                `}>
                   {user.email?.[0].toUpperCase()}
                 </div>
               </Link>
+              
               <button 
                 onClick={handleLogout}
                 className="text-sm text-gray-500 hover:text-red-500 whitespace-nowrap"
               >
                 登出
               </button>
-              <Link href="/create" className="hidden sm:block bg-blue-600 text-white px-4 py-2 rounded-full font-medium hover:bg-blue-700 transition shadow-md text-sm whitespace-nowrap">
-                {t.createButton}
-              </Link>
+              
+              {/* 根據模式顯示不同的按鈕 */}
+              {mode === 'requester' ? (
+                <Link href="/create" className="hidden sm:block bg-blue-600 text-white px-4 py-2 rounded-full font-medium hover:bg-blue-700 transition shadow-md text-sm whitespace-nowrap">
+                  {t.createButton}
+                </Link>
+              ) : (
+                <Link href="/trips/create" className="hidden sm:block bg-orange-500 text-white px-4 py-2 rounded-full font-medium hover:bg-orange-600 transition shadow-md text-sm whitespace-nowrap">
+                  ＋ 發布行程
+                </Link>
+              )}
             </div>
           ) : (
             <div className="flex items-center gap-3">
