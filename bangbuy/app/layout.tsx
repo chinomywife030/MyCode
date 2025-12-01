@@ -1,6 +1,7 @@
 import './globals.css';
 import { LanguageProvider } from '@/components/LanguageProvider';
-import { UserModeProvider } from '@/components/UserModeProvider'; // 👈 1. 這裡要引入
+import { UserModeProvider } from '@/components/UserModeProvider';
+import FloatingButton from '@/components/FloatingButton'; // 👈 1. 引入元件
 
 export const metadata = {
   title: 'BangBuy 幫買',
@@ -16,9 +17,12 @@ export default function RootLayout({
     <html lang="zh">
       <body>
         <LanguageProvider>
-          {/* 🔽 2. 這層非常重要！沒有它，切換功能就是壞的 */}
           <UserModeProvider>
             {children}
+            
+            {/* 🔽 2. 放在這裡，就會浮在所有頁面的最上面 */}
+            <FloatingButton />
+            
           </UserModeProvider>
         </LanguageProvider>
       </body>
