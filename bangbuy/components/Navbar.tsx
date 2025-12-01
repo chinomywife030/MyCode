@@ -45,37 +45,40 @@ export default function Navbar() {
   };
 
   return (
-    // ✨ 修改：加入 backdrop-blur (毛玻璃) 與 bg-white/80 (半透明白)
     <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 transition-all">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
         
         {/* 左邊區域 */}
-        <div className="flex items-center gap-3 sm:gap-6">
-          <Link href="/" className="flex items-center gap-2 group">
+        <div className="flex items-center gap-2 sm:gap-6">
+          <Link href="/" className="flex items-center gap-2 group shrink-0">
             <div className="transform transition-transform group-hover:rotate-12">
               <Logo className="w-8 h-8 sm:w-9 sm:h-9" />
             </div>
-            <span className={`hidden sm:block text-xl font-black tracking-tighter transition-colors ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>
+            {/* 🔽 修改：移除 'hidden sm:block'，讓手機版也顯示文字 */}
+            <span className={`text-lg sm:text-xl font-black tracking-tighter transition-colors ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>
               {t.siteName}
             </span>
           </Link>
 
-          {/* ✨ 修改：模式切換按鈕優化 */}
+          {/* 切換按鈕：手機版隱藏文字只留圖示，節省空間 */}
           <button 
             onClick={toggleMode}
-            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm hover:shadow-md active:scale-95 border
+            className={`flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm hover:shadow-md active:scale-95 border shrink-0
               ${mode === 'requester' 
                 ? 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100' 
                 : 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100'
               }`}
           >
-            {mode === 'requester' ? '🛍️ 買家模式' : '✈️ 留學生模式'}
+            {/* 手機版顯示簡短文字，電腦版顯示完整 */}
+            <span className="sm:hidden">{mode === 'requester' ? '買家' : '代購'}</span>
+            <span className="hidden sm:inline">{mode === 'requester' ? '🛍️ 買家模式' : '✈️ 留學生模式'}</span>
+            
             <span className="text-gray-400 text-[10px] hidden sm:inline opacity-60">⇄ 切換</span>
           </button>
 
           <Link 
             href="/calculator" 
-            className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-blue-600 px-3 py-1.5 rounded-lg font-bold transition text-xs sm:text-sm border border-transparent hover:border-gray-200"
+            className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-blue-600 px-2 sm:px-3 py-1.5 rounded-lg font-bold transition text-xs sm:text-sm border border-transparent hover:border-gray-200 shrink-0"
             title="匯率/運費試算"
           >
             <span className="text-lg">🧮</span>
@@ -92,7 +95,7 @@ export default function Navbar() {
               </Link>
 
               <Link href="/dashboard" title="會員中心">
-                <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold cursor-pointer transition-all border-2
+                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center font-bold cursor-pointer transition-all border-2 shrink-0
                   ${mode === 'shopper' 
                     ? 'border-orange-100 hover:border-orange-300 bg-orange-50 text-orange-600' 
                     : 'border-blue-100 hover:border-blue-300 bg-blue-50 text-blue-600'}
@@ -105,18 +108,20 @@ export default function Navbar() {
                 </div>
               </Link>
               
-              <button onClick={handleLogout} className="text-sm font-medium text-gray-500 hover:text-red-500 px-2 transition-colors">登出</button>
+              {/* 手機版隱藏登出文字，只留圖示 (如果要更省空間)，這邊先保留文字但縮小間距 */}
+              <button onClick={handleLogout} className="text-sm font-medium text-gray-500 hover:text-red-500 px-1 sm:px-2 transition-colors whitespace-nowrap">登出</button>
               
+              {/* 手機版隱藏「發布按鈕」(通常手機版畫面小，讓使用者去首頁或會員中心操作比較好，或者只顯示 + 號) */}
               {mode === 'requester' ? (
-                <Link href="/create" className="hidden sm:block bg-blue-600 text-white px-5 py-2 rounded-full font-bold hover:bg-blue-700 transition shadow-md shadow-blue-200 hover:shadow-lg active:scale-95 text-sm whitespace-nowrap">{t.createButton}</Link>
+                <Link href="/create" className="hidden md:block bg-blue-600 text-white px-5 py-2 rounded-full font-bold hover:bg-blue-700 transition shadow-md shadow-blue-200 hover:shadow-lg active:scale-95 text-sm whitespace-nowrap">{t.createButton}</Link>
               ) : (
-                <Link href="/trips/create" className="hidden sm:block bg-orange-500 text-white px-5 py-2 rounded-full font-bold hover:bg-orange-600 transition shadow-md shadow-orange-200 hover:shadow-lg active:scale-95 text-sm whitespace-nowrap">＋ 發布行程</Link>
+                <Link href="/trips/create" className="hidden md:block bg-orange-500 text-white px-5 py-2 rounded-full font-bold hover:bg-orange-600 transition shadow-md shadow-orange-200 hover:shadow-lg active:scale-95 text-sm whitespace-nowrap">＋ 發布行程</Link>
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 sm:gap-4">
               <Link href="/login" className="text-gray-600 font-bold hover:text-blue-600 text-sm whitespace-nowrap transition-colors">登入</Link>
-              <Link href="/create" className="bg-gray-900 text-white px-5 py-2.5 rounded-full font-bold hover:bg-black transition shadow-lg hover:shadow-xl active:scale-95 text-sm whitespace-nowrap">{t.createButton}</Link>
+              <Link href="/create" className="bg-gray-900 text-white px-4 sm:px-5 py-2 sm:py-2.5 rounded-full font-bold hover:bg-black transition shadow-lg hover:shadow-xl active:scale-95 text-sm whitespace-nowrap">{t.createButton}</Link>
             </div>
           )}
         </div>
