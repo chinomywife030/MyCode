@@ -11,7 +11,6 @@ export default function CreatePage() {
   const [file, setFile] = useState<File | null>(null);
   const [user, setUser] = useState<any>(null);
 
-  // 1. 檢查登入
   useEffect(() => {
     async function checkUser() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -32,7 +31,6 @@ export default function CreatePage() {
     target_country: 'JP',
     category: 'food',
     deadline: '',
-    contact_line: '',
   });
 
   const handleChange = (e: any) => {
@@ -61,14 +59,13 @@ export default function CreatePage() {
         imageUrl = publicUrlData.publicUrl;
       }
 
-      // 確保 Profile 存在
       await supabase.from('profiles').upsert({
         id: user.id,
         name: user.user_metadata?.name || user.email?.split('@')[0],
         role: 'buyer',
       }, { onConflict: 'id' });
 
-      // 寫入許願單 (wish_requests)
+      // 這裡修正了 contact_type 為 chat
       const { error } = await supabase.from('wish_requests').insert([
         {
           title: formData.title,
@@ -77,8 +74,8 @@ export default function CreatePage() {
           target_country: formData.target_country,
           category: formData.category,
           deadline: formData.deadline,
-          buyer_contact_type: 'line',
-          buyer_contact_value: formData.contact_line,
+          buyer_contact_type: 'chat',
+          buyer_contact_value: 'In-App Chat',
           buyer_id: user.id,
           status: 'open',
           images: imageUrl ? [imageUrl] : [],
@@ -102,10 +99,10 @@ export default function CreatePage() {
   return (
     <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md mx-auto bg-white rounded-xl shadow-md overflow-hidden md:max-w-2xl p-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">
           📝 我要發布許願單
         </h2>
-
+        
         <form onSubmit={handleSubmit} className="space-y-6">
           <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
             <label className="block text-sm font-medium text-blue-800 mb-2">上傳商品參考圖</label>
@@ -153,11 +150,6 @@ export default function CreatePage() {
           <div>
              <label className="block text-sm font-medium text-gray-700">希望截止日期</label>
              <input name="deadline" type="date" required className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm" onChange={handleChange} />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">您的 LINE ID</label>
-            <input name="contact_line" required className="mt-1 block w-full rounded-md border border-gray-300 p-2 shadow-sm" onChange={handleChange} />
           </div>
 
           <div className="flex gap-4">
