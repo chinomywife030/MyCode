@@ -9,12 +9,11 @@ import { useRouter } from 'next/navigation';
 import Logo from '@/components/Logo';
 
 export default function Navbar() {
-  const { t, lang, changeLanguage } = useLanguage();
+  const { t } = useLanguage();
   const { mode, toggleMode } = useUserMode();
   
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string>(''); // 新增：存頭像
+  const [avatarUrl, setAvatarUrl] = useState<string>('');
   const router = useRouter();
 
   useEffect(() => {
@@ -22,7 +21,6 @@ export default function Navbar() {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
 
-      // 🔽 新增：如果有登入，去抓 profile 裡的頭像
       if (user) {
         const { data: profile } = await supabase
           .from('profiles')
@@ -46,101 +44,79 @@ export default function Navbar() {
     router.refresh();
   };
 
-  const languages = [
-    { code: 'zh', label: '繁體中文 (TW)' },
-    { code: 'en', label: 'English (US)' },
-    { code: 'jp', label: '日本語 (JP)' },
-    { code: 'kr', label: '한국어 (KR)' },
-  ];
-  
-  // @ts-ignore
-  const currentLangLabel = languages.find(l => l.code === lang)?.label || 'Language';
-
   return (
-    <nav className="bg-white shadow-sm sticky top-0 z-50">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
+    // ✨ 修改：加入 backdrop-blur (毛玻璃) 與 bg-white/80 (半透明白)
+    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100 transition-all">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
         
         {/* 左邊區域 */}
-        <div className="flex items-center gap-4 sm:gap-6">
+        <div className="flex items-center gap-3 sm:gap-6">
           <Link href="/" className="flex items-center gap-2 group">
-            <Logo className="w-8 h-8 sm:w-10 sm:h-10 transition-transform group-hover:scale-110" />
-            <span className={`text-xl sm:text-2xl font-black tracking-tighter transition-colors ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>
+            <div className="transform transition-transform group-hover:rotate-12">
+              <Logo className="w-8 h-8 sm:w-9 sm:h-9" />
+            </div>
+            <span className={`hidden sm:block text-xl font-black tracking-tighter transition-colors ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>
               {t.siteName}
             </span>
           </Link>
 
+          {/* ✨ 修改：模式切換按鈕優化 */}
           <button 
             onClick={toggleMode}
-            className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border transition-all shadow-sm active:scale-95
+            className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm hover:shadow-md active:scale-95 border
               ${mode === 'requester' 
-                ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100' 
-                : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100'
+                ? 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100' 
+                : 'bg-orange-50 text-orange-600 border-orange-100 hover:bg-orange-100'
               }`}
           >
             {mode === 'requester' ? '🛍️ 買家模式' : '✈️ 留學生模式'}
-            <span className="text-gray-400 text-[10px]">⇄</span>
+            <span className="text-gray-400 text-[10px] hidden sm:inline opacity-60">⇄ 切換</span>
           </button>
 
-          <div className="hidden md:flex items-center gap-4">
-            <Link href="/calculator" className="text-gray-600 font-medium hover:text-blue-600 transition whitespace-nowrap">
-              {/* @ts-ignore */}
-              {t.calculator || '💰 計算機'}
-            </Link>
-          </div>
-
-          <div className="relative">
-            <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="flex items-center gap-1 text-gray-500 hover:text-gray-800 transition p-2 rounded-full hover:bg-gray-100">
-              <span className="text-xl">🌍</span>
-            </button>
-            {isMenuOpen && (
-              <div className="absolute top-12 left-0 w-40 bg-white rounded-lg shadow-xl border border-gray-100 overflow-hidden animate-fade-in">
-                {languages.map((item) => (
-                  <button 
-                    key={item.code} 
-                    onClick={() => { changeLanguage(item.code as any); setIsMenuOpen(false); }} 
-                    className={`w-full text-left px-4 py-3 text-sm hover:bg-gray-50 transition ${lang === item.code ? 'text-blue-600 font-bold bg-blue-50' : 'text-gray-700'}`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          <Link 
+            href="/calculator" 
+            className="flex items-center gap-1.5 bg-gray-50 hover:bg-gray-100 text-gray-600 hover:text-blue-600 px-3 py-1.5 rounded-lg font-bold transition text-xs sm:text-sm border border-transparent hover:border-gray-200"
+            title="匯率/運費試算"
+          >
+            <span className="text-lg">🧮</span>
+            <span className="hidden sm:inline">試算</span>
+          </Link>
         </div>
 
         {/* 右邊區域 */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           {user ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <Link href="/chat" className="p-2 text-gray-500 hover:text-blue-600 transition hover:bg-blue-50 rounded-full relative group">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg>
               </Link>
 
               <Link href="/dashboard" title="會員中心">
-                {/* 🔽 修改：如果有頭像就顯示圖片，沒有就顯示藍色圓圈 */}
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold cursor-pointer hover:ring-2 transition overflow-hidden border border-gray-200
-                  ${mode === 'shopper' ? 'bg-orange-500 hover:ring-orange-300' : 'bg-blue-600 hover:ring-blue-300'}
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold cursor-pointer transition-all border-2
+                  ${mode === 'shopper' 
+                    ? 'border-orange-100 hover:border-orange-300 bg-orange-50 text-orange-600' 
+                    : 'border-blue-100 hover:border-blue-300 bg-blue-50 text-blue-600'}
                 `}>
                   {avatarUrl ? (
-                    <img src={avatarUrl} alt="User" className="w-full h-full object-cover" />
+                    <img src={avatarUrl} alt="User" className="w-full h-full object-cover rounded-full" />
                   ) : (
-                    <span className="text-white">{user.email?.[0].toUpperCase()}</span>
+                    <span>{user.email?.[0].toUpperCase()}</span>
                   )}
                 </div>
               </Link>
               
-              <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-red-500 whitespace-nowrap">登出</button>
+              <button onClick={handleLogout} className="text-sm font-medium text-gray-500 hover:text-red-500 px-2 transition-colors">登出</button>
               
               {mode === 'requester' ? (
-                <Link href="/create" className="hidden sm:block bg-blue-600 text-white px-4 py-2 rounded-full font-medium hover:bg-blue-700 transition shadow-md text-sm whitespace-nowrap">{t.createButton}</Link>
+                <Link href="/create" className="hidden sm:block bg-blue-600 text-white px-5 py-2 rounded-full font-bold hover:bg-blue-700 transition shadow-md shadow-blue-200 hover:shadow-lg active:scale-95 text-sm whitespace-nowrap">{t.createButton}</Link>
               ) : (
-                <Link href="/trips/create" className="hidden sm:block bg-orange-500 text-white px-4 py-2 rounded-full font-medium hover:bg-orange-600 transition shadow-md text-sm whitespace-nowrap">＋ 發布行程</Link>
+                <Link href="/trips/create" className="hidden sm:block bg-orange-500 text-white px-5 py-2 rounded-full font-bold hover:bg-orange-600 transition shadow-md shadow-orange-200 hover:shadow-lg active:scale-95 text-sm whitespace-nowrap">＋ 發布行程</Link>
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-3">
-              <Link href="/login" className="text-gray-600 font-medium hover:text-blue-600 text-sm whitespace-nowrap">登入</Link>
-              <Link href="/create" className="bg-blue-600 text-white px-4 py-2 rounded-full font-medium hover:bg-blue-700 transition shadow-md text-sm whitespace-nowrap">{t.createButton}</Link>
+            <div className="flex items-center gap-4">
+              <Link href="/login" className="text-gray-600 font-bold hover:text-blue-600 text-sm whitespace-nowrap transition-colors">登入</Link>
+              <Link href="/create" className="bg-gray-900 text-white px-5 py-2.5 rounded-full font-bold hover:bg-black transition shadow-lg hover:shadow-xl active:scale-95 text-sm whitespace-nowrap">{t.createButton}</Link>
             </div>
           )}
         </div>
