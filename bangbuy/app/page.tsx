@@ -12,6 +12,7 @@ export default function Home() {
   const { t } = useLanguage();
   const { mode } = useUserMode();
   
+  // 🔽 修正 1: 加上 <any[]> 解決 TypeScript 紅線報錯
   const [wishes, setWishes] = useState<any[]>([]);
   const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -23,17 +24,16 @@ export default function Home() {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // 🔽 修改：多抓了 profiles (發文者資料)
       const [wishesRes, tripsRes] = await Promise.all([
         supabase
           .from('wish_requests')
-          .select('*, profiles:buyer_id(name, avatar_url)') // 關聯抓取買家資料
+          .select('*, profiles:buyer_id(name, avatar_url)')
           .eq('status', 'open')
           .order('created_at', { ascending: false }),
         
         supabase
           .from('trips')
-          .select('*, profiles:shopper_id(name, avatar_url)') // 關聯抓取留學生資料
+          .select('*, profiles:shopper_id(name, avatar_url)')
           .order('created_at', { ascending: false })
       ]);
 
@@ -115,7 +115,6 @@ export default function Home() {
                       <h3 className="text-2xl font-extrabold mb-2 text-gray-900 group-hover:text-blue-700 transition-colors">{trip.destination}</h3>
                       <p className="text-gray-600 text-base mb-4 line-clamp-2 leading-relaxed">{trip.description}</p>
                       
-                      {/* 🔽 顯示行程發布者的頭像 */}
                       <Link href={`/profile/${trip.shopper_id}`} className="flex items-center gap-3 group/profile w-fit p-2 -ml-2 rounded-lg hover:bg-white/50 transition">
                         <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden ring-2 ring-white shadow-sm">
                            {trip.profiles?.avatar_url ? <img src={trip.profiles.avatar_url} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center bg-blue-200 text-blue-600 font-bold">{trip.shopper_name?.[0]}</div>}
@@ -143,39 +142,49 @@ export default function Home() {
             {loading ? <p className="text-gray-500 text-lg py-10 text-center">正在整理願望...</p> : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {wishes.map((wish) => (
-                  <Link key={wish.id} href={`/wish/${wish.id}`} className="block group relative">
-                    <div className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-orange-200 h-full flex flex-col transform hover:-translate-y-1">
-                      <div className="h-56 bg-gray-50 relative w-full overflow-hidden flex justify-center items-center">
-                        {wish.images?.[0] ? <img src={wish.images[0]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"/> : <div className="text-6xl opacity-20">🎁</div>}
-                        <button onClick={(e) => toggleFavorite(e, wish.id)} className={`absolute top-3 right-3 p-2.5 rounded-full transition shadow-sm backdrop-blur-sm ${myFavorites.includes(wish.id) ? 'bg-white text-red-500 shadow-red-100' : 'bg-black/20 text-white hover:bg-white hover:text-red-500'}`}>
-                          <svg xmlns="http://www.w3.org/2000/svg" fill={myFavorites.includes(wish.id) ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" /></svg>
-                        </button>
-                        <div className="absolute top-3 left-3">
-                           <span className="backdrop-blur-md bg-white/80 text-gray-800 text-sm font-bold px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1">
-                             {getFlag(wish.target_country)} {wish.target_country}
-                           </span>
-                        </div>
-                      </div>
-                      <div className="p-5 flex flex-col flex-grow">
-                        <div className="mb-3">
-                          <span className="block text-2xl font-extrabold text-gray-900 mb-1">${Number(wish.budget).toLocaleString()}</span>
-                          <h3 className="font-bold text-lg text-gray-700 line-clamp-2 group-hover:text-orange-600 transition-colors">{wish.title}</h3>
-                        </div>
-                        
-                        {/* 🔽 顯示許願者的小頭像 */}
-                        <div className="flex items-center gap-2 mb-3">
-                           <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden">
-                             {wish.profiles?.avatar_url ? <img src={wish.profiles.avatar_url} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-blue-100"></div>}
-                           </div>
-                           <span className="text-xs text-gray-500">{wish.profiles?.name}</span>
-                        </div>
+                  // 🔽 修正 2: 外層改成 div，不再是 Link (避免連結包連結錯誤)
+                  <div key={wish.id} className="group relative bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-orange-200 h-full flex flex-col transform hover:-translate-y-1">
+                    
+                    {/* 圖片區域 (點擊跳轉) */}
+                    <Link href={`/wish/${wish.id}`} className="h-56 bg-gray-50 relative w-full overflow-hidden flex justify-center items-center cursor-pointer block">
+                      {wish.images?.[0] ? <img src={wish.images[0]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"/> : <div className="text-6xl opacity-20">🎁</div>}
+                    </Link>
 
-                        <Link href={`/chat?target=${wish.buyer_id}`} className="w-full mt-auto py-3 bg-orange-50 text-orange-600 rounded-xl text-base font-bold group-hover:bg-orange-500 group-hover:text-white transition-all shadow-sm hover:shadow-md text-center block">
-                          ✋ 私訊接單
+                    {/* 愛心按鈕 (獨立於 Link 之外) */}
+                    <button onClick={(e) => toggleFavorite(e, wish.id)} className={`absolute top-3 right-3 p-2.5 rounded-full transition shadow-sm backdrop-blur-sm z-10 ${myFavorites.includes(wish.id) ? 'bg-white text-red-500 shadow-red-100' : 'bg-black/20 text-white hover:bg-white hover:text-red-500'}`}>
+                      <svg xmlns="http://www.w3.org/2000/svg" fill={myFavorites.includes(wish.id) ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" /></svg>
+                    </button>
+
+                    {/* 國旗標籤 (獨立於 Link 之外) */}
+                    <div className="absolute top-3 left-3 z-10 pointer-events-none">
+                       <span className="backdrop-blur-md bg-white/80 text-gray-800 text-sm font-bold px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1">
+                         {getFlag(wish.target_country)} {wish.target_country}
+                       </span>
+                    </div>
+
+                    <div className="p-5 flex flex-col flex-grow">
+                      <div className="mb-3">
+                        <span className="block text-2xl font-extrabold text-gray-900 mb-1">${Number(wish.budget).toLocaleString()}</span>
+                        {/* 標題 (點擊跳轉) */}
+                        <Link href={`/wish/${wish.id}`}>
+                          <h3 className="font-bold text-lg text-gray-700 line-clamp-2 group-hover:text-orange-600 transition-colors cursor-pointer">{wish.title}</h3>
                         </Link>
                       </div>
+                      
+                      {/* 許願者頭像 */}
+                      <div className="flex items-center gap-2 mb-3">
+                         <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden">
+                           {wish.profiles?.avatar_url ? <img src={wish.profiles.avatar_url} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-blue-100"></div>}
+                         </div>
+                         <span className="text-xs text-gray-500">{wish.profiles?.name}</span>
+                      </div>
+
+                      {/* 接單按鈕 (獨立的 Link) */}
+                      <Link href={`/chat?target=${wish.buyer_id}`} className="w-full mt-auto py-3 bg-orange-50 text-orange-600 rounded-xl text-base font-bold group-hover:bg-orange-500 group-hover:text-white transition-all shadow-sm hover:shadow-md text-center block">
+                        ✋ 私訊接單
+                      </Link>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             )}

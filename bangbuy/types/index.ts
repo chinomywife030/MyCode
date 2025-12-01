@@ -1,39 +1,14 @@
-// types/index.ts
-
-export type OrderStatus = 'pending' | 'accepted' | 'purchased' | 'shipped' | 'completed' | 'cancelled';
-
-export interface Profile {
+// src/types/index.ts 加入下面這段
+export interface Review {
   id: string;
-  name: string;
-  avatar_url?: string;
-  role: 'buyer' | 'shopper';
-  is_shopper: boolean;
-  country?: string;
-  verified: boolean;
-  rating_avg: number;
-  rating_count: number;
-}
-
-export interface Order {
-  id: string;
-  wish_id: string;
-  buyer_id: string;
-  shopper_id: string;
-  status: OrderStatus;
-  price_final?: number;
-  shipping_info?: string;
+  order_id: string;
+  reviewer_id: string;
+  target_id: string;
+  rating: number;
+  comment: string;
   created_at: string;
-  // 關聯資料 (Join)
-  wish_requests?: any; 
-  profiles?: Profile; // 指 Shopper
-}
-
-export interface Notification {
-  id: string;
-  user_id: string;
-  title: string;
-  message: string;
-  link?: string;
-  is_read: boolean;
-  created_at: string;
+  reviewer?: {
+    name: string;
+    avatar_url?: string;
+  };
 }

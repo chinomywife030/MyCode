@@ -5,20 +5,23 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLanguage } from '@/components/LanguageProvider';
+import ReviewModal from '@/components/ReviewModal';
 
 export default function Dashboard() {
   const { t } = useLanguage();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
-  // 🔽 新增 orders 分頁
   const [activeTab, setActiveTab] = useState<'wishes' | 'trips' | 'favorites' | 'orders'>('wishes');
   
   const [myWishes, setMyWishes] = useState<any[]>([]);
   const [myTrips, setMyTrips] = useState<any[]>([]);
   const [myFavorites, setMyFavorites] = useState<any[]>([]);
-  const [myOrders, setMyOrders] = useState<any[]>([]); // 🔽 新增訂單狀態
+  const [myOrders, setMyOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 評價 Modal 狀態
+  const [reviewModal, setReviewModal] = useState<{open: boolean, orderId: string, targetId: string, targetName: string} | null>(null);
 
   // 編輯模式
   const [isEditing, setIsEditing] = useState(false);
@@ -51,7 +54,7 @@ export default function Dashboard() {
       const { data: favs } = await supabase.from('favorites').select(`wish_id, wish_requests (*)`).eq('user_id', user.id);
       if (favs) setMyFavorites(favs.map((f: any) => f.wish_requests).filter(Boolean));
 
-      // 🔽 抓訂單 (我是買家 OR 我是接單者)
+      // 抓訂單
       const { data: orders } = await supabase
         .from('orders')
         .select(`
@@ -112,7 +115,7 @@ export default function Dashboard() {
     setMyTrips(prev => prev.filter(t => t.id !== id));
   };
 
-  // 🔽 更新訂單狀態
+  // 更新訂單狀態
   const updateOrderStatus = async (orderId: string, status: string) => {
     await supabase.from('orders').update({ status }).eq('id', orderId);
     setMyOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
@@ -150,7 +153,6 @@ export default function Dashboard() {
               <MenuButton id="wishes" icon="🎁" label={t.dashboard.myWishes} />
               <MenuButton id="trips" icon="✈️" label={t.dashboard.myTrips} />
               <MenuButton id="favorites" icon="❤️" label={t.dashboard.myFavorites} />
-              {/* 🔽 新增訂單按鈕 */}
               <MenuButton id="orders" icon="📦" label="我的訂單" />
             </nav>
           </aside>
@@ -197,7 +199,6 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* 🔽 訂單列表 (新功能) */}
               {activeTab === 'orders' && (
                 <div className="space-y-4">
                   {myOrders.length === 0 ? <EmptyState text="目前沒有進行中的訂單" /> : 
@@ -205,7 +206,6 @@ export default function Dashboard() {
                       const isBuyer = user.id === order.buyer_id;
                       return (
                         <div key={order.id} className="border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row gap-4 hover:shadow-md transition bg-white">
-                          {/* 圖片與標題 */}
                           <div className="flex gap-4 flex-grow">
                             <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden shrink-0">
                               {order.wish_requests?.images?.[0] ? <img src={order.wish_requests.images[0]} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full">🎁</div>}
@@ -219,7 +219,6 @@ export default function Dashboard() {
                             </div>
                           </div>
 
-                          {/* 狀態與按鈕 */}
                           <div className="flex flex-col items-end gap-2 min-w-[120px]">
                             <span className={`px-3 py-1 rounded-full text-xs font-bold 
                               ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 
@@ -230,17 +229,33 @@ export default function Dashboard() {
                                order.status === 'completed' ? '已完成' : order.status}
                             </span>
 
-                            {/* 只有買家可以接受訂單 */}
                             {isBuyer && order.status === 'pending' && (
                               <button onClick={() => updateOrderStatus(order.id, 'accepted')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-blue-700">
                                 確認委託
                               </button>
                             )}
                             
-                            {/* 雙方都可以按完成 */}
                             {order.status === 'accepted' && (
                               <button onClick={() => updateOrderStatus(order.id, 'completed')} className="border border-green-600 text-green-600 px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-green-50">
                                 完成訂單
+                              </button>
+                            )}
+
+                            {order.status === 'completed' && (
+                              <button 
+                                onClick={() => {
+                                  const targetId = isBuyer ? order.shopper_id : order.buyer_id;
+                                  const targetName = isBuyer ? order.profiles?.name : order.buyer_profile?.name;
+                                  setReviewModal({
+                                    open: true,
+                                    orderId: order.id,
+                                    targetId: targetId,
+                                    targetName: targetName || '對方'
+                                  });
+                                }}
+                                className="text-sm text-blue-600 underline hover:text-blue-800"
+                              >
+                                ✍️ 給予評價
                               </button>
                             )}
                           </div>
@@ -255,7 +270,7 @@ export default function Dashboard() {
           </main>
         </div>
       </div>
-      {/* (省略編輯 Modal 的部分，請保留原本的 Modal 程式碼) */}
+
       {isEditing && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
@@ -284,6 +299,16 @@ export default function Dashboard() {
             </form>
           </div>
         </div>
+      )}
+
+      {reviewModal?.open && (
+        <ReviewModal 
+          orderId={reviewModal.orderId}
+          targetId={reviewModal.targetId}
+          targetName={reviewModal.targetName}
+          onClose={() => setReviewModal(null)}
+          onSuccess={() => {}}
+        />
       )}
     </div>
   );

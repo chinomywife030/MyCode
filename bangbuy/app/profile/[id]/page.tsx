@@ -17,6 +17,7 @@ export default function ProfilePage() {
     async function fetchProfileData() {
       if (!id) return;
 
+      // 1. 抓個人資料
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
@@ -25,10 +26,24 @@ export default function ProfilePage() {
 
       if (profileError) {
         console.error('找不到使用者', profileError);
-      } else {
-        setProfile(profileData);
       }
 
+      // 2. 抓取評價
+      const { data: reviewsData } = await supabase
+        .from('reviews')
+        .select('*, reviewer:reviewer_id(name, avatar_url)')
+        .eq('target_id', id)
+        .order('created_at', { ascending: false });
+      
+      // 計算平均分
+      const totalRating = reviewsData?.reduce((acc, r) => acc + r.rating, 0) || 0;
+      const avgRating = reviewsData?.length ? (totalRating / reviewsData.length).toFixed(1) : '新用戶';
+      
+      if (profileData) {
+        setProfile({ ...profileData, calculated_rating: avgRating, reviews: reviewsData || [] });
+      }
+
+      // 3. 抓取許願單
       const { data: wishesData } = await supabase
         .from('wish_requests')
         .select('*')
@@ -94,7 +109,6 @@ export default function ProfilePage() {
                 </p>
               </div>
 
-              {/* 🔽 這裡！按鈕現在會連去聊天室了 */}
               <div className="w-full sm:w-auto mt-4 sm:mt-0">
                 <Link 
                   href={`/chat?target=${profile.id}`}
@@ -113,9 +127,11 @@ export default function ProfilePage() {
               </div>
               <div className="text-center border-l border-r border-gray-200">
                 <div className="text-2xl font-black text-yellow-500 flex items-center justify-center gap-1">
-                  {profile.rating || 5.0} <span className="text-lg">★</span>
+                  {profile.calculated_rating} <span className="text-lg">★</span>
                 </div>
-                <div className="text-xs text-gray-500 font-medium mt-1">{t.profile.rating}</div>
+                <div className="text-xs text-gray-500 font-medium mt-1">
+                  {profile.reviews?.length || 0} 則評價
+                </div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-black text-gray-800">102</div>
@@ -165,6 +181,39 @@ export default function ProfilePage() {
                     </Link>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* 評價列表區塊 */}
+            <div className="mt-10 pt-10 border-t border-gray-100">
+              <h3 className="font-bold text-gray-900 text-lg mb-4">💬 收到的評價</h3>
+              
+              {profile.reviews && profile.reviews.length > 0 ? (
+                <div className="space-y-4">
+                  {profile.reviews.map((review: any) => (
+                    <div key={review.id} className="bg-gray-50 p-4 rounded-xl flex gap-4">
+                      <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden shrink-0">
+                        {review.reviewer?.avatar_url ? (
+                          <img src={review.reviewer.avatar_url} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-500 font-bold">
+                            {review.reviewer?.name?.[0]}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-gray-800">{review.reviewer?.name}</span>
+                          <span className="text-yellow-500 text-sm">{'★'.repeat(review.rating)}</span>
+                        </div>
+                        <p className="text-gray-600 text-sm mt-1">{review.comment || "沒有留言"}</p>
+                        <p className="text-gray-400 text-xs mt-2">{new Date(review.created_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-400 text-center py-6">還沒有收到評價喔。</p>
               )}
             </div>
 
