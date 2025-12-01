@@ -69,11 +69,7 @@ export default function ReviewModal({ orderId, targetId, targetName, onClose, on
 
           <div className="flex gap-3">
             <button onClick={onClose} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold hover:bg-gray-200">取消</button>
-            <button 
-              onClick={handleSubmit} 
-              disabled={loading}
-              className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:bg-gray-400"
-            >
+            <button onClick={handleSubmit} disabled={loading} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:bg-gray-400">
               {loading ? '送出中...' : '送出評價'}
             </button>
           </div>

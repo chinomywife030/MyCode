@@ -6,12 +6,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLanguage } from '@/components/LanguageProvider';
 import ReviewModal from '@/components/ReviewModal';
+import { Profile } from '@/types';
 
 export default function Dashboard() {
   const { t } = useLanguage();
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [activeTab, setActiveTab] = useState<'wishes' | 'trips' | 'favorites' | 'orders'>('wishes');
   
   const [myWishes, setMyWishes] = useState<any[]>([]);
@@ -66,7 +67,14 @@ export default function Dashboard() {
         .or(`buyer_id.eq.${user.id},shopper_id.eq.${user.id}`)
         .order('created_at', { ascending: false });
       
-      setMyOrders(orders || []);
+      if (orders) {
+        const visibleOrders = orders.filter(o => {
+          if (o.buyer_id === user.id) return !o.archived_by_buyer;
+          if (o.shopper_id === user.id) return !o.archived_by_shopper;
+          return true;
+        });
+        setMyOrders(visibleOrders);
+      }
 
       setLoading(false);
     }
@@ -78,7 +86,7 @@ export default function Dashboard() {
     e.preventDefault();
     setUpdating(true);
     try {
-      let avatarUrl = profile.avatar_url;
+      let avatarUrl = profile?.avatar_url;
       if (avatarFile) {
         const fileName = `avatar-${Date.now()}-${avatarFile.name}`;
         const { error: uploadError } = await supabase.storage.from('wish-images').upload(fileName, avatarFile);
@@ -94,6 +102,7 @@ export default function Dashboard() {
       if (error) throw error;
       alert('更新成功！');
       setIsEditing(false);
+      // @ts-ignore
       setProfile({ ...profile, name: editForm.name, bio: editForm.bio, avatar_url: avatarUrl });
       router.refresh();
     } catch (error: any) {
@@ -115,10 +124,40 @@ export default function Dashboard() {
     setMyTrips(prev => prev.filter(t => t.id !== id));
   };
 
-  // 更新訂單狀態
-  const updateOrderStatus = async (orderId: string, status: string) => {
-    await supabase.from('orders').update({ status }).eq('id', orderId);
-    setMyOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+  const handleArchiveOrder = async (order: any) => {
+    const isBuyer = order.buyer_id === user.id;
+    const fieldToUpdate = isBuyer ? 'archived_by_buyer' : 'archived_by_shopper';
+
+    if (!confirm('確定要隱藏這筆訂單嗎？\n(這不會影響對方的紀錄，也不會刪除評價)')) return;
+    
+    const { error } = await supabase
+      .from('orders')
+      .update({ [fieldToUpdate]: true })
+      .eq('id', order.id);
+
+    if (error) {
+      alert('隱藏失敗: ' + error.message);
+    } else {
+      setMyOrders(prev => prev.filter(o => o.id !== order.id));
+    }
+  };
+
+  // 🔽 修改重點：加入 wishId 參數，並且如果是完成訂單，直接在前端也送出關閉許願單的請求
+  const updateOrderStatus = async (orderId: string, status: string, wishId?: string) => {
+    try {
+      // 1. 更新訂單狀態
+      await supabase.from('orders').update({ status }).eq('id', orderId);
+      
+      // 2. 雙重保險：如果是完成訂單，且我是買家，直接手動關閉許願單 (避免 Trigger 延遲或失敗)
+      if (status === 'completed' && wishId) {
+        // 嘗試更新 wish_requests (如果我是買家會成功，我是代購會被 RLS 擋下但沒關係，DB Trigger 會補救)
+        await supabase.from('wish_requests').update({ status: 'closed' }).eq('id', wishId);
+      }
+
+      setMyOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+    } catch (error) {
+      console.error('更新狀態失敗', error);
+    }
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">載入會員資料...</div>;
@@ -134,6 +173,21 @@ export default function Dashboard() {
     </button>
   );
 
+  const renderVerificationStatus = () => {
+    const status = profile?.verification_status || 'unverified';
+    if (status === 'verified') {
+      return <div className="bg-green-100 text-green-700 text-xs px-3 py-1 rounded-full font-bold inline-block mt-2">✓ 已認證留學生</div>;
+    } else if (status === 'pending') {
+      return <div className="bg-yellow-100 text-yellow-700 text-xs px-3 py-1 rounded-full font-bold inline-block mt-2">⏳ 身份審核中</div>;
+    } else {
+      return (
+        <Link href="/verify" className="bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs px-3 py-1 rounded-full font-bold inline-block mt-2 transition">
+          → 去認證身份
+        </Link>
+      );
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-6xl mx-auto">
@@ -147,7 +201,10 @@ export default function Dashboard() {
                 {profile?.avatar_url ? <img src={profile.avatar_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-600 text-3xl font-bold">{profile?.name?.[0]?.toUpperCase()}</div>}
               </div>
               <p className="font-bold text-gray-800 truncate text-lg">{profile?.name}</p>
-              <Link href={`/profile/${user.id}`} className="block w-full py-2 border border-gray-200 text-gray-600 text-xs rounded hover:bg-gray-50 transition">{t.dashboard.viewProfile}</Link>
+              
+              {renderVerificationStatus()}
+
+              <Link href={`/profile/${user.id}`} className="block w-full py-2 mt-4 border border-gray-200 text-gray-600 text-xs rounded hover:bg-gray-50 transition">{t.dashboard.viewProfile}</Link>
             </div>
             <nav className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-1">
               <MenuButton id="wishes" icon="🎁" label={t.dashboard.myWishes} />
@@ -205,13 +262,14 @@ export default function Dashboard() {
                     myOrders.map(order => {
                       const isBuyer = user.id === order.buyer_id;
                       return (
-                        <div key={order.id} className="border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row gap-4 hover:shadow-md transition bg-white">
+                        <div key={order.id} className="border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row gap-4 hover:shadow-md transition bg-white relative">
+                          
                           <div className="flex gap-4 flex-grow">
                             <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden shrink-0">
                               {order.wish_requests?.images?.[0] ? <img src={order.wish_requests.images[0]} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full">🎁</div>}
                             </div>
                             <div>
-                              <h4 className="font-bold text-lg text-gray-800">{order.wish_requests?.title}</h4>
+                              <h4 className="font-bold text-lg text-gray-800">{order.wish_requests?.title || '商品已下架'}</h4>
                               <p className="text-sm text-gray-500">
                                 {isBuyer ? `接單人: ${order.profiles?.name}` : `買家: ${order.buyer_profile?.name}`}
                               </p>
@@ -230,13 +288,13 @@ export default function Dashboard() {
                             </span>
 
                             {isBuyer && order.status === 'pending' && (
-                              <button onClick={() => updateOrderStatus(order.id, 'accepted')} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-blue-700">
+                              <button onClick={() => updateOrderStatus(order.id, 'accepted', order.wish_id)} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-blue-700">
                                 確認委託
                               </button>
                             )}
                             
                             {order.status === 'accepted' && (
-                              <button onClick={() => updateOrderStatus(order.id, 'completed')} className="border border-green-600 text-green-600 px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-green-50">
+                              <button onClick={() => updateOrderStatus(order.id, 'completed', order.wish_id)} className="border border-green-600 text-green-600 px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-green-50">
                                 完成訂單
                               </button>
                             )}
@@ -256,6 +314,19 @@ export default function Dashboard() {
                                 className="text-sm text-blue-600 underline hover:text-blue-800"
                               >
                                 ✍️ 給予評價
+                              </button>
+                            )}
+
+                            {(order.status === 'completed' || order.status === 'cancelled') && (
+                              <button 
+                                onClick={() => handleArchiveOrder(order)}
+                                className="text-gray-400 hover:text-gray-600 p-1 mt-1 transition text-xs flex items-center gap-1"
+                                title="從列表中隱藏"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                </svg>
+                                隱藏訂單
                               </button>
                             )}
                           </div>

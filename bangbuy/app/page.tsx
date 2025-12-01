@@ -7,17 +7,22 @@ import { useLanguage } from '@/components/LanguageProvider';
 import Navbar from '@/components/Navbar';
 import { useUserMode } from '@/components/UserModeProvider';
 import RoleSelectorModal from '@/components/RoleSelectorModal';
+import IntroModal from '@/components/IntroModal';
+import OfferModal from '@/components/OfferModal'; // 👈 1. 引入新元件
 
 export default function Home() {
   const { t } = useLanguage();
   const { mode } = useUserMode();
   
-  // 🔽 修正 1: 加上 <any[]> 解決 TypeScript 紅線報錯
   const [wishes, setWishes] = useState<any[]>([]);
   const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [myFavorites, setMyFavorites] = useState<string[]>([]);
+  const [myOrders, setMyOrders] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // 👈 2. 新增：控制報價彈窗的狀態
+  const [activeWishForOffer, setActiveWishForOffer] = useState<any>(null);
 
   useEffect(() => {
     async function fetchData() {
@@ -43,6 +48,9 @@ export default function Home() {
       if (user) {
         const { data: favData } = await supabase.from('favorites').select('wish_id').eq('user_id', user.id);
         if (favData) setMyFavorites(favData.map(f => f.wish_id));
+
+        const { data: orderData } = await supabase.from('orders').select('wish_id').eq('shopper_id', user.id);
+        if (orderData) setMyOrders(orderData.map(o => o.wish_id));
       }
       
       setLoading(false);
@@ -65,6 +73,37 @@ export default function Home() {
     }
   };
 
+  // 👈 3. 修改：點擊按鈕只負責打開彈窗
+  const openOfferModal = (e: React.MouseEvent, wish: any) => {
+    e.preventDefault();
+    if (!currentUser) return alert('請先登入才能接單喔！');
+    if (currentUser.id === wish.buyer_id) return alert('不能接自己的單啦 😂');
+    setActiveWishForOffer(wish); // 設定當前要報價的許願單
+  };
+
+  // 👈 4. 新增：真正執行送出報價的函式 (給 Modal 用的)
+  const handleConfirmOffer = async (price: number) => {
+    if (!activeWishForOffer) return;
+
+    const { error } = await supabase.from('orders').insert([
+      {
+        wish_id: activeWishForOffer.id,
+        buyer_id: activeWishForOffer.buyer_id,
+        shopper_id: currentUser.id,
+        price: price,
+        status: 'pending'
+      }
+    ]);
+
+    if (error) {
+      alert('接單失敗：' + error.message);
+    } else {
+      alert('🎉 報價已送出！請等待買家確認。\n您可以到「會員中心 > 我的訂單」查看進度。');
+      setMyOrders(prev => [...prev, activeWishForOffer.id]);
+      setActiveWishForOffer(null); // 關閉彈窗
+    }
+  };
+
   const getFlag = (code: string) => {
     const flags: Record<string, string> = { JP: '🇯🇵', KR: '🇰🇷', US: '🇺🇸', UK: '🇬🇧', TW: '🇹🇼' };
     return flags[code] || code;
@@ -72,7 +111,18 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <IntroModal />
       <RoleSelectorModal />
+      
+      {/* 👈 5. 渲染報價彈窗 (如果有選中許願單的話) */}
+      {activeWishForOffer && (
+        <OfferModal 
+          wish={activeWishForOffer} 
+          onClose={() => setActiveWishForOffer(null)} 
+          onConfirm={handleConfirmOffer} 
+        />
+      )}
+
       <Navbar />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -141,51 +191,61 @@ export default function Home() {
             
             {loading ? <p className="text-gray-500 text-lg py-10 text-center">正在整理願望...</p> : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {wishes.map((wish) => (
-                  // 🔽 修正 2: 外層改成 div，不再是 Link (避免連結包連結錯誤)
-                  <div key={wish.id} className="group relative bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-orange-200 h-full flex flex-col transform hover:-translate-y-1">
-                    
-                    {/* 圖片區域 (點擊跳轉) */}
-                    <Link href={`/wish/${wish.id}`} className="h-56 bg-gray-50 relative w-full overflow-hidden flex justify-center items-center cursor-pointer block">
-                      {wish.images?.[0] ? <img src={wish.images[0]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"/> : <div className="text-6xl opacity-20">🎁</div>}
-                    </Link>
-
-                    {/* 愛心按鈕 (獨立於 Link 之外) */}
-                    <button onClick={(e) => toggleFavorite(e, wish.id)} className={`absolute top-3 right-3 p-2.5 rounded-full transition shadow-sm backdrop-blur-sm z-10 ${myFavorites.includes(wish.id) ? 'bg-white text-red-500 shadow-red-100' : 'bg-black/20 text-white hover:bg-white hover:text-red-500'}`}>
-                      <svg xmlns="http://www.w3.org/2000/svg" fill={myFavorites.includes(wish.id) ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" /></svg>
-                    </button>
-
-                    {/* 國旗標籤 (獨立於 Link 之外) */}
-                    <div className="absolute top-3 left-3 z-10 pointer-events-none">
-                       <span className="backdrop-blur-md bg-white/80 text-gray-800 text-sm font-bold px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1">
-                         {getFlag(wish.target_country)} {wish.target_country}
-                       </span>
-                    </div>
-
-                    <div className="p-5 flex flex-col flex-grow">
-                      <div className="mb-3">
-                        <span className="block text-2xl font-extrabold text-gray-900 mb-1">${Number(wish.budget).toLocaleString()}</span>
-                        {/* 標題 (點擊跳轉) */}
-                        <Link href={`/wish/${wish.id}`}>
-                          <h3 className="font-bold text-lg text-gray-700 line-clamp-2 group-hover:text-orange-600 transition-colors cursor-pointer">{wish.title}</h3>
-                        </Link>
-                      </div>
+                {wishes.map((wish) => {
+                  const hasOffered = myOrders.includes(wish.id); 
+                  
+                  return (
+                    <div key={wish.id} className="group relative bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-orange-200 h-full flex flex-col transform hover:-translate-y-1">
                       
-                      {/* 許願者頭像 */}
-                      <div className="flex items-center gap-2 mb-3">
-                         <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden">
-                           {wish.profiles?.avatar_url ? <img src={wish.profiles.avatar_url} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-blue-100"></div>}
-                         </div>
-                         <span className="text-xs text-gray-500">{wish.profiles?.name}</span>
+                      <Link href={`/wish/${wish.id}`} className="h-56 bg-gray-50 relative w-full overflow-hidden flex justify-center items-center cursor-pointer block">
+                        {wish.images?.[0] ? <img src={wish.images[0]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"/> : <div className="text-6xl opacity-20">🎁</div>}
+                      </Link>
+
+                      <button onClick={(e) => toggleFavorite(e, wish.id)} className={`absolute top-3 right-3 p-2.5 rounded-full transition shadow-sm backdrop-blur-sm z-10 ${myFavorites.includes(wish.id) ? 'bg-white text-red-500 shadow-red-100' : 'bg-black/20 text-white hover:bg-white hover:text-red-500'}`}>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill={myFavorites.includes(wish.id) ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" /></svg>
+                      </button>
+
+                      <div className="absolute top-3 left-3 z-10 pointer-events-none">
+                         <span className="backdrop-blur-md bg-white/80 text-gray-800 text-sm font-bold px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1">
+                           {getFlag(wish.target_country)} {wish.target_country}
+                         </span>
                       </div>
 
-                      {/* 接單按鈕 (獨立的 Link) */}
-                      <Link href={`/chat?target=${wish.buyer_id}`} className="w-full mt-auto py-3 bg-orange-50 text-orange-600 rounded-xl text-base font-bold group-hover:bg-orange-500 group-hover:text-white transition-all shadow-sm hover:shadow-md text-center block">
-                        ✋ 私訊接單
-                      </Link>
+                      <div className="p-5 flex flex-col flex-grow">
+                        <div className="mb-3">
+                          <span className="block text-2xl font-extrabold text-gray-900 mb-1">${Number(wish.budget).toLocaleString()}</span>
+                          <Link href={`/wish/${wish.id}`}>
+                            <h3 className="font-bold text-lg text-gray-700 line-clamp-2 group-hover:text-orange-600 transition-colors cursor-pointer">{wish.title}</h3>
+                          </Link>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 mb-3">
+                           <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden">
+                             {wish.profiles?.avatar_url ? <img src={wish.profiles.avatar_url} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-blue-100"></div>}
+                           </div>
+                           <span className="text-xs text-gray-500">{wish.profiles?.name}</span>
+                        </div>
+
+                        <div className="w-full mt-auto flex gap-2">
+                          <Link href={`/chat?target=${wish.buyer_id}`} className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl text-base font-bold hover:bg-gray-200 transition text-center block">
+                            💬 私訊
+                          </Link>
+                          
+                          <button 
+                            // 👈 6. 修改：點擊後打開彈窗，而不是直接 prompt
+                            onClick={(e) => openOfferModal(e, wish)}
+                            disabled={hasOffered || currentUser?.id === wish.buyer_id}
+                            className={`flex-[2] py-3 rounded-xl text-base font-bold transition shadow-sm hover:shadow-md text-center block text-white
+                              ${hasOffered ? 'bg-green-500 cursor-default' : 'bg-orange-500 hover:bg-orange-600'}`}
+                          >
+                            {hasOffered ? '✅ 已報價' : '💰 報價接單'}
+                          </button>
+                        </div>
+
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

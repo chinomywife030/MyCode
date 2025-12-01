@@ -15,10 +15,10 @@ function ChatContent() {
   const [activeChat, setActiveChat] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [loadingChat, setLoadingChat] = useState(false); // 右邊載入中
+  const [loadingChat, setLoadingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. 初始化使用者 & 載入列表
+  // 1. 初始化
   useEffect(() => {
     async function init() {
       const { data: { user } } = await supabase.auth.getUser();
@@ -28,24 +28,21 @@ function ChatContent() {
       }
       setUser(user);
       
-      // 平行處理：一邊抓列表，一邊處理跳轉，互不卡頓
       fetchConversations(user.id);
       
-      // 如果有 target，立刻處理跳轉
       if (targetId) {
         handleDirectJump(user.id, targetId);
       }
     }
     init();
-  }, [targetId]); // 當 targetId 改變時也會觸發
+  }, [targetId]);
 
-  // ⚡️ 極速跳轉邏輯
+  // 2. 跳轉邏輯
   const handleDirectJump = async (myId: string, targetId: string) => {
     if (myId === targetId) return;
     setLoadingChat(true);
 
     try {
-      // 1. 先確認這個人存不存在 (順便抓他的頭像名字)
       const { data: targetUser, error: uErr } = await supabase
         .from('profiles')
         .select('*')
@@ -58,14 +55,12 @@ function ChatContent() {
         return;
       }
 
-      // 2. 直接去資料庫問：我跟他有沒有聊天室？
       let { data: existing } = await supabase
         .from('conversations')
         .select('*')
         .or(`and(user1_id.eq.${myId},user2_id.eq.${targetId}),and(user1_id.eq.${targetId},user2_id.eq.${myId})`)
         .maybeSingle();
 
-      // 3. 如果沒有，立刻建立一個
       if (!existing) {
         const { data: newChat } = await supabase
           .from('conversations')
@@ -73,11 +68,9 @@ function ChatContent() {
           .select()
           .single();
         existing = newChat;
-        // 建立新聊天後，重新整理一下列表，讓新的人出現在左邊
         fetchConversations(myId);
       }
 
-      // 4. 設定當前聊天 (不用等列表載入完，直接顯示！)
       if (existing) {
         setActiveChat({ ...existing, otherUser: targetUser });
         loadMessages(existing.id);
@@ -90,17 +83,20 @@ function ChatContent() {
     }
   };
 
-  // Realtime 監聽
+  // 3. Realtime 監聽 (這是唯一接收新訊息的地方)
   useEffect(() => {
     if (!activeChat) return;
+    
     const channel = supabase
       .channel(`chat:${activeChat.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeChat.id}` }, 
       (payload) => {
+        // 這裡會收到「所有」新訊息 (包含自己發的)
         setMessages((prev) => [...prev, payload.new]);
         scrollToBottom();
       })
       .subscribe();
+
     return () => { supabase.removeChannel(channel); };
   }, [activeChat?.id]);
 
@@ -135,17 +131,32 @@ function ChatContent() {
     scrollToBottom();
   };
 
+  // 🔽 修改重點：移除手動 setMessages，只負責寫入資料庫
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !activeChat) return;
+    
     const msg = newMessage;
-    setNewMessage('');
-    // 樂觀更新
-    setMessages(prev => [...prev, { id: Date.now().toString(), content: msg, sender_id: user.id, created_at: new Date().toISOString() }]);
-    scrollToBottom();
+    setNewMessage(''); // 清空輸入框
+    
+    // ❌ 移除這行 (樂觀更新)，避免重複顯示
+    // setMessages(prev => [...prev, { ... }]); 
 
-    await supabase.from('messages').insert([{ conversation_id: activeChat.id, sender_id: user.id, content: msg }]);
-    await supabase.from('conversations').update({ updated_at: new Date() }).eq('id', activeChat.id);
+    // 直接寫入 DB，成功後 Realtime 會自動通知並更新畫面
+    const { error } = await supabase.from('messages').insert([{ 
+      conversation_id: activeChat.id, 
+      sender_id: user.id, 
+      content: msg 
+    }]);
+
+    if (error) {
+      console.error('發送失敗:', error);
+      alert('訊息發送失敗');
+      setNewMessage(msg); // 失敗的話把訊息放回去
+    } else {
+      // 更新對話時間，讓它浮到列表最上面
+      await supabase.from('conversations').update({ updated_at: new Date() }).eq('id', activeChat.id);
+    }
   };
 
   const scrollToBottom = () => {

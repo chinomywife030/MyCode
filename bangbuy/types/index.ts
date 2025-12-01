@@ -1,4 +1,38 @@
-// src/types/index.ts 加入下面這段
+// types/index.ts
+
+export type OrderStatus = 'pending' | 'accepted' | 'purchased' | 'shipped' | 'completed' | 'cancelled';
+export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'rejected';
+
+export interface Profile {
+  id: string;
+  name: string;
+  avatar_url?: string;
+  role: 'buyer' | 'shopper';
+  is_shopper: boolean;
+  verification_status: VerificationStatus;
+  student_card_url?: string;
+  rating_avg: number;
+  rating_count: number;
+  deals_count?: number; // 成交數
+  bio?: string;
+  // 關聯欄位
+  reviews?: Review[];
+}
+
+export interface Order {
+  id: string;
+  wish_id: string;
+  buyer_id: string;
+  shopper_id: string;
+  status: OrderStatus;
+  price: number;
+  created_at: string;
+  // 關聯資料
+  wish_requests?: any; 
+  profiles?: Profile; // Shopper
+  buyer_profile?: Profile; // Buyer
+}
+
 export interface Review {
   id: string;
   order_id: string;
