@@ -1,244 +1,219 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { BuyerState, ShopperState, CountryProfile } from '@/types/calculator';
-import { calculateBuyerCost, calculateShopperProfit } from '@/utils/calc';
+import { BuyerState, ShopperState, CalculatorSettings, CountryOption } from '@/types/calculator';
+import { calculateBuyer, calculateShopper, getEffectiveRate, formatCurrency } from '@/utils/calculator';
 
-// 預設國家資料 (這裡把德國改成了歐洲)
-const DEFAULT_COUNTRIES: CountryProfile[] = [
-  { code: 'JP', name: '🇯🇵 日本', currency: 'JPY', defaultFxRate: 0.22 },
-  { code: 'US', name: '🇺🇸 美國', currency: 'USD', defaultFxRate: 32.5 },
-  { code: 'UK', name: '🇬🇧 英國', currency: 'GBP', defaultFxRate: 41.5 },
-  { code: 'EU', name: '🇪🇺 歐洲', currency: 'EUR', defaultFxRate: 35.5 }, // 👈 改成歐洲
-  { code: 'KR', name: '🇰🇷 韓國', currency: 'KRW', defaultFxRate: 0.024 },
+// 0. 國家資料設定
+const COUNTRIES: CountryOption[] = [
+  { code: 'JP', name: '日本', currency: 'JPY', flag: '🇯🇵', defaultRate: 0.215 },
+  { code: 'US', name: '美國', currency: 'USD', flag: '🇺🇸', defaultRate: 31.5 },
+  { code: 'UK', name: '英國', currency: 'GBP', flag: '🇬🇧', defaultRate: 40.5 },
+  { code: 'EU', name: '歐洲', currency: 'EUR', flag: '🇪🇺', defaultRate: 34.5 },
+  { code: 'KR', name: '韓國', currency: 'KRW', flag: '🇰🇷', defaultRate: 0.024 },
 ];
 
+// 1. 子元件：封裝好的輸入框
+interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label: string;
+  prefix?: string;
+  suffix?: string;
+  tooltip?: string;
+}
+const InputGroup = ({ label, prefix, suffix, tooltip, className, ...props }: InputProps) => (
+  <div className={`space-y-1 ${className}`}>
+    <div className="flex items-center gap-1">
+      <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{label}</label>
+      {tooltip && <span className="text-gray-300 cursor-help text-xs" title={tooltip}>ⓘ</span>}
+    </div>
+    <div className="relative flex items-center bg-gray-50 border border-gray-200 rounded-lg focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:bg-white focus-within:border-blue-400 transition-all">
+      {prefix && <span className="pl-3 text-gray-400 text-sm font-medium">{prefix}</span>}
+      <input 
+        className="w-full p-2.5 bg-transparent outline-none text-sm font-medium text-gray-700 placeholder:text-gray-300" 
+        type="number"
+        min="0"
+        onWheel={(e) => e.currentTarget.blur()} 
+        {...props} 
+      />
+      {suffix && <span className="pr-3 text-gray-400 text-xs font-bold">{suffix}</span>}
+    </div>
+  </div>
+);
+
+// 2. 主計算機元件
 export default function Calculator() {
-  const [activeTab, setActiveTab] = useState<'buyer' | 'shopper'>('buyer');
-  const [exchangeRates, setExchangeRates] = useState<Record<string, number>>({});
-  const [loadingRates, setLoadingRates] = useState(true);
+  const [mode, setMode] = useState<'buyer' | 'shopper'>('buyer');
+  const [loading, setLoading] = useState(true);
 
-  // --- 1. 抓取即時匯率 ---
-  useEffect(() => {
-    async function fetchRates() {
-      try {
-        const res = await fetch('https://api.exchangerate-api.com/v4/latest/TWD');
-        const data = await res.json();
-        
-        // API 回傳的是 1 TWD = X 外幣，我們需要反過來 (1 外幣 = ? TWD)
-        const rates = {
-          JPY: 1 / data.rates.JPY,
-          USD: 1 / data.rates.USD,
-          KRW: 1 / data.rates.KRW,
-          GBP: 1 / data.rates.GBP,
-          EUR: 1 / data.rates.EUR,
-        };
-        setExchangeRates(rates);
-        setLoadingRates(false);
-      } catch (e) {
-        console.error("匯率抓取失敗，使用預設值", e);
-        setLoadingRates(false);
-      }
-    }
-    fetchRates();
-  }, []);
+  // 全域設定 State
+  const [settings, setSettings] = useState<CalculatorSettings>({
+    countryCode: 'JP',
+    fxRateMode: 'auto',
+    manualFxRate: 0,
+    liveFxRate: 0.215,
+    lastUpdated: null,
+  });
 
-  // --- 狀態初始化 ---
+  // 表單 State
   const [buyerForm, setBuyerForm] = useState<BuyerState>({
-    countryCode: 'JP', itemPrice: 0, isTaxIncluded: true, deduction: 0, 
-    shippingCost: 0, otherCost: 0, serviceFeeType: 'percent', serviceFee: 10, 
-    fxRateMode: 'auto', manualFxRate: 0,
+    productPrice: 0, quantity: 1, discount: 0, shippingCost: 0, otherCost: 0,
+    serviceFeeType: 'percent', serviceFeeValue: 10,
   });
 
   const [shopperForm, setShopperForm] = useState<ShopperState>({
-    countryCode: 'JP', sellingPriceTWD: 0, actualCost: 0, shippingCost: 0, 
-    otherCost: 0, timeSpent: 0, fxRateMode: 'auto', manualFxRate: 0,
+    targetSellingPrice: 0, productCost: 0, shippingCost: 0, otherCost: 0, timeSpent: 0,
   });
 
-  // --- 取得當前國家資訊 (包含即時匯率) ---
-  const currentCountry = useMemo(() => {
-    const code = activeTab === 'buyer' ? buyerForm.countryCode : shopperForm.countryCode;
-    const baseProfile = DEFAULT_COUNTRIES.find(c => c.code === code) || DEFAULT_COUNTRIES[0];
-    
-    // 如果有抓到即時匯率，就覆蓋 defaultFxRate
-    const realTimeRate = exchangeRates[baseProfile.currency];
-    
-    return {
-      ...baseProfile,
-      defaultFxRate: realTimeRate || baseProfile.defaultFxRate
+  const currentCountry = useMemo(() => COUNTRIES.find(c => c.code === settings.countryCode) || COUNTRIES[0], [settings.countryCode]);
+
+  // API 抓取匯率
+  useEffect(() => {
+    const fetchRate = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch('https://api.exchangerate-api.com/v4/latest/TWD');
+        const data = await res.json();
+        const rate = 1 / data.rates[currentCountry.currency]; // 反算匯率
+        setSettings(prev => ({ ...prev, liveFxRate: rate, lastUpdated: new Date() }));
+      } catch (error) {
+        console.error('Rate error', error);
+        setSettings(prev => ({ ...prev, liveFxRate: currentCountry.defaultRate }));
+      } finally {
+        setLoading(false);
+      }
     };
-  }, [activeTab, buyerForm.countryCode, shopperForm.countryCode, exchangeRates]);
+    fetchRate();
+  }, [currentCountry.currency]);
 
-  // --- 處理輸入變更 ---
-  const handleBuyerChange = (field: keyof BuyerState, value: any) => {
-    setBuyerForm(prev => ({ ...prev, [field]: value }));
+  // 即時計算
+  const buyerResult = useMemo(() => calculateBuyer(buyerForm, settings), [buyerForm, settings]);
+  const shopperResult = useMemo(() => calculateShopper(shopperForm, settings), [shopperForm, settings]);
+  const activeRate = getEffectiveRate(settings);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert('已複製明細到剪貼簿！');
   };
-  const handleShopperChange = (field: keyof ShopperState, value: any) => {
-    setShopperForm(prev => ({ ...prev, [field]: value }));
-  };
-
-  // --- 計算結果 ---
-  const buyerResult = useMemo(() => calculateBuyerCost(buyerForm, currentCountry.defaultFxRate), [buyerForm, currentCountry]);
-  const shopperResult = useMemo(() => calculateShopperProfit(shopperForm, currentCountry.defaultFxRate), [shopperForm, currentCountry]);
-
-  // --- Tooltip Label ---
-  const Label = ({ label, tip }: { label: string, tip?: string }) => (
-    <div className="flex items-center gap-1 mb-1">
-      <label className="text-xs font-bold text-gray-500 uppercase">{label}</label>
-      {tip && <span className="text-gray-300 cursor-help" title={tip}>ⓘ</span>}
-    </div>
-  );
 
   return (
-    <div className="w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden font-sans">
+    <div className="flex flex-col h-full bg-white text-sm font-sans">
       
-      {/* Tabs */}
-      <div className="flex border-b border-gray-100">
-        <button onClick={() => setActiveTab('buyer')} className={`flex-1 py-4 text-center font-bold transition-all ${activeTab === 'buyer' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}`}>
-          🛍️ 買家試算
-        </button>
-        <button onClick={() => setActiveTab('shopper')} className={`flex-1 py-4 text-center font-bold transition-all ${activeTab === 'shopper' ? 'bg-orange-50 text-orange-600 border-b-2 border-orange-600' : 'text-gray-500 hover:bg-gray-50'}`}>
-          ✈️ 代購試算
-        </button>
+      {/* --- 頂部：切換模式 --- */}
+      <div className="flex p-1 bg-gray-100 rounded-xl m-4 mb-2">
+        <button onClick={() => setMode('buyer')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'buyer' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>🛍️ 買家試算</button>
+        <button onClick={() => setMode('shopper')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'shopper' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>✈️ 代購獲利</button>
       </div>
 
-      <div className="p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="px-4 pb-4 space-y-5 overflow-y-auto flex-1 custom-scrollbar">
         
-        {/* 左側表單 */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* 國家選擇 */}
-          <div>
-            <Label label="選擇國家 / 匯率" />
-            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-              {DEFAULT_COUNTRIES.map((c) => (
-                <button
-                  key={c.code}
-                  onClick={() => activeTab === 'buyer' ? handleBuyerChange('countryCode', c.code) : handleShopperChange('countryCode', c.code)}
-                  className={`py-2 px-1 rounded-lg border text-xs font-bold transition-all ${
-                    (activeTab === 'buyer' ? buyerForm.countryCode : shopperForm.countryCode) === c.code
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-500'
-                      : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
-            <p className="text-right text-[10px] text-gray-400 mt-1">
-              目前匯率: 1 {currentCountry.currency} ≈ {currentCountry.defaultFxRate.toFixed(3)} TWD {loadingRates && '(更新中...)'}
-            </p>
+        {/* --- 1. 國家與匯率設定 --- */}
+        <div className="space-y-2">
+          <div className="flex justify-between items-center">
+             <label className="text-[10px] font-bold text-gray-400 uppercase">國家</label>
+             <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+                <span>1 {currentCountry.currency} ≈ {activeRate.toFixed(3)} TWD</span>
+                {settings.fxRateMode === 'auto' && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/>}
+             </div>
           </div>
+          <div className="grid grid-cols-5 gap-1.5">
+            {COUNTRIES.map((c) => (
+              <button key={c.code} onClick={() => setSettings(s => ({ ...s, countryCode: c.code }))}
+                className={`py-1.5 rounded-lg border text-xs font-bold flex flex-col items-center gap-0.5 transition-all ${settings.countryCode === c.code ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-gray-200 hover:bg-gray-50 text-gray-600'}`}>
+                <span className="text-base">{c.flag}</span>
+                <span className="text-[9px] scale-90">{c.currency}</span>
+              </button>
+            ))}
+          </div>
+          
+          {/* 匯率手動切換小開關 */}
+          <div className="flex items-center justify-end gap-2 pt-1">
+             <label className="text-[10px] text-gray-400">自訂匯率</label>
+             <div className="flex bg-gray-100 rounded p-0.5">
+                <button onClick={() => setSettings(s => ({ ...s, fxRateMode: 'auto' }))} className={`px-2 py-0.5 text-[10px] rounded transition ${settings.fxRateMode === 'auto' ? 'bg-white shadow-sm font-bold' : 'text-gray-400'}`}>Auto</button>
+                <button onClick={() => setSettings(s => ({ ...s, fxRateMode: 'manual' }))} className={`px-2 py-0.5 text-[10px] rounded transition ${settings.fxRateMode === 'manual' ? 'bg-white shadow-sm font-bold' : 'text-gray-400'}`}>Set</button>
+             </div>
+          </div>
+          {settings.fxRateMode === 'manual' && (
+            <InputGroup label="輸入匯率" value={settings.manualFxRate || ''} onChange={(e) => setSettings(s => ({ ...s, manualFxRate: parseFloat(e.target.value) }))} />
+          )}
+        </div>
 
-          {/* Tab 1: 買家表單 */}
-          {activeTab === 'buyer' && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label label={`商品價格 (${currentCountry.currency})`} />
-                  <input type="number" min="0" value={buyerForm.itemPrice || ''} onChange={(e) => handleBuyerChange('itemPrice', parseFloat(e.target.value))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
+        <hr className="border-dashed border-gray-200"/>
+
+        {/* --- 2. 表單區域 --- */}
+        {mode === 'buyer' ? (
+          <div className="space-y-3 animate-fade-in">
+             <div className="grid grid-cols-2 gap-3">
+                <InputGroup label={`單價 (${currentCountry.currency})`} value={buyerForm.productPrice || ''} onChange={(e) => setBuyerForm(p => ({ ...p, productPrice: parseFloat(e.target.value) }))} />
+                <InputGroup label="數量" value={buyerForm.quantity} onChange={(e) => setBuyerForm(p => ({ ...p, quantity: parseFloat(e.target.value) }))} />
+             </div>
+             <div className="grid grid-cols-2 gap-3">
+                <InputGroup label="折扣 (原幣)" prefix="-" value={buyerForm.discount || ''} onChange={(e) => setBuyerForm(p => ({ ...p, discount: parseFloat(e.target.value) }))} />
+                <InputGroup label="國際運費" value={buyerForm.shippingCost || ''} onChange={(e) => setBuyerForm(p => ({ ...p, shippingCost: parseFloat(e.target.value) }))} />
+             </div>
+             
+             {/* 代購費特殊區塊 */}
+             <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 space-y-2">
+                <div className="flex justify-between items-center">
+                   <label className="text-[10px] font-bold text-blue-800">代購服務費</label>
+                   <div className="flex gap-1">
+                      {[10, 12, 15].map(rate => (
+                        <button key={rate} onClick={() => setBuyerForm(p => ({ ...p, serviceFeeValue: rate, serviceFeeType: 'percent' }))} className="text-[9px] px-1.5 py-0.5 bg-white border border-blue-200 rounded text-blue-600 hover:bg-blue-50 transition">{rate}%</button>
+                      ))}
+                   </div>
                 </div>
-                <div>
-                  <Label label="折扣 / 退稅" tip="請輸入扣除金額" />
-                  <input type="number" min="0" value={buyerForm.deduction || ''} onChange={(e) => handleBuyerChange('deduction', parseFloat(e.target.value))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label label="國際運費 (原幣)" />
-                  <input type="number" min="0" value={buyerForm.shippingCost || ''} onChange={(e) => handleBuyerChange('shippingCost', parseFloat(e.target.value))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none" placeholder="0" />
-                </div>
-                <div>
-                  <Label label="代購費" />
-                  <div className="flex">
-                    <select value={buyerForm.serviceFeeType} onChange={(e) => handleBuyerChange('serviceFeeType', e.target.value)} className="bg-gray-100 border border-r-0 border-gray-200 rounded-l-xl px-2 text-sm outline-none">
+                <div className="flex gap-2">
+                   <select className="bg-white border border-blue-200 rounded-lg px-2 text-xs font-bold text-gray-600 outline-none h-9" value={buyerForm.serviceFeeType} onChange={(e) => setBuyerForm(p => ({ ...p, serviceFeeType: e.target.value as any }))}>
                       <option value="percent">%</option>
                       <option value="fixed">$</option>
-                    </select>
-                    <input type="number" min="0" value={buyerForm.serviceFee} onChange={(e) => handleBuyerChange('serviceFee', parseFloat(e.target.value))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-r-xl focus:ring-2 focus:ring-blue-500 outline-none" />
-                  </div>
+                   </select>
+                   <input type="number" className="flex-1 px-3 rounded-lg border border-blue-200 text-sm outline-none focus:ring-2 focus:ring-blue-500/20" value={buyerForm.serviceFeeValue} onChange={(e) => setBuyerForm(p => ({ ...p, serviceFeeValue: parseFloat(e.target.value) }))} />
                 </div>
-              </div>
-              <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex justify-between items-center">
-                <span className="text-xs text-blue-700 font-bold">匯率設定</span>
-                <div className="flex gap-2">
-                  <button onClick={() => handleBuyerChange('fxRateMode', 'auto')} className={`px-2 py-1 rounded text-xs ${buyerForm.fxRateMode === 'auto' ? 'bg-blue-500 text-white' : 'text-gray-500'}`}>自動</button>
-                  <button onClick={() => handleBuyerChange('fxRateMode', 'manual')} className={`px-2 py-1 rounded text-xs ${buyerForm.fxRateMode === 'manual' ? 'bg-blue-500 text-white' : 'text-gray-500'}`}>手動</button>
-                </div>
-              </div>
-              {buyerForm.fxRateMode === 'manual' && <input type="number" value={buyerForm.manualFxRate || ''} onChange={(e) => handleBuyerChange('manualFxRate', parseFloat(e.target.value))} className="w-full p-2 border border-gray-300 rounded-lg text-sm" placeholder="輸入自訂匯率" />}
-            </div>
-          )}
-
-          {/* Tab 2: 留學生表單 */}
-          {activeTab === 'shopper' && (
-             <div className="space-y-4 animate-fade-in">
-               <div>
-                 <Label label="預計售價 (TWD)" tip="你想賣多少錢？" />
-                 <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-bold">$</span>
-                    <input type="number" min="0" value={shopperForm.sellingPriceTWD || ''} onChange={(e) => handleShopperChange('sellingPriceTWD', parseFloat(e.target.value))} className="w-full pl-8 p-3 bg-orange-50 border border-orange-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none font-bold text-orange-800" placeholder="0" />
-                 </div>
-               </div>
-               <div className="grid grid-cols-2 gap-4">
-                 <div>
-                   <Label label="實際成本 (原幣)" />
-                   <input type="number" min="0" value={shopperForm.actualCost || ''} onChange={(e) => handleShopperChange('actualCost', parseFloat(e.target.value))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none" placeholder="0" />
-                 </div>
-                 <div>
-                   <Label label="運費成本 (原幣)" />
-                   <input type="number" min="0" value={shopperForm.shippingCost || ''} onChange={(e) => handleShopperChange('shippingCost', parseFloat(e.target.value))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none" placeholder="0" />
-                 </div>
-               </div>
-               <div>
-                  <Label label="花費時間 (小時)" />
-                  <input type="number" min="0" value={shopperForm.timeSpent || ''} onChange={(e) => handleShopperChange('timeSpent', parseFloat(e.target.value))} className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none" placeholder="1" />
-               </div>
              </div>
-          )}
-        </div>
-
-        {/* 右側：結果卡片 */}
-        <div className="lg:col-span-5">
-          <div className={`sticky top-8 rounded-2xl shadow-lg p-6 border-2 transition-all duration-500 ${activeTab === 'buyer' ? 'bg-gradient-to-br from-blue-600 to-blue-800 border-blue-500 text-white' : 'bg-gradient-to-br from-orange-500 to-red-500 border-orange-400 text-white'}`}>
-            <h3 className="text-lg font-bold opacity-90 mb-6">{activeTab === 'buyer' ? '🧾 費用總覽' : '💰 獲利分析'}</h3>
-            
-            {activeTab === 'buyer' ? (
-              <>
-                <div className="space-y-2 mb-6 text-sm opacity-90">
-                  <div className="flex justify-between"><span>商品折合</span><span>$ {buyerResult.itemCostTWD.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span>運費+雜支</span><span>+ $ {(buyerResult.shippingTWD + buyerResult.otherTWD).toLocaleString()}</span></div>
-                  <div className="flex justify-between font-bold bg-white/20 p-1 rounded px-2"><span>代購費</span><span>+ $ {buyerResult.serviceFeeTWD.toLocaleString()}</span></div>
-                </div>
-                <div className="border-t border-white/20 pt-4">
-                  <p className="text-sm opacity-70">預估總價</p>
-                  <p className="text-4xl font-black">NT$ {buyerResult.totalTWD.toLocaleString()}</p>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2 mb-6 text-sm opacity-90">
-                  <div className="flex justify-between"><span>預計收入</span><span>$ {shopperForm.sellingPriceTWD.toLocaleString()}</span></div>
-                  <div className="flex justify-between"><span>總成本</span><span className="text-red-100">- $ {shopperResult.totalCostTWD.toLocaleString()}</span></div>
-                  
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    <div className="bg-white/10 p-2 rounded text-center">
-                      <p className="text-xs opacity-70">利潤率</p>
-                      <p className="font-bold text-lg">{shopperResult.profitMargin.toFixed(1)}%</p>
-                    </div>
-                    <div className="bg-white/10 p-2 rounded text-center">
-                      <p className="text-xs opacity-70">時薪</p>
-                      <p className="font-bold text-lg">${Math.round(shopperResult.hourlyRate)}</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="border-t border-white/20 pt-4">
-                  <p className="text-sm opacity-70">預估淨利</p>
-                  <p className="text-4xl font-black">NT$ {shopperResult.netProfit.toLocaleString()}</p>
-                </div>
-              </>
-            )}
+             <InputGroup label="其他雜支 (原幣)" tooltip="如當地運費、包材等" value={buyerForm.otherCost || ''} onChange={(e) => setBuyerForm(p => ({ ...p, otherCost: parseFloat(e.target.value) }))} />
           </div>
-        </div>
+        ) : (
+          <div className="space-y-3 animate-fade-in">
+             <InputGroup label="預計售價 (台幣)" prefix="$" className="border-orange-200" value={shopperForm.targetSellingPrice || ''} onChange={(e) => setShopperForm(p => ({ ...p, targetSellingPrice: parseFloat(e.target.value) }))} />
+             <div className="grid grid-cols-2 gap-3">
+                <InputGroup label={`成本 (${currentCountry.currency})`} tooltip="商品實際入手價" value={shopperForm.productCost || ''} onChange={(e) => setShopperForm(p => ({ ...p, productCost: parseFloat(e.target.value) }))} />
+                <InputGroup label={`運費 (${currentCountry.currency})`} value={shopperForm.shippingCost || ''} onChange={(e) => setShopperForm(p => ({ ...p, shippingCost: parseFloat(e.target.value) }))} />
+             </div>
+             <div className="grid grid-cols-2 gap-3">
+                <InputGroup label={`雜支 (${currentCountry.currency})`} value={shopperForm.otherCost || ''} onChange={(e) => setShopperForm(p => ({ ...p, otherCost: parseFloat(e.target.value) }))} />
+                <InputGroup label="工時 (小時)" value={shopperForm.timeSpent || ''} onChange={(e) => setShopperForm(p => ({ ...p, timeSpent: parseFloat(e.target.value) }))} />
+             </div>
+          </div>
+        )}
+      </div>
+
+      {/* --- 3. 結果卡片 (Sticky Bottom) --- */}
+      <div className={`p-5 border-t transition-colors duration-300 ${mode === 'buyer' ? 'bg-slate-50 border-slate-100' : 'bg-orange-50 border-orange-100'}`}>
+        {mode === 'buyer' ? (
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-gray-500"><span>商品小計</span><span>{formatCurrency(buyerResult.productTotalTWD)}</span></div>
+            <div className="flex justify-between text-xs text-gray-500"><span>運費+雜支</span><span>+{formatCurrency(buyerResult.shippingTWD + buyerResult.otherTWD)}</span></div>
+            <div className="flex justify-between text-xs font-bold text-blue-600"><span>代購費</span><span>+{formatCurrency(buyerResult.serviceFeeTWD)}</span></div>
+            <div className="pt-2 border-t border-gray-200 flex justify-between items-end">
+               <span className="text-xs font-bold text-gray-500">預估總價</span>
+               <span className="text-2xl font-black text-blue-600 tracking-tight">{formatCurrency(buyerResult.totalTWD)}</span>
+            </div>
+            <button onClick={() => copyToClipboard(buyerResult.breakdown)} className="w-full py-2 mt-1 bg-white border border-gray-200 text-gray-600 text-[10px] font-bold rounded-lg hover:bg-gray-50 active:scale-95 transition shadow-sm">📄 複製明細</button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex justify-between text-xs text-gray-500"><span>總成本</span><span>-{formatCurrency(shopperResult.totalCostTWD)}</span></div>
+            <div className="flex gap-2 mt-1">
+               <div className="flex-1 bg-white p-1.5 rounded border border-orange-100 text-center"><p className="text-[9px] text-gray-400">利潤率</p><p className={`font-bold ${shopperResult.profitMargin > 20 ? 'text-green-600' : 'text-gray-700'}`}>{shopperResult.profitMargin.toFixed(1)}%</p></div>
+               <div className="flex-1 bg-white p-1.5 rounded border border-orange-100 text-center"><p className="text-[9px] text-gray-400">時薪</p><p className="font-bold text-gray-700">{formatCurrency(shopperResult.hourlyWage)}</p></div>
+            </div>
+            <div className="pt-2 border-t border-orange-200 flex justify-between items-end">
+               <span className="text-xs font-bold text-orange-800">預估淨利</span>
+               <span className="text-2xl font-black text-orange-600 tracking-tight">{formatCurrency(shopperResult.netProfit)}</span>
+            </div>
+            <button onClick={() => copyToClipboard(shopperResult.breakdown)} className="w-full py-2 mt-1 bg-orange-100 text-orange-700 border border-orange-200 text-[10px] font-bold rounded-lg hover:bg-orange-200 active:scale-95 transition shadow-sm">📄 複製分析</button>
+          </div>
+        )}
       </div>
     </div>
   );
