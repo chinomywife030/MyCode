@@ -1,107 +1,251 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import Calculator from '@/components/Calculator';
-import Link from 'next/link';
-import { useLanguage } from '@/components/LanguageProvider';
 
-export default function TripsPage() {
-  const { t } = useLanguage();
-  const [trips, setTrips] = useState<any[]>([]);
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+export default function CreatePage() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    async function fetchTrips() {
-      const { data } = await supabase
-        .from('trips')
-        .select('*')
-        .order('created_at', { ascending: false });
-      setTrips(data || []);
+    async function checkUser() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        alert('請先登入才能許願喔！');
+        router.push('/login');
+      } else {
+        setUser(user);
+      }
     }
-    fetchTrips();
-  }, []);
+    checkUser();
+  }, [router]);
+  
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+    price: '',      // 商品原價
+    commission: '', // 代購費
+    target_country: 'JP',
+    category: 'food',
+    deadline: '',
+    product_url: '',
+    is_urgent: false,
+  });
+
+  // 計算總預算 (商品價 + 代購費)
+  const totalPrice = (Number(formData.price) || 0) + (Number(formData.commission) || 0);
+
+  const handleChange = (e: any) => {
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handleFileChange = (e: any) => {
+    if (e.target.files && e.target.files[0]) {
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      setPreviewUrl(URL.createObjectURL(selectedFile));
+    }
+  };
+
+  const handleSubmit = async (e: any) => {
+    e.preventDefault();
+    if (!user) return;
+    setLoading(true);
+
+    try {
+      let imageUrl = null;
+      if (file) {
+        const fileName = `${Date.now()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage.from('wish-images').upload(fileName, file);
+        if (uploadError) throw uploadError;
+        const { data: publicUrlData } = supabase.storage.from('wish-images').getPublicUrl(fileName);
+        imageUrl = publicUrlData.publicUrl;
+      }
+
+      await supabase.from('profiles').upsert({
+        id: user.id,
+        name: user.user_metadata?.name || user.email?.split('@')[0],
+        role: 'buyer',
+      }, { onConflict: 'id' });
+
+      const { error } = await supabase.from('wish_requests').insert([
+        {
+          title: formData.title,
+          description: formData.description,
+          budget: totalPrice, // 存入總金額
+          price: Number(formData.price), // (可選) 如果你有加開這個欄位存原價
+          commission: Number(formData.commission), // 新欄位：代購費
+          product_url: formData.product_url,       // 新欄位：連結
+          is_urgent: formData.is_urgent,           // 新欄位：急單
+          target_country: formData.target_country,
+          category: formData.category,
+          deadline: formData.deadline,
+          buyer_id: user.id,
+          status: 'open',
+          images: imageUrl ? [imageUrl] : [],
+        },
+      ]);
+
+      if (error) throw error;
+      alert('🎉 許願成功！等待代購接單中...');
+      router.push('/');
+
+    } catch (error: any) {
+      console.error(error);
+      alert('發布失敗：' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!user) return <div className="p-10 text-center text-gray-500">檢查權限中...</div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 sm:p-8">
-      <div className="max-w-6xl mx-auto mb-6">
-        <Link href="/" className="text-gray-500 hover:text-blue-600 flex items-center gap-1 w-fit">
-          ← 回首頁
-        </Link>
-      </div>
-
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-800 mb-8 flex items-center gap-2">
-          ✈️ 留學生行程牆
-        </h1>
+    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-2xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100">
         
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {/* 頂部標題區 */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-500 p-8 text-white text-center">
+          <h2 className="text-3xl font-black mb-2">📝 發布許願單</h2>
+          <p className="opacity-90">填寫越詳細，越容易被代購選中喔！</p>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="p-8 space-y-8">
           
-          {/* 左邊：行程列表 */}
-          <div className="md:col-span-2 space-y-4">
-            {trips.length === 0 ? (
-              <p className="text-gray-500 bg-white p-6 rounded-xl">目前沒有行程喔！</p>
-            ) : trips.map((trip) => (
-              <div key={trip.id} className="bg-white p-6 rounded-xl shadow-sm border-l-4 border-blue-500 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:shadow-md transition">
-                <div className="flex-grow">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full font-bold">
-                      即將出發
-                    </span>
-                    <span className="text-gray-500 text-sm">📅 {trip.date}</span>
-                  </div>
-                  
-                  <h3 className="text-xl font-bold mb-2 text-gray-800">
-                    {trip.destination}
-                  </h3>
-                  <p className="text-gray-600 text-sm mb-4 line-clamp-2">
-                    {trip.description}
-                  </p>
-
-                  {/* 點頭像也可以連去個人頁 */}
-                  <Link 
-                    href={`/profile/${trip.shopper_id}`} 
-                    className="flex items-center gap-2 group w-fit cursor-pointer"
-                  >
-                    <div className="w-8 h-8 bg-gray-200 rounded-full overflow-hidden border border-gray-200 group-hover:border-blue-500 transition">
-                      <img src="https://via.placeholder.com/150" alt="avatar" className="w-full h-full object-cover opacity-50" />
-                    </div>
-                    <span className="text-sm text-gray-500 group-hover:text-blue-600 transition font-medium">
-                      代購人：{trip.shopper_name}
-                    </span>
-                  </Link>
-                </div>
-
-                {/* 🔽 這裡！按鈕現在會連去聊天室了 */}
-                <Link 
-                  href={`/chat?target=${trip.shopper_id}`}
-                  className="w-full sm:w-auto bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-sm whitespace-nowrap text-center block"
-                >
-                  私訊委託
-                </Link>
-              </div>
-            ))}
-          </div>
-
-          {/* 右邊：計算機 & 發布按鈕 */}
-          <div className="md:col-span-1">
-            <div className="sticky top-8">
-              <Calculator />
+          {/* 1. 圖片上傳區 */}
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-gray-700">商品參考圖片 <span className="text-red-500">*</span></label>
+            <div className={`relative border-2 border-dashed rounded-xl p-6 flex flex-col items-center justify-center transition-all cursor-pointer hover:bg-gray-50 group
+              ${previewUrl ? 'border-blue-300 bg-blue-50' : 'border-gray-300'}`}>
               
-              <div className="mt-6 bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <h4 className="font-bold text-blue-800 mb-2">💡 想要發布行程？</h4>
-                <p className="text-sm text-blue-600 mb-3">
-                  如果你是留學生，發布行程可以賺取額外收入喔！
-                </p>
-                <Link 
-                  href="/trips/create"
-                  className="block w-full bg-white border border-blue-200 text-blue-600 py-2 rounded-lg text-sm hover:bg-blue-50 text-center font-medium"
-                >
-                  ＋ 發布我的行程
-                </Link>
-              </div>
+              <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"/>
+              
+              {previewUrl ? (
+                <div className="relative w-full h-64">
+                  <img src={previewUrl} alt="Preview" className="w-full h-full object-contain rounded-lg"/>
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition text-white font-bold">點擊更換圖片</div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <span className="text-4xl block mb-2">📷</span>
+                  <span className="text-blue-600 font-bold">上傳圖片</span>
+                  <p className="text-gray-400 text-xs mt-1">支援 JPG, PNG</p>
+                </div>
+              )}
             </div>
           </div>
 
-        </div>
+          {/* 2. 基本資訊 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="col-span-2">
+              <label className="block text-sm font-bold text-gray-700 mb-2">商品名稱 <span className="text-red-500">*</span></label>
+              <input name="title" required placeholder="例如：日本限定星巴克櫻花杯" className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none transition" onChange={handleChange} />
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">購買國家</label>
+              <select name="target_country" className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" onChange={handleChange}>
+                <option value="JP">🇯🇵 日本</option>
+                <option value="KR">🇰🇷 韓國</option>
+                <option value="US">🇺🇸 美國</option>
+                <option value="UK">🇬🇧 英國</option>
+                <option value="TW">🇹🇼 台灣</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">商品分類</label>
+              <select name="category" className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white" onChange={handleChange}>
+                <option value="food">🍪 零食 / 伴手禮</option>
+                <option value="beauty">💄 藥妝 / 美保</option>
+                <option value="clothes">👕 服飾 / 包包</option>
+                <option value="digital">📷 3C / 家電</option>
+                <option value="other">📦 其他</option>
+              </select>
+            </div>
+          </div>
+
+          {/* 3. 價格與連結 */}
+          <div className="bg-gray-50 p-6 rounded-xl border border-gray-100 space-y-6">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-2">商品連結 (選填)</label>
+              <input name="product_url" type="url" placeholder="https://..." className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none" onChange={handleChange} />
+              <p className="text-xs text-gray-400 mt-1">貼上網址讓代購更精準買到對的商品</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">商品預估單價 (台幣)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  <input name="price" type="number" required placeholder="1000" className="w-full pl-7 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none" onChange={handleChange} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">願付代購費 (台幣)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+                  <input name="commission" type="number" required placeholder="200" className="w-full pl-7 p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none" onChange={handleChange} />
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-between items-center border-t border-gray-200 pt-4">
+              <span className="font-bold text-gray-600">總預算金額：</span>
+              <span className="text-2xl font-black text-blue-600">${totalPrice.toLocaleString()}</span>
+            </div>
+          </div>
+
+          {/* 4. 詳細需求與急單 */}
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-2">詳細需求備註</label>
+            <textarea name="description" required rows={4} placeholder="請描述顏色、尺寸、數量、是否含盒..." className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none" onChange={handleChange} />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            <div>
+               <label className="block text-sm font-bold text-gray-700 mb-2">希望截止日期</label>
+               <input name="deadline" type="date" required className="w-full p-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:outline-none" onChange={handleChange} />
+            </div>
+
+            {/* 急單開關 */}
+            <div className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between
+              ${formData.is_urgent ? 'border-red-500 bg-red-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+              <label className="flex items-center gap-3 cursor-pointer w-full">
+                <input 
+                  name="is_urgent" 
+                  type="checkbox" 
+                  className="w-5 h-5 text-red-600 rounded focus:ring-red-500 border-gray-300" 
+                  onChange={handleChange}
+                />
+                <div>
+                  <span className={`font-bold block ${formData.is_urgent ? 'text-red-600' : 'text-gray-700'}`}>這是急單！🔥</span>
+                  <span className="text-xs text-gray-500">勾選後會標示為「急件」，吸引代購優先接單</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          {/* 按鈕區 */}
+          <div className="flex gap-4 pt-4">
+            <Link href="/" className="w-1/3 py-4 border border-gray-200 text-center rounded-xl text-gray-600 font-bold hover:bg-gray-50 transition">
+              取消
+            </Link>
+            <button type="submit" disabled={loading} className="w-2/3 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition active:scale-95 disabled:bg-gray-400 disabled:shadow-none">
+              {loading ? '發布中...' : '確認發布許願'}
+            </button>
+          </div>
+
+        </form>
       </div>
     </div>
   );
