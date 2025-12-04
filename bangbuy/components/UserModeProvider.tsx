@@ -1,48 +1,43 @@
+// components/UserModeProvider.tsx
 'use client';
 
-import { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 
-type UserMode = 'requester' | 'shopper'; // requester=刊登者, shopper=留學生
+// 定義兩種身分：requester (買家/許願者), shopper (代購/接單者)
+type UserMode = 'requester' | 'shopper';
 
-type UserModeContextType = {
+interface UserModeContextType {
   mode: UserMode;
-  setMode: (mode: UserMode) => void;
   toggleMode: () => void;
-};
+  isShopper: boolean;
+}
 
 const UserModeContext = createContext<UserModeContextType | undefined>(undefined);
 
 export function UserModeProvider({ children }: { children: React.ReactNode }) {
-  const [mode, setModeState] = useState<UserMode>('requester'); // 預設為刊登者
+  // 預設身分為 requester (買家)
+  const [mode, setMode] = useState<UserMode>('requester');
 
-  // 1. 初始化：去讀取瀏覽器紀錄，看上次選什麼
-  useEffect(() => {
-    const savedMode = localStorage.getItem('bangbuy_mode') as UserMode;
-    if (savedMode) {
-      setModeState(savedMode);
-    }
-  }, []);
-
-  // 2. 切換模式的函式
-  const setMode = (newMode: UserMode) => {
-    setModeState(newMode);
-    localStorage.setItem('bangbuy_mode', newMode); // 存到瀏覽器
-  };
-
+  // 切換功能的邏輯
   const toggleMode = () => {
-    const newMode = mode === 'requester' ? 'shopper' : 'requester';
-    setMode(newMode);
+    setMode((prev) => (prev === 'requester' ? 'shopper' : 'requester'));
   };
+
+  // 為了方便其他元件判斷，多傳一個布林值
+  const isShopper = mode === 'shopper';
 
   return (
-    <UserModeContext.Provider value={{ mode, setMode, toggleMode }}>
+    <UserModeContext.Provider value={{ mode, toggleMode, isShopper }}>
       {children}
     </UserModeContext.Provider>
   );
 }
 
+// 這是給其他元件用的 Hook
 export function useUserMode() {
   const context = useContext(UserModeContext);
-  if (!context) throw new Error('useUserMode must be used within a UserModeProvider');
+  if (context === undefined) {
+    throw new Error('useUserMode must be used within a UserModeProvider');
+  }
   return context;
 }

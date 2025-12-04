@@ -1,10 +1,143 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { BuyerState, ShopperState, CalculatorSettings, CountryOption } from '@/types/calculator';
-import { calculateBuyer, calculateShopper, getEffectiveRate, formatCurrency } from '@/utils/calculator';
 
-// 0. 國家資料設定
+// ==========================================
+// 1. 補上缺失的型別定義 (原本在 @/types/calculator)
+// ==========================================
+export interface CountryOption {
+  code: string;
+  name: string;
+  currency: string;
+  flag: string;
+  defaultRate: number;
+}
+
+export interface CalculatorSettings {
+  countryCode: string;
+  fxRateMode: 'auto' | 'manual';
+  manualFxRate: number;
+  liveFxRate: number;
+  lastUpdated: Date | null;
+}
+
+export interface BuyerState {
+  productPrice: number;
+  quantity: number;
+  discount: number;
+  shippingCost: number;
+  otherCost: number;
+  serviceFeeType: 'percent' | 'fixed';
+  serviceFeeValue: number;
+}
+
+export interface ShopperState {
+  targetSellingPrice: number;
+  productCost: number;
+  shippingCost: number;
+  otherCost: number;
+  timeSpent: number;
+}
+
+// ==========================================
+// 2. 補上缺失的工具函式 (原本在 @/utils/calculator)
+// ==========================================
+
+// 格式化金額
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat('zh-TW', {
+    style: 'currency',
+    currency: 'TWD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount || 0);
+};
+
+// 取得有效匯率
+const getEffectiveRate = (settings: CalculatorSettings) => {
+  return settings.fxRateMode === 'manual' && settings.manualFxRate > 0
+    ? settings.manualFxRate
+    : settings.liveFxRate;
+};
+
+// 計算買家 (Buyer) 邏輯
+const calculateBuyer = (form: BuyerState, settings: CalculatorSettings) => {
+  const rate = getEffectiveRate(settings);
+  
+  // 商品原幣總價 = (單價 * 數量) - 折扣
+  const productTotalNative = (form.productPrice * form.quantity) - form.discount;
+  // 換算台幣
+  const productTotalTWD = Math.max(0, productTotalNative * rate);
+  const shippingTWD = form.shippingCost * rate;
+  const otherTWD = form.otherCost * rate;
+
+  // 計算代購費
+  let serviceFeeTWD = 0;
+  if (form.serviceFeeType === 'percent') {
+    // 假設服務費是基於 (商品總價 + 運費) 計算，或者僅基於商品總價。這裡採用常見的僅商品總價：
+    serviceFeeTWD = productTotalTWD * (form.serviceFeeValue / 100);
+  } else {
+    // 固定金額直接就是台幣
+    serviceFeeTWD = form.serviceFeeValue;
+  }
+
+  const totalTWD = productTotalTWD + shippingTWD + otherTWD + serviceFeeTWD;
+
+  // 生成明細字串
+  const breakdown = `
+🛍️ 代購試算明細
+------------------
+匯率：${rate.toFixed(3)} (${settings.countryCode})
+商品總計：${formatCurrency(productTotalTWD)}
+國際運費：${formatCurrency(shippingTWD)}
+其他雜支：${formatCurrency(otherTWD)}
+代購服務費：${formatCurrency(serviceFeeTWD)}
+------------------
+💰 預估總價：${formatCurrency(totalTWD)}
+`.trim();
+
+  return { productTotalTWD, shippingTWD, otherTWD, serviceFeeTWD, totalTWD, breakdown };
+};
+
+// 計算代購賣家 (Shopper) 邏輯
+const calculateShopper = (form: ShopperState, settings: CalculatorSettings) => {
+  const rate = getEffectiveRate(settings);
+
+  // 總成本 (原幣轉台幣)
+  const totalCostNative = form.productCost + form.shippingCost + form.otherCost;
+  const totalCostTWD = totalCostNative * rate;
+
+  // 淨利 = 售價 - 總成本
+  const netProfit = form.targetSellingPrice - totalCostTWD;
+  
+  // 利潤率 = (淨利 / 售價) * 100
+  const profitMargin = form.targetSellingPrice > 0 
+    ? (netProfit / form.targetSellingPrice) * 100 
+    : 0;
+
+  // 時薪 = 淨利 / 工時
+  const hourlyWage = form.timeSpent > 0 ? netProfit / form.timeSpent : 0;
+
+  // 生成分析字串
+  const breakdown = `
+✈️ 代購獲利分析
+------------------
+匯率：${rate.toFixed(3)} (${settings.countryCode})
+預計售價：${formatCurrency(form.targetSellingPrice)}
+總成本：${formatCurrency(totalCostTWD)}
+------------------
+💵 預估淨利：${formatCurrency(netProfit)}
+📈 利潤率：${profitMargin.toFixed(1)}%
+⏱️換算時薪：${formatCurrency(hourlyWage)}
+`.trim();
+
+  return { totalCostTWD, netProfit, profitMargin, hourlyWage, breakdown };
+};
+
+// ==========================================
+// 3. UI 元件 (保持原本邏輯，移除 import)
+// ==========================================
+
 const COUNTRIES: CountryOption[] = [
   { code: 'JP', name: '日本', currency: 'JPY', flag: '🇯🇵', defaultRate: 0.215 },
   { code: 'US', name: '美國', currency: 'USD', flag: '🇺🇸', defaultRate: 31.5 },
@@ -13,13 +146,13 @@ const COUNTRIES: CountryOption[] = [
   { code: 'KR', name: '韓國', currency: 'KRW', flag: '🇰🇷', defaultRate: 0.024 },
 ];
 
-// 1. 子元件：封裝好的輸入框
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label: string;
   prefix?: string;
   suffix?: string;
   tooltip?: string;
 }
+
 const InputGroup = ({ label, prefix, suffix, tooltip, className, ...props }: InputProps) => (
   <div className={`space-y-1 ${className}`}>
     <div className="flex items-center gap-1">
@@ -40,12 +173,10 @@ const InputGroup = ({ label, prefix, suffix, tooltip, className, ...props }: Inp
   </div>
 );
 
-// 2. 主計算機元件
 export default function Calculator() {
   const [mode, setMode] = useState<'buyer' | 'shopper'>('buyer');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // 雖然有定義但目前 UI 沒用到 loading spinner，可保留供未來擴充
 
-  // 全域設定 State
   const [settings, setSettings] = useState<CalculatorSettings>({
     countryCode: 'JP',
     fxRateMode: 'auto',
@@ -54,7 +185,6 @@ export default function Calculator() {
     lastUpdated: null,
   });
 
-  // 表單 State
   const [buyerForm, setBuyerForm] = useState<BuyerState>({
     productPrice: 0, quantity: 1, discount: 0, shippingCost: 0, otherCost: 0,
     serviceFeeType: 'percent', serviceFeeValue: 10,
@@ -66,15 +196,24 @@ export default function Calculator() {
 
   const currentCountry = useMemo(() => COUNTRIES.find(c => c.code === settings.countryCode) || COUNTRIES[0], [settings.countryCode]);
 
-  // API 抓取匯率
   useEffect(() => {
     const fetchRate = async () => {
       setLoading(true);
       try {
-        const res = await fetch('https://api.exchangerate-api.com/v4/latest/TWD');
+        // 注意：這個 API 是免費公開的，基底貨幣通常是 USD 或 EUR，這裡用 TWD 反算可能需要調整
+        // 這裡維持原邏輯，假設 API 回傳 base TWD (雖然 exchangerate-api 通常需付費或指定 base)
+        // 為了確保運作，建議使用更穩定的公開 API 寫法，或是單純抓取美金匯率換算
+        // 這裡修正邏輯：抓取 USD 匯率，然後透過交叉匯率計算 (簡化版：直接 fetch)
+        const res = await fetch(`https://api.exchangerate-api.com/v4/latest/${currentCountry.currency}`);
         const data = await res.json();
-        const rate = 1 / data.rates[currentCountry.currency]; // 反算匯率
-        setSettings(prev => ({ ...prev, liveFxRate: rate, lastUpdated: new Date() }));
+        // 取得該外幣對台幣的匯率 (API 回傳: 1 外幣 = 多少 TWD)
+        const rate = data.rates['TWD']; 
+        
+        if (rate) {
+           setSettings(prev => ({ ...prev, liveFxRate: rate, lastUpdated: new Date() }));
+        } else {
+           throw new Error('No TWD rate found');
+        }
       } catch (error) {
         console.error('Rate error', error);
         setSettings(prev => ({ ...prev, liveFxRate: currentCountry.defaultRate }));
@@ -83,36 +222,31 @@ export default function Calculator() {
       }
     };
     fetchRate();
-  }, [currentCountry.currency]);
+  }, [currentCountry.currency, currentCountry.defaultRate]);
 
-  // 即時計算
   const buyerResult = useMemo(() => calculateBuyer(buyerForm, settings), [buyerForm, settings]);
   const shopperResult = useMemo(() => calculateShopper(shopperForm, settings), [shopperForm, settings]);
   const activeRate = getEffectiveRate(settings);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    alert('已複製明細到剪貼簿！');
+    alert('已複製明細！');
   };
 
   return (
-    <div className="flex flex-col h-full bg-white text-sm font-sans">
-      
-      {/* --- 頂部：切換模式 --- */}
+    <div className="flex flex-col h-full bg-white text-sm font-sans max-w-md mx-auto border rounded-xl shadow-sm overflow-hidden">
       <div className="flex p-1 bg-gray-100 rounded-xl m-4 mb-2">
         <button onClick={() => setMode('buyer')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'buyer' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>🛍️ 買家試算</button>
         <button onClick={() => setMode('shopper')} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${mode === 'shopper' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>✈️ 代購獲利</button>
       </div>
 
       <div className="px-4 pb-4 space-y-5 overflow-y-auto flex-1 custom-scrollbar">
-        
-        {/* --- 1. 國家與匯率設定 --- */}
         <div className="space-y-2">
           <div className="flex justify-between items-center">
              <label className="text-[10px] font-bold text-gray-400 uppercase">國家</label>
              <div className="flex items-center gap-1 text-[10px] text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
-                <span>1 {currentCountry.currency} ≈ {activeRate.toFixed(3)} TWD</span>
-                {settings.fxRateMode === 'auto' && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/>}
+               <span>1 {currentCountry.currency} ≈ {activeRate.toFixed(3)} TWD</span>
+               {settings.fxRateMode === 'auto' && <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"/>}
              </div>
           </div>
           <div className="grid grid-cols-5 gap-1.5">
@@ -125,12 +259,11 @@ export default function Calculator() {
             ))}
           </div>
           
-          {/* 匯率手動切換小開關 */}
           <div className="flex items-center justify-end gap-2 pt-1">
              <label className="text-[10px] text-gray-400">自訂匯率</label>
              <div className="flex bg-gray-100 rounded p-0.5">
-                <button onClick={() => setSettings(s => ({ ...s, fxRateMode: 'auto' }))} className={`px-2 py-0.5 text-[10px] rounded transition ${settings.fxRateMode === 'auto' ? 'bg-white shadow-sm font-bold' : 'text-gray-400'}`}>Auto</button>
-                <button onClick={() => setSettings(s => ({ ...s, fxRateMode: 'manual' }))} className={`px-2 py-0.5 text-[10px] rounded transition ${settings.fxRateMode === 'manual' ? 'bg-white shadow-sm font-bold' : 'text-gray-400'}`}>Set</button>
+               <button onClick={() => setSettings(s => ({ ...s, fxRateMode: 'auto' }))} className={`px-2 py-0.5 text-[10px] rounded transition ${settings.fxRateMode === 'auto' ? 'bg-white shadow-sm font-bold' : 'text-gray-400'}`}>Auto</button>
+               <button onClick={() => setSettings(s => ({ ...s, fxRateMode: 'manual' }))} className={`px-2 py-0.5 text-[10px] rounded transition ${settings.fxRateMode === 'manual' ? 'bg-white shadow-sm font-bold' : 'text-gray-400'}`}>Set</button>
              </div>
           </div>
           {settings.fxRateMode === 'manual' && (
@@ -140,7 +273,6 @@ export default function Calculator() {
 
         <hr className="border-dashed border-gray-200"/>
 
-        {/* --- 2. 表單區域 --- */}
         {mode === 'buyer' ? (
           <div className="space-y-3 animate-fade-in">
              <div className="grid grid-cols-2 gap-3">
@@ -152,20 +284,19 @@ export default function Calculator() {
                 <InputGroup label="國際運費" value={buyerForm.shippingCost || ''} onChange={(e) => setBuyerForm(p => ({ ...p, shippingCost: parseFloat(e.target.value) }))} />
              </div>
              
-             {/* 代購費特殊區塊 */}
              <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 space-y-2">
                 <div className="flex justify-between items-center">
                    <label className="text-[10px] font-bold text-blue-800">代購服務費</label>
                    <div className="flex gap-1">
-                      {[10, 12, 15].map(rate => (
-                        <button key={rate} onClick={() => setBuyerForm(p => ({ ...p, serviceFeeValue: rate, serviceFeeType: 'percent' }))} className="text-[9px] px-1.5 py-0.5 bg-white border border-blue-200 rounded text-blue-600 hover:bg-blue-50 transition">{rate}%</button>
-                      ))}
+                     {[10, 12, 15].map(rate => (
+                       <button key={rate} onClick={() => setBuyerForm(p => ({ ...p, serviceFeeValue: rate, serviceFeeType: 'percent' }))} className="text-[9px] px-1.5 py-0.5 bg-white border border-blue-200 rounded text-blue-600 hover:bg-blue-50 transition">{rate}%</button>
+                     ))}
                    </div>
                 </div>
                 <div className="flex gap-2">
                    <select className="bg-white border border-blue-200 rounded-lg px-2 text-xs font-bold text-gray-600 outline-none h-9" value={buyerForm.serviceFeeType} onChange={(e) => setBuyerForm(p => ({ ...p, serviceFeeType: e.target.value as any }))}>
-                      <option value="percent">%</option>
-                      <option value="fixed">$</option>
+                     <option value="percent">%</option>
+                     <option value="fixed">$</option>
                    </select>
                    <input type="number" className="flex-1 px-3 rounded-lg border border-blue-200 text-sm outline-none focus:ring-2 focus:ring-blue-500/20" value={buyerForm.serviceFeeValue} onChange={(e) => setBuyerForm(p => ({ ...p, serviceFeeValue: parseFloat(e.target.value) }))} />
                 </div>
@@ -187,7 +318,6 @@ export default function Calculator() {
         )}
       </div>
 
-      {/* --- 3. 結果卡片 (Sticky Bottom) --- */}
       <div className={`p-5 border-t transition-colors duration-300 ${mode === 'buyer' ? 'bg-slate-50 border-slate-100' : 'bg-orange-50 border-orange-100'}`}>
         {mode === 'buyer' ? (
           <div className="space-y-2">
