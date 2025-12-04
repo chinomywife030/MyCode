@@ -49,7 +49,10 @@ export default function ProfilePage() {
 
       const { data: reviewsData } = await supabase
         .from('reviews')
-        .select('*, reviewer:reviewer_id(name, avatar_url)')
+        .select(`
+          *,
+          reviewer:profiles!reviews_reviewer_id_fkey(name, avatar_url)
+        `)
         .eq('target_id', id)
         .order('created_at', { ascending: false });
       setReviews(reviewsData || []);

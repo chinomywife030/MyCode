@@ -35,6 +35,15 @@ export interface WishRequest {
   status?: string;
   images?: string[];
   created_at?: string;
+  // 關聯欄位 (從 Supabase join 查詢取得)
+  buyer?: {
+    name: string;
+    avatar_url?: string;
+  };
+  profiles?: {
+    name: string;
+    avatar_url?: string;
+  };
 }
 
 export interface Order {
@@ -60,6 +69,25 @@ export interface Review {
   comment: string;
   created_at: string;
   reviewer?: {
+    name: string;
+    avatar_url?: string;
+  };
+}
+
+export interface Trip {
+  id: string;
+  destination: string;
+  date: string;
+  description?: string;
+  shopper_id: string;
+  shopper_name?: string;
+  created_at?: string;
+  // 關聯欄位 (從 Supabase join 查詢取得)
+  shopper?: {
+    name: string;
+    avatar_url?: string;
+  };
+  profiles?: {
     name: string;
     avatar_url?: string;
   };
