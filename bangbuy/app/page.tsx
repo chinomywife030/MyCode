@@ -15,37 +15,52 @@ export default function Home() {
   const [wishes, setWishes] = useState<any[]>([]);
   const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [myFavorites, setMyFavorites] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
   useEffect(() => {
     async function fetchData() {
-      const { data: { user } } = await supabase.auth.getUser();
-      setCurrentUser(user);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setCurrentUser(user);
 
-      // 🔽 修改：多抓了 profiles (發文者資料)
-      const [wishesRes, tripsRes] = await Promise.all([
-        supabase
-          .from('wish_requests')
-          .select('*, profiles:buyer_id(name, avatar_url)') // 關聯抓取買家資料
-          .eq('status', 'open')
-          .order('created_at', { ascending: false }),
-        
-        supabase
-          .from('trips')
-          .select('*, profiles:shopper_id(name, avatar_url)') // 關聯抓取留學生資料
-          .order('created_at', { ascending: false })
-      ]);
+        // 🔽 修改：多抓了 profiles (發文者資料)
+        const [wishesRes, tripsRes] = await Promise.all([
+          supabase
+            .from('wish_requests')
+            .select('*, profiles:buyer_id(name, avatar_url)') // 關聯抓取買家資料
+            .eq('status', 'open')
+            .order('created_at', { ascending: false }),
 
-      setWishes(wishesRes.data || []);
-      setTrips(tripsRes.data || []);
+          supabase
+            .from('trips')
+            .select('*, profiles:shopper_id(name, avatar_url)') // 關聯抓取留學生資料
+            .order('created_at', { ascending: false })
+        ]);
 
-      if (user) {
-        const { data: favData } = await supabase.from('favorites').select('wish_id').eq('user_id', user.id);
-        if (favData) setMyFavorites(favData.map(f => f.wish_id));
+        if (wishesRes.error) {
+          console.error('Error fetching wishes:', wishesRes.error);
+          setError('無法載入許願單：' + wishesRes.error.message);
+        }
+        if (tripsRes.error) {
+          console.error('Error fetching trips:', tripsRes.error);
+          setError('無法載入行程：' + tripsRes.error.message);
+        }
+
+        setWishes(wishesRes.data || []);
+        setTrips(tripsRes.data || []);
+
+        if (user) {
+          const { data: favData } = await supabase.from('favorites').select('wish_id').eq('user_id', user.id);
+          if (favData) setMyFavorites(favData.map(f => f.wish_id));
+        }
+      } catch (err) {
+        console.error('Error in fetchData:', err);
+        setError('載入資料時發生錯誤：' + (err instanceof Error ? err.message : String(err)));
+      } finally {
+        setLoading(false);
       }
-      
-      setLoading(false);
     }
     fetchData();
   }, []);
@@ -93,6 +108,12 @@ export default function Home() {
           </Link>
         </div>
 
+        {error && (
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+            <p className="text-red-700 font-medium">❌ {error}</p>
+          </div>
+        )}
+
         {mode === 'requester' ? (
           <div>
             <div className="flex justify-between items-end mb-6">
@@ -102,7 +123,13 @@ export default function Home() {
               </div>
             </div>
 
-            {loading ? <p className="text-gray-500 text-lg py-10 text-center">正在搜尋航班...</p> : (
+            {loading ? <p className="text-gray-500 text-lg py-10 text-center">正在搜尋航班...</p> : trips.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-2xl shadow-sm">
+                <div className="text-6xl mb-4">✈️</div>
+                <p className="text-gray-500 text-lg">目前沒有即將出發的行程</p>
+                <p className="text-gray-400 text-sm mt-2">請稍後再回來查看！</p>
+              </div>
+            ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {trips.map((trip) => (
                   <div key={trip.id} className="group bg-gradient-to-br from-white to-blue-50 p-6 rounded-2xl shadow-md hover:shadow-xl border border-blue-100 hover:border-blue-300 transition-all duration-300 transform hover:-translate-y-1 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 relative overflow-hidden">
@@ -139,8 +166,14 @@ export default function Home() {
 
           <div>
             <h2 className="text-2xl font-extrabold text-gray-900 mb-6 flex items-center gap-2">🎁 這裡有訂單可以接</h2>
-            
-            {loading ? <p className="text-gray-500 text-lg py-10 text-center">正在整理願望...</p> : (
+
+            {loading ? <p className="text-gray-500 text-lg py-10 text-center">正在整理願望...</p> : wishes.length === 0 ? (
+              <div className="text-center py-16 bg-white rounded-2xl shadow-sm">
+                <div className="text-6xl mb-4">🎁</div>
+                <p className="text-gray-500 text-lg">目前沒有許願單</p>
+                <p className="text-gray-400 text-sm mt-2">請稍後再回來查看！</p>
+              </div>
+            ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {wishes.map((wish) => (
                   <Link key={wish.id} href={`/wish/${wish.id}`} className="block group relative">
