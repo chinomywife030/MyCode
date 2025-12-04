@@ -10,7 +10,15 @@ export default function CreatePage() {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [user, setUser] = useState<any>(null);
+  interface User {
+    id: string;
+    email?: string;
+    user_metadata?: {
+      name?: string;
+    };
+  }
+
+  const [user, setUser] = useState<User | null>(null);
 
   // 1. 檢查登入狀態
   useEffect(() => {
@@ -43,8 +51,9 @@ export default function CreatePage() {
   const totalPrice = (Number(formData.price) || 0) + (Number(formData.commission) || 0);
 
   // 處理輸入變更
-  const handleChange = (e: any) => {
-    const { name, value, type, checked } = e.target;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value, type } = e.target;
+    const checked = (e.target as HTMLInputElement).checked;
     setFormData((prev) => ({
       ...prev,
       [name]: type === 'checkbox' ? checked : value
@@ -52,7 +61,7 @@ export default function CreatePage() {
   };
 
   // 處理圖片選擇
-  const handleFileChange = (e: any) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
@@ -61,7 +70,7 @@ export default function CreatePage() {
   };
 
   // 3. 送出表單
-  const handleSubmit = async (e: any) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     

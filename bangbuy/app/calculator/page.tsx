@@ -43,7 +43,15 @@ const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('zh-TW', { style: 'currency', currency: 'TWD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 };
 
-const InputGroup = ({ label, prefix, suffix, tooltip, className, ...props }: any) => (
+interface InputGroupProps extends React.InputHTMLAttributes<HTMLInputElement> {
+  label: string;
+  prefix?: string;
+  suffix?: string;
+  tooltip?: string;
+  className?: string;
+}
+
+const InputGroup = ({ label, prefix, suffix, tooltip, className, ...props }: InputGroupProps) => (
   <div className={`space-y-1 ${className}`}>
     <div className="flex items-center gap-1">
       <label className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">{label}</label>
@@ -167,36 +175,36 @@ export default function CalculatorPage() {
            {mode === 'buyer' ? (
               <div className="space-y-4 animate-fade-in">
                   <div className="grid grid-cols-2 gap-4">
-                      <InputGroup label={`單價 (${currentCountry.currency})`} value={buyerForm.productPrice || ''} onChange={(e: any) => setBuyerForm(p => ({ ...p, productPrice: parseFloat(e.target.value) }))} />
-                      <InputGroup label="數量" value={buyerForm.quantity} onChange={(e: any) => setBuyerForm(p => ({ ...p, quantity: parseFloat(e.target.value) }))} />
+                      <InputGroup label={`單價 (${currentCountry.currency})`} value={buyerForm.productPrice || ''} onChange={(e) => setBuyerForm(p => ({ ...p, productPrice: parseFloat(e.target.value) || 0 }))} />
+                      <InputGroup label="數量" value={buyerForm.quantity} onChange={(e) => setBuyerForm(p => ({ ...p, quantity: parseFloat(e.target.value) || 0 }))} />
                   </div>
-                  <InputGroup label="折扣 (原幣)" prefix="-" value={buyerForm.discount || ''} onChange={(e: any) => setBuyerForm(p => ({ ...p, discount: parseFloat(e.target.value) }))} />
+                  <InputGroup label="折扣 (原幣)" prefix="-" value={buyerForm.discount || ''} onChange={(e) => setBuyerForm(p => ({ ...p, discount: parseFloat(e.target.value) || 0 }))} />
                   <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 space-y-3">
                       <div className="flex justify-between items-center">
                          <label className="text-[10px] font-bold text-blue-800">代購服務費</label>
                          <div className="flex gap-1">{[10, 12, 15].map(rate => (<button key={rate} onClick={() => setBuyerForm(p => ({ ...p, serviceFeeValue: rate, serviceFeeType: 'percent' }))} className="text-[9px] px-1.5 py-0.5 bg-white border border-blue-200 rounded text-blue-600 hover:bg-blue-50">{rate}%</button>))}</div>
                       </div>
                       <div className="flex gap-2">
-                        <select className="bg-white border border-blue-200 rounded-lg px-2 text-xs font-bold text-gray-600 h-10 outline-none" value={buyerForm.serviceFeeType} onChange={(e) => setBuyerForm(p => ({ ...p, serviceFeeType: e.target.value as any }))}><option value="percent">%</option><option value="fixed">$</option></select>
+                        <select className="bg-white border border-blue-200 rounded-lg px-2 text-xs font-bold text-gray-600 h-10 outline-none" value={buyerForm.serviceFeeType} onChange={(e) => setBuyerForm(p => ({ ...p, serviceFeeType: e.target.value as 'percent' | 'fixed' }))}><option value="percent">%</option><option value="fixed">$</option></select>
                         <input type="number" className="flex-1 px-3 rounded-lg border border-blue-200 text-sm outline-none focus:ring-2 focus:ring-blue-500/20" value={buyerForm.serviceFeeValue} onChange={(e) => setBuyerForm(p => ({ ...p, serviceFeeValue: parseFloat(e.target.value) }))} />
                       </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                    <InputGroup label="國際運費" value={buyerForm.shippingCost || ''} onChange={(e: any) => setBuyerForm(p => ({ ...p, shippingCost: parseFloat(e.target.value) }))} />
-                    <InputGroup label="其他雜支" value={buyerForm.otherCost || ''} onChange={(e: any) => setBuyerForm(p => ({ ...p, otherCost: parseFloat(e.target.value) }))} />
+                    <InputGroup label="國際運費" value={buyerForm.shippingCost || ''} onChange={(e) => setBuyerForm(p => ({ ...p, shippingCost: parseFloat(e.target.value) || 0 }))} />
+                    <InputGroup label="其他雜支" value={buyerForm.otherCost || ''} onChange={(e) => setBuyerForm(p => ({ ...p, otherCost: parseFloat(e.target.value) || 0 }))} />
                   </div>
               </div>
            ) : (
               // Shopper form (略，同上，僅結構)
               <div className="space-y-4 animate-fade-in">
-                  <InputGroup label="預計售價 (台幣)" prefix="$" className="border-orange-200" value={shopperForm.targetSellingPrice || ''} onChange={(e: any) => setShopperForm(p => ({ ...p, targetSellingPrice: parseFloat(e.target.value) }))} />
+                  <InputGroup label="預計售價 (台幣)" prefix="$" className="border-orange-200" value={shopperForm.targetSellingPrice || ''} onChange={(e) => setShopperForm(p => ({ ...p, targetSellingPrice: parseFloat(e.target.value) || 0 }))} />
                   <div className="grid grid-cols-2 gap-4">
-                      <InputGroup label="成本" value={shopperForm.productCost || ''} onChange={(e: any) => setShopperForm(p => ({ ...p, productCost: parseFloat(e.target.value) }))} />
-                      <InputGroup label="運費" value={shopperForm.shippingCost || ''} onChange={(e: any) => setShopperForm(p => ({ ...p, shippingCost: parseFloat(e.target.value) }))} />
+                      <InputGroup label="成本" value={shopperForm.productCost || ''} onChange={(e) => setShopperForm(p => ({ ...p, productCost: parseFloat(e.target.value) || 0 }))} />
+                      <InputGroup label="運費" value={shopperForm.shippingCost || ''} onChange={(e) => setShopperForm(p => ({ ...p, shippingCost: parseFloat(e.target.value) || 0 }))} />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
-                      <InputGroup label="雜支" value={shopperForm.otherCost || ''} onChange={(e: any) => setShopperForm(p => ({ ...p, otherCost: parseFloat(e.target.value) }))} />
-                      <InputGroup label="工時" value={shopperForm.timeSpent || ''} onChange={(e: any) => setShopperForm(p => ({ ...p, timeSpent: parseFloat(e.target.value) }))} />
+                      <InputGroup label="雜支" value={shopperForm.otherCost || ''} onChange={(e) => setShopperForm(p => ({ ...p, otherCost: parseFloat(e.target.value) || 0 }))} />
+                      <InputGroup label="工時" value={shopperForm.timeSpent || ''} onChange={(e) => setShopperForm(p => ({ ...p, timeSpent: parseFloat(e.target.value) || 0 }))} />
                   </div>
               </div>
            )}

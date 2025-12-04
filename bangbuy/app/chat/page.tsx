@@ -11,10 +11,40 @@ function ChatContent() {
   const searchParams = useSearchParams();
   const targetId = searchParams.get('target');
 
-  const [user, setUser] = useState<any>(null);
-  const [conversations, setConversations] = useState<any[]>([]);
-  const [activeChat, setActiveChat] = useState<any>(null);
-  const [messages, setMessages] = useState<any[]>([]);
+  interface User {
+    id: string;
+    email?: string;
+    user_metadata?: {
+      name?: string;
+    };
+  }
+
+  interface Profile {
+    id: string;
+    name: string;
+    avatar_url?: string;
+  }
+
+  interface Conversation {
+    id: string;
+    user1_id: string;
+    user2_id: string;
+    updated_at?: string;
+    otherUser?: Profile;
+  }
+
+  interface Message {
+    id?: string;
+    conversation_id: string;
+    sender_id: string;
+    content: string;
+    created_at?: string;
+  }
+
+  const [user, setUser] = useState<User | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeChat, setActiveChat] = useState<Conversation | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loadingChat, setLoadingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -74,9 +104,9 @@ function ChatContent() {
     if (!activeChat) return;
     const channel = supabase
       .channel(`chat:${activeChat.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeChat.id}` }, 
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `conversation_id=eq.${activeChat.id}` },
       (payload) => {
-        setMessages((prev) => [...prev, payload.new]);
+        setMessages((prev) => [...prev, payload.new as Message]);
         scrollToBottom();
       })
       .subscribe();
@@ -105,14 +135,14 @@ function ChatContent() {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !activeChat) return;
+    if (!newMessage.trim() || !activeChat || !user) return;
     const msg = newMessage;
-    setNewMessage(''); 
+    setNewMessage('');
 
     const { error } = await supabase.from('messages').insert([{ conversation_id: activeChat.id, sender_id: user.id, content: msg }]);
     if (!error) {
       await supabase.from('conversations').update({ updated_at: new Date() }).eq('id', activeChat.id);
-      
+
       // 寄信通知對方
       if (activeChat.otherUser?.id) {
          const myName = user.user_metadata?.name || '使用者';

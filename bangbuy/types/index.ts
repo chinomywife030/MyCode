@@ -19,6 +19,24 @@ export interface Profile {
   reviews?: Review[];
 }
 
+export interface WishRequest {
+  id?: string;
+  title: string;
+  description?: string;
+  budget?: number;
+  price?: number;
+  commission?: number;
+  product_url?: string;
+  is_urgent?: boolean;
+  target_country?: string;
+  category?: string;
+  deadline?: string;
+  buyer_id?: string;
+  status?: string;
+  images?: string[];
+  created_at?: string;
+}
+
 export interface Order {
   id: string;
   wish_id: string;
@@ -28,7 +46,7 @@ export interface Order {
   price: number;
   created_at: string;
   // 關聯資料
-  wish_requests?: any; 
+  wish_requests?: WishRequest;
   profiles?: Profile; // Shopper
   buyer_profile?: Profile; // Buyer
 }

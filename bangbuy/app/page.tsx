@@ -38,30 +38,45 @@ export default function Home() {
 
   useEffect(() => {
     async function fetchData() {
-      const { data: { user } } = await supabase.auth.getUser();
-      setCurrentUser(user);
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        setCurrentUser(user);
 
-      const [wishesRes, tripsRes] = await Promise.all([
-        supabase
-          .from('wish_requests')
-          .select('*, profiles:buyer_id(name, avatar_url)')
-          .eq('status', 'open')
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('trips')
-          .select('*, profiles:shopper_id(name, avatar_url)')
-          .order('created_at', { ascending: false }),
-      ]);
+        const [wishesRes, tripsRes] = await Promise.all([
+          supabase
+            .from('wish_requests')
+            .select('*, profiles:buyer_id(name, avatar_url)')
+            .eq('status', 'open')
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('trips')
+            .select('*, profiles:shopper_id(name, avatar_url)')
+            .order('created_at', { ascending: false }),
+        ]);
 
-      setWishes(wishesRes.data || []);
-      setTrips(tripsRes.data || []);
+        console.log('Wishes response:', wishesRes);
+        console.log('Trips response:', tripsRes);
 
-      if (user) {
-        const { data: favData } = await supabase.from('favorites').select('wish_id').eq('user_id', user.id);
-        if (favData) setMyFavorites(favData.map((f) => f.wish_id));
+        if (wishesRes.error) {
+          console.error('Error fetching wishes:', wishesRes.error);
+        }
+        if (tripsRes.error) {
+          console.error('Error fetching trips:', tripsRes.error);
+        }
+
+        setWishes(wishesRes.data || []);
+        setTrips(tripsRes.data || []);
+
+        if (user) {
+          const { data: favData } = await supabase.from('favorites').select('wish_id').eq('user_id', user.id);
+          if (favData) setMyFavorites(favData.map((f) => f.wish_id));
+        }
+
+        setLoading(false);
+      } catch (error) {
+        console.error('Error in fetchData:', error);
+        setLoading(false);
       }
-
-      setLoading(false);
     }
     fetchData();
   }, []);
@@ -120,13 +135,22 @@ export default function Home() {
           <div>
             <div className="flex justify-between items-end mb-6">
               <div>
-                <h2 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2 mb-1">正在出國的代購</h2>
+                <h2 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2 mb-1">
+                  正在出國的代購
+                  {!loading && <span className="text-sm font-normal text-gray-500">({trips.length} 個行程)</span>}
+                </h2>
                 <p className="text-gray-500 text-sm">把握時間，直接聊聊委託代買。</p>
               </div>
             </div>
 
             {loading ? (
               <p className="text-gray-500 text-lg py-10 text-center">載入中...</p>
+            ) : trips.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-2xl shadow-sm">
+                <div className="text-6xl mb-4">✈️</div>
+                <p className="text-xl font-bold text-gray-700 mb-2">目前沒有代購行程</p>
+                <p className="text-gray-500">等待代購發布新行程...</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {trips.map((trip) => (
@@ -177,10 +201,19 @@ export default function Home() {
           </div>
         ) : (
           <div>
-            <h2 className="text-2xl font-extrabold text-gray-900 mb-6 flex items-center gap-2">最新可接的需求</h2>
+            <h2 className="text-2xl font-extrabold text-gray-900 mb-6 flex items-center gap-2">
+              最新可接的需求
+              {!loading && <span className="text-sm font-normal text-gray-500">({wishes.length} 個需求)</span>}
+            </h2>
 
             {loading ? (
               <p className="text-gray-500 text-lg py-10 text-center">載入中...</p>
+            ) : wishes.length === 0 ? (
+              <div className="text-center py-20 bg-white rounded-2xl shadow-sm">
+                <div className="text-6xl mb-4">🛍️</div>
+                <p className="text-xl font-bold text-gray-700 mb-2">目前沒有代購需求</p>
+                <p className="text-gray-500">等待買家發布新需求...</p>
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {wishes.map((wish) => (

@@ -1,8 +1,15 @@
 'use client';
 import { useState } from 'react';
 
+interface Wish {
+  id?: string;
+  title: string;
+  budget: number;
+  images?: string[];
+}
+
 interface OfferModalProps {
-  wish: any;
+  wish: Wish;
   onClose: () => void;
   onConfirm: (price: number) => void;
 }
