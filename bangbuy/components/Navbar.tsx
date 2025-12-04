@@ -21,7 +21,10 @@ export default function Navbar() {
   const pathname = usePathname();
 
   // 換頁時自動關閉選單
-  useEffect(() => { setIsMenuOpen(false); }, [pathname]);
+  useEffect(() => {
+    const timer = setTimeout(() => setIsMenuOpen(false), 0);
+    return () => clearTimeout(timer);
+  }, [pathname]);
 
   // 獨立出抓取 Profile 的功能
   const fetchUserProfile = useCallback(async (userId: string) => {

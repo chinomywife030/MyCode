@@ -5,15 +5,14 @@ import { useUserMode } from '@/components/UserModeProvider';
 
 export default function RoleSelectorModal() {
   const { setMode } = useUserMode();
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
+  const [isOpen, setIsOpen] = useState(() => {
     // 檢查是否是第一次來 (如果沒有存過模式，就跳出視窗)
-    const savedMode = localStorage.getItem('bangbuy_mode');
-    if (!savedMode) {
-      setIsOpen(true);
+    if (typeof window !== 'undefined') {
+      const savedMode = localStorage.getItem('bangbuy_mode');
+      return !savedMode;
     }
-  }, []);
+    return false;
+  });
 
   const handleSelect = (role: 'requester' | 'shopper') => {
     setMode(role);

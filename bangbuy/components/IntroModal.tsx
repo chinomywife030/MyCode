@@ -3,16 +3,15 @@
 import { useState, useEffect } from 'react';
 
 export default function IntroModal() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [step, setStep] = useState(0);
-
-  useEffect(() => {
+  const [isOpen, setIsOpen] = useState(() => {
     // 檢查 localStorage，如果是第一次來，就顯示介紹
-    const hasSeenIntro = localStorage.getItem('bangbuy_intro_seen');
-    if (!hasSeenIntro) {
-      setIsOpen(true);
+    if (typeof window !== 'undefined') {
+      const hasSeenIntro = localStorage.getItem('bangbuy_intro_seen');
+      return !hasSeenIntro;
     }
-  }, []);
+    return false;
+  });
+  const [step, setStep] = useState(0);
 
   const handleClose = () => {
     setIsOpen(false);
