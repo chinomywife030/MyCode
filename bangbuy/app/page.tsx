@@ -1,19 +1,37 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { useLanguage } from '@/components/LanguageProvider';
+import { supabase } from '@/lib/supabase';
 import Navbar from '@/components/Navbar';
 import { useUserMode } from '@/components/UserModeProvider';
 import RoleSelectorModal from '@/components/RoleSelectorModal';
 
+type Wish = {
+  id: string;
+  title: string;
+  budget: number;
+  buyer_id: string;
+  images?: string[];
+  target_country: string;
+  profiles?: { name?: string; avatar_url?: string };
+};
+
+type Trip = {
+  id: string;
+  destination: string;
+  description: string;
+  date: string;
+  shopper_id: string;
+  profiles?: { name?: string; avatar_url?: string };
+  shopper_name?: string;
+};
+
 export default function Home() {
-  const { t } = useLanguage();
   const { mode } = useUserMode();
-  
-  const [wishes, setWishes] = useState<any[]>([]);
-  const [trips, setTrips] = useState<any[]>([]);
+
+  const [wishes, setWishes] = useState<Wish[]>([]);
+  const [trips, setTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(true);
   const [myFavorites, setMyFavorites] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -23,18 +41,16 @@ export default function Home() {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // 🔽 修改：多抓了 profiles (發文者資料)
       const [wishesRes, tripsRes] = await Promise.all([
         supabase
           .from('wish_requests')
-          .select('*, profiles:buyer_id(name, avatar_url)') // 關聯抓取買家資料
+          .select('*, profiles:buyer_id(name, avatar_url)')
           .eq('status', 'open')
           .order('created_at', { ascending: false }),
-        
         supabase
           .from('trips')
-          .select('*, profiles:shopper_id(name, avatar_url)') // 關聯抓取留學生資料
-          .order('created_at', { ascending: false })
+          .select('*, profiles:shopper_id(name, avatar_url)')
+          .order('created_at', { ascending: false }),
       ]);
 
       setWishes(wishesRes.data || []);
@@ -42,9 +58,9 @@ export default function Home() {
 
       if (user) {
         const { data: favData } = await supabase.from('favorites').select('wish_id').eq('user_id', user.id);
-        if (favData) setMyFavorites(favData.map(f => f.wish_id));
+        if (favData) setMyFavorites(favData.map((f) => f.wish_id));
       }
-      
+
       setLoading(false);
     }
     fetchData();
@@ -53,14 +69,17 @@ export default function Home() {
   const toggleFavorite = async (e: React.MouseEvent, wishId: string) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!currentUser) return alert('請先登入');
-    
+    if (!currentUser) {
+      alert('請先登入');
+      return;
+    }
+
     const isFav = myFavorites.includes(wishId);
     if (isFav) {
-      setMyFavorites(prev => prev.filter(id => id !== wishId));
+      setMyFavorites((prev) => prev.filter((id) => id !== wishId));
       await supabase.from('favorites').delete().eq('user_id', currentUser.id).eq('wish_id', wishId);
     } else {
-      setMyFavorites(prev => [...prev, wishId]);
+      setMyFavorites((prev) => [...prev, wishId]);
       await supabase.from('favorites').insert([{ user_id: currentUser.id, wish_id: wishId }]);
     }
   };
@@ -76,20 +95,24 @@ export default function Home() {
       <Navbar />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        <div className={`rounded-3xl p-8 mb-10 shadow-xl text-white transition-all duration-500 transform hover:scale-[1.01]
+        <div
+          className={`rounded-3xl p-8 mb-10 shadow-xl text-white transition-all duration-500 transform hover:scale-[1.01]
           ${mode === 'requester' ? 'bg-gradient-to-br from-blue-600 via-blue-500 to-cyan-500' : 'bg-gradient-to-br from-orange-500 via-orange-400 to-amber-400'}
-        `}>
+        `}
+        >
           <h2 className="text-3xl sm:text-4xl font-extrabold mb-3 tracking-tight">
-            {mode === 'requester' ? '👋 嗨，買家！找人幫你買？' : '👋 嗨，代購夥伴！想接單嗎？'}
+            {mode === 'requester' ? '買家您好，找到人幫你買！' : '代購您好，看看想接什麼行程'}
           </h2>
           <p className="opacity-90 mb-8 text-lg sm:text-xl max-w-2xl leading-relaxed">
-            {mode === 'requester' 
-              ? '瀏覽下方即將出發的留學生行程，直接委託他們，或者發布你的許願單！' 
-              : '瀏覽下方的許願清單，看看大家想要什麼，順路幫帶賺旅費！'}
+            {mode === 'requester'
+              ? '在下方找到正在出國的代購，直接發佈需求或發訊息詢價。'
+              : '瀏覽目前的代購需求，挑選適合的訂單並私訊買家。'}
           </p>
-          <Link href={mode === 'requester' ? '/create' : '/trips/create'} className="inline-block bg-white text-gray-900 px-8 py-4 rounded-full font-bold shadow-md hover:bg-gray-50 hover:shadow-lg transition-all active:scale-95">
-            {mode === 'requester' ? '＋ 發布許願單' : '＋ 發布我的行程'}
+          <Link
+            href={mode === 'requester' ? '/create' : '/trips/create'}
+            className="inline-block bg-white text-gray-900 px-8 py-4 rounded-full font-bold shadow-md hover:bg-gray-50 hover:shadow-lg transition-all active:scale-95"
+          >
+            {mode === 'requester' ? '我要發布代購需求' : '我要發布出行行程'}
           </Link>
         </div>
 
@@ -97,81 +120,134 @@ export default function Home() {
           <div>
             <div className="flex justify-between items-end mb-6">
               <div>
-                <h2 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2 mb-1">✈️ 這些人準備要出發</h2>
-                <p className="text-gray-500 text-sm">把握機會，直接私訊他們幫忙帶貨！</p>
+                <h2 className="text-2xl font-extrabold text-gray-900 flex items-center gap-2 mb-1">正在出國的代購</h2>
+                <p className="text-gray-500 text-sm">把握時間，直接聊聊委託代買。</p>
               </div>
             </div>
 
-            {loading ? <p className="text-gray-500 text-lg py-10 text-center">正在搜尋航班...</p> : (
+            {loading ? (
+              <p className="text-gray-500 text-lg py-10 text-center">載入中...</p>
+            ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {trips.map((trip) => (
-                  <div key={trip.id} className="group bg-gradient-to-br from-white to-blue-50 p-6 rounded-2xl shadow-md hover:shadow-xl border border-blue-100 hover:border-blue-300 transition-all duration-300 transform hover:-translate-y-1 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 relative overflow-hidden">
+                  <div
+                    key={trip.id}
+                    className="group bg-gradient-to-br from-white to-blue-50 p-6 rounded-2xl shadow-md hover:shadow-xl border border-blue-100 hover:border-blue-300 transition-all duration-300 transform hover:-translate-y-1 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 relative overflow-hidden"
+                  >
                     <div className="absolute -right-6 -top-6 text-blue-100/50 text-8xl font-black rotate-12 pointer-events-none">✈️</div>
                     <div className="flex-grow relative z-10">
                       <div className="flex flex-wrap items-center gap-3 mb-3">
-                        <span className="bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-bold shadow-sm">🚀 即將出發</span>
-                        <span className="text-blue-800 font-medium text-sm flex items-center gap-1 bg-blue-100/50 px-2 py-1 rounded-md">📅 {trip.date}</span>
+                        <span className="bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-bold shadow-sm">代購行程</span>
+                        <span className="text-blue-800 font-medium text-sm flex items-center gap-1 bg-blue-100/50 px-2 py-1 rounded-md">日期 {trip.date}</span>
                       </div>
                       <h3 className="text-2xl font-extrabold mb-2 text-gray-900 group-hover:text-blue-700 transition-colors">{trip.destination}</h3>
                       <p className="text-gray-600 text-base mb-4 line-clamp-2 leading-relaxed">{trip.description}</p>
-                      
-                      {/* 🔽 顯示行程發布者的頭像 */}
-                      <Link href={`/profile/${trip.shopper_id}`} className="flex items-center gap-3 group/profile w-fit p-2 -ml-2 rounded-lg hover:bg-white/50 transition">
+
+                      <Link
+                        href={`/profile/${trip.shopper_id}`}
+                        className="flex items-center gap-3 group/profile w-fit p-2 -ml-2 rounded-lg hover:bg-white/50 transition"
+                      >
                         <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden ring-2 ring-white shadow-sm">
-                           {trip.profiles?.avatar_url ? <img src={trip.profiles.avatar_url} className="w-full h-full object-cover"/> : <div className="w-full h-full flex items-center justify-center bg-blue-200 text-blue-600 font-bold">{trip.shopper_name?.[0]}</div>}
+                          {trip.profiles?.avatar_url ? (
+                            <img src={trip.profiles.avatar_url} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-blue-200 text-blue-600 font-bold">
+                              {(trip.shopper_name || trip.profiles?.name || '?')[0]}
+                            </div>
+                          )}
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500">代購夥伴</p>
-                          <span className="text-sm font-bold text-gray-700 group-hover/profile:text-blue-600 transition">{trip.shopper_name || trip.profiles?.name}</span>
+                          <p className="text-xs text-gray-500">代購</p>
+                          <span className="text-sm font-bold text-gray-700 group-hover/profile:text-blue-600 transition">
+                            {trip.shopper_name || trip.profiles?.name || '代購'}
+                          </span>
                         </div>
                       </Link>
                     </div>
-                    <Link href={`/chat?target=${trip.shopper_id}`} className="relative z-10 w-full sm:w-auto bg-blue-600 text-white px-8 py-3 rounded-xl text-base font-bold hover:bg-blue-700 shadow-md hover:shadow-lg transition-all active:scale-95 whitespace-nowrap text-center block">
-                      私訊委託代購
+                    <Link
+                      href={`/chat?target=${trip.shopper_id}`}
+                      className="relative z-10 w-full sm:w-auto bg-blue-600 text-white px-8 py-3 rounded-xl text-base font-bold hover:bg-blue-700 shadow-md hover:shadow-lg transition-all active:scale-95 whitespace-nowrap text-center block"
+                    >
+                      私訊委託
                     </Link>
                   </div>
                 ))}
               </div>
             )}
           </div>
-
         ) : (
-
           <div>
-            <h2 className="text-2xl font-extrabold text-gray-900 mb-6 flex items-center gap-2">🎁 這裡有訂單可以接</h2>
-            
-            {loading ? <p className="text-gray-500 text-lg py-10 text-center">正在整理願望...</p> : (
+            <h2 className="text-2xl font-extrabold text-gray-900 mb-6 flex items-center gap-2">最新可接的需求</h2>
+
+            {loading ? (
+              <p className="text-gray-500 text-lg py-10 text-center">載入中...</p>
+            ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {wishes.map((wish) => (
                   <Link key={wish.id} href={`/wish/${wish.id}`} className="block group relative">
                     <div className="bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 hover:border-orange-200 h-full flex flex-col transform hover:-translate-y-1">
                       <div className="h-56 bg-gray-50 relative w-full overflow-hidden flex justify-center items-center">
-                        {wish.images?.[0] ? <img src={wish.images[0]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"/> : <div className="text-6xl opacity-20">🎁</div>}
-                        <button onClick={(e) => toggleFavorite(e, wish.id)} className={`absolute top-3 right-3 p-2.5 rounded-full transition shadow-sm backdrop-blur-sm ${myFavorites.includes(wish.id) ? 'bg-white text-red-500 shadow-red-100' : 'bg-black/20 text-white hover:bg-white hover:text-red-500'}`}>
-                          <svg xmlns="http://www.w3.org/2000/svg" fill={myFavorites.includes(wish.id) ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" /></svg>
+                        {wish.images?.[0] ? (
+                          <img src={wish.images[0]} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                        ) : (
+                          <div className="text-6xl opacity-20">🛍️</div>
+                        )}
+                        <button
+                          onClick={(e) => toggleFavorite(e, wish.id)}
+                          className={`absolute top-3 right-3 p-2.5 rounded-full transition shadow-sm backdrop-blur-sm ${
+                            myFavorites.includes(wish.id)
+                              ? 'bg-white text-red-500 shadow-red-100'
+                              : 'bg-black/20 text-white hover:bg-white hover:text-red-500'
+                          }`}
+                          aria-label="收藏"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill={myFavorites.includes(wish.id) ? 'currentColor' : 'none'}
+                            viewBox="0 0 24 24"
+                            strokeWidth={2}
+                            stroke="currentColor"
+                            className="w-6 h-6"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"
+                            />
+                          </svg>
                         </button>
                         <div className="absolute top-3 left-3">
-                           <span className="backdrop-blur-md bg-white/80 text-gray-800 text-sm font-bold px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1">
-                             {getFlag(wish.target_country)} {wish.target_country}
-                           </span>
+                          <span className="backdrop-blur-md bg-white/80 text-gray-800 text-sm font-bold px-3 py-1.5 rounded-full shadow-sm flex items-center gap-1">
+                            {getFlag(wish.target_country)} {wish.target_country}
+                          </span>
                         </div>
                       </div>
                       <div className="p-5 flex flex-col flex-grow">
                         <div className="mb-3">
-                          <span className="block text-2xl font-extrabold text-gray-900 mb-1">${Number(wish.budget).toLocaleString()}</span>
-                          <h3 className="font-bold text-lg text-gray-700 line-clamp-2 group-hover:text-orange-600 transition-colors">{wish.title}</h3>
-                        </div>
-                        
-                        {/* 🔽 顯示許願者的小頭像 */}
-                        <div className="flex items-center gap-2 mb-3">
-                           <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden">
-                             {wish.profiles?.avatar_url ? <img src={wish.profiles.avatar_url} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-blue-100"></div>}
-                           </div>
-                           <span className="text-xs text-gray-500">{wish.profiles?.name}</span>
+                          <span className="block text-2xl font-extrabold text-gray-900 mb-1">
+                            ${Number(wish.budget).toLocaleString()}
+                          </span>
+                          <h3 className="font-bold text-lg text-gray-700 line-clamp-2 group-hover:text-orange-600 transition-colors">
+                            {wish.title}
+                          </h3>
                         </div>
 
-                        <Link href={`/chat?target=${wish.buyer_id}`} className="w-full mt-auto py-3 bg-orange-50 text-orange-600 rounded-xl text-base font-bold group-hover:bg-orange-500 group-hover:text-white transition-all shadow-sm hover:shadow-md text-center block">
-                          ✋ 私訊接單
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-6 h-6 rounded-full bg-gray-200 overflow-hidden">
+                            {wish.profiles?.avatar_url ? (
+                              <img src={wish.profiles.avatar_url} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full bg-blue-100" />
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500">{wish.profiles?.name || '買家'}</span>
+                        </div>
+
+                        <Link
+                          href={`/chat?target=${wish.buyer_id}`}
+                          className="w-full mt-auto py-3 bg-orange-50 text-orange-600 rounded-xl text-base font-bold group-hover:bg-orange-500 group-hover:text-white transition-all shadow-sm hover:shadow-md text-center block"
+                        >
+                          私訊買家
                         </Link>
                       </div>
                     </div>
@@ -181,7 +257,6 @@ export default function Home() {
             )}
           </div>
         )}
-
       </main>
     </div>
   );

@@ -14,17 +14,15 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [activeTab, setActiveTab] = useState<'wishes' | 'trips' | 'favorites' | 'orders'>('wishes');
-  
+
   const [myWishes, setMyWishes] = useState<any[]>([]);
   const [myTrips, setMyTrips] = useState<any[]>([]);
   const [myFavorites, setMyFavorites] = useState<any[]>([]);
   const [myOrders, setMyOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // 評價 Modal 狀態
-  const [reviewModal, setReviewModal] = useState<{open: boolean, orderId: string, targetId: string, targetName: string} | null>(null);
+  const [reviewModal, setReviewModal] = useState<{ open: boolean; orderId: string; targetId: string; targetName: string } | null>(null);
 
-  // 編輯模式
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({ name: '', bio: '' });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -43,19 +41,15 @@ export default function Dashboard() {
       setProfile(profileData);
       setEditForm({ name: profileData?.name || '', bio: profileData?.bio || '' });
 
-      // 抓許願
       const { data: wishes } = await supabase.from('wish_requests').select('*').eq('buyer_id', user.id).order('created_at', { ascending: false });
       setMyWishes(wishes || []);
 
-      // 抓行程
       const { data: trips } = await supabase.from('trips').select('*').eq('shopper_id', user.id).order('created_at', { ascending: false });
       setMyTrips(trips || []);
 
-      // 抓收藏
       const { data: favs } = await supabase.from('favorites').select(`wish_id, wish_requests (*)`).eq('user_id', user.id);
       if (favs) setMyFavorites(favs.map((f: any) => f.wish_requests).filter(Boolean));
 
-      // 抓訂單
       const { data: orders } = await supabase
         .from('orders')
         .select(`
@@ -66,9 +60,9 @@ export default function Dashboard() {
         `)
         .or(`buyer_id.eq.${user.id},shopper_id.eq.${user.id}`)
         .order('created_at', { ascending: false });
-      
+
       if (orders) {
-        const visibleOrders = orders.filter(o => {
+        const visibleOrders = orders.filter((o) => {
           if (o.buyer_id === user.id) return !o.archived_by_buyer;
           if (o.shopper_id === user.id) return !o.archived_by_shopper;
           return true;
@@ -81,7 +75,6 @@ export default function Dashboard() {
     initData();
   }, [router]);
 
-  // 更新個人資料
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setUpdating(true);
@@ -94,16 +87,18 @@ export default function Dashboard() {
         const { data: publicUrlData } = supabase.storage.from('wish-images').getPublicUrl(fileName);
         avatarUrl = publicUrlData.publicUrl;
       }
-      const { error } = await supabase.from('profiles').update({
-        name: editForm.name,
-        bio: editForm.bio,
-        avatar_url: avatarUrl
-      }).eq('id', user.id);
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          name: editForm.name,
+          bio: editForm.bio,
+          avatar_url: avatarUrl,
+        })
+        .eq('id', user.id);
       if (error) throw error;
-      alert('更新成功！');
+      alert('更新成功');
       setIsEditing(false);
-      // @ts-ignore
-      setProfile({ ...profile, name: editForm.name, bio: editForm.bio, avatar_url: avatarUrl });
+      setProfile({ ...profile, name: editForm.name, bio: editForm.bio, avatar_url: avatarUrl } as Profile);
       router.refresh();
     } catch (error: any) {
       alert('更新失敗: ' + error.message);
@@ -113,56 +108,49 @@ export default function Dashboard() {
   };
 
   const handleDeleteWish = async (id: string) => {
-    if (!confirm('確定刪除？')) return;
+    if (!confirm('確定要刪除這個需求嗎？')) return;
     await supabase.from('wish_requests').delete().eq('id', id);
-    setMyWishes(prev => prev.filter(w => w.id !== id));
+    setMyWishes((prev) => prev.filter((w) => w.id !== id));
   };
 
   const handleDeleteTrip = async (id: string) => {
-    if (!confirm('確定刪除？')) return;
+    if (!confirm('確定要刪除這個行程嗎？')) return;
     await supabase.from('trips').delete().eq('id', id);
-    setMyTrips(prev => prev.filter(t => t.id !== id));
+    setMyTrips((prev) => prev.filter((t) => t.id !== id));
   };
 
   const handleArchiveOrder = async (order: any) => {
     const isBuyer = order.buyer_id === user.id;
     const fieldToUpdate = isBuyer ? 'archived_by_buyer' : 'archived_by_shopper';
 
-    if (!confirm('確定要隱藏這筆訂單嗎？\n(這不會影響對方的紀錄，也不會刪除評價)')) return;
-    
-    const { error } = await supabase
-      .from('orders')
-      .update({ [fieldToUpdate]: true })
-      .eq('id', order.id);
+    if (!confirm('確定要隱藏這筆訂單嗎？\n(隱藏後仍保留於資料庫，可向客服協助恢復)')) return;
+
+    const { error } = await supabase.from('orders').update({ [fieldToUpdate]: true }).eq('id', order.id);
 
     if (error) {
-      alert('隱藏失敗: ' + error.message);
+      alert('操作失敗: ' + error.message);
     } else {
-      setMyOrders(prev => prev.filter(o => o.id !== order.id));
+      setMyOrders((prev) => prev.filter((o) => o.id !== order.id));
     }
   };
 
-  // 🔽 修改重點：加入 wishId 參數，並且如果是完成訂單，直接在前端也送出關閉許願單的請求
   const updateOrderStatus = async (orderId: string, status: string, wishId?: string) => {
     try {
-      // 1. 更新訂單狀態
       await supabase.from('orders').update({ status }).eq('id', orderId);
-      
-      // 2. 雙重保險：如果是完成訂單，且我是買家，直接手動關閉許願單 (避免 Trigger 延遲或失敗)
+
       if (status === 'completed' && wishId) {
-        // 嘗試更新 wish_requests (如果我是買家會成功，我是代購會被 RLS 擋下但沒關係，DB Trigger 會補救)
         await supabase.from('wish_requests').update({ status: 'closed' }).eq('id', wishId);
       }
 
-      setMyOrders(prev => prev.map(o => o.id === orderId ? { ...o, status } : o));
+      setMyOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
     } catch (error) {
-      console.error('更新狀態失敗', error);
+      console.error('更新訂單狀態失敗', error);
     }
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">載入會員資料...</div>;
 
-  const MenuButton = ({ id, icon, label }: { id: typeof activeTab, icon: string, label: string }) => (
+  const MenuButton = ({ id, icon, label }: { id: typeof activeTab; icon: string; label: string }) => (
     <button
       onClick={() => setActiveTab(id)}
       className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 
@@ -176,13 +164,13 @@ export default function Dashboard() {
   const renderVerificationStatus = () => {
     const status = profile?.verification_status || 'unverified';
     if (status === 'verified') {
-      return <div className="bg-green-100 text-green-700 text-xs px-3 py-1 rounded-full font-bold inline-block mt-2">✓ 已認證留學生</div>;
+      return <div className="bg-green-100 text-green-700 text-xs px-3 py-1 rounded-full font-bold inline-block mt-2">已驗證學生</div>;
     } else if (status === 'pending') {
-      return <div className="bg-yellow-100 text-yellow-700 text-xs px-3 py-1 rounded-full font-bold inline-block mt-2">⏳ 身份審核中</div>;
+      return <div className="bg-yellow-100 text-yellow-700 text-xs px-3 py-1 rounded-full font-bold inline-block mt-2">身份審核中</div>;
     } else {
       return (
         <Link href="/verify" className="bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs px-3 py-1 rounded-full font-bold inline-block mt-2 transition">
-          → 去認證身份
+          前往驗證身份
         </Link>
       );
     }
@@ -196,15 +184,21 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <aside className="md:col-span-1 space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center relative group">
-              <button onClick={() => setIsEditing(true)} className="absolute top-2 right-2 text-gray-400 hover:text-blue-600 p-2">✏️</button>
+              <button onClick={() => setIsEditing(true)} className="absolute top-2 right-2 text-gray-400 hover:text-blue-600 p-2" aria-label="編輯個人資料">✏️</button>
               <div className="w-24 h-24 mx-auto mb-3 rounded-full overflow-hidden border-4 border-gray-100 shadow-sm bg-gray-200">
-                {profile?.avatar_url ? <img src={profile.avatar_url} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-600 text-3xl font-bold">{profile?.name?.[0]?.toUpperCase()}</div>}
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} className="w-full h-full object-cover" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-600 text-3xl font-bold">{profile?.name?.[0]?.toUpperCase()}</div>
+                )}
               </div>
               <p className="font-bold text-gray-800 truncate text-lg">{profile?.name}</p>
-              
+
               {renderVerificationStatus()}
 
-              <Link href={`/profile/${user.id}`} className="block w-full py-2 mt-4 border border-gray-200 text-gray-600 text-xs rounded hover:bg-gray-50 transition">{t.dashboard.viewProfile}</Link>
+              <Link href={`/profile/${user.id}`} className="block w-full py-2 mt-4 border border-gray-200 text-gray-600 text-xs rounded hover:bg-gray-50 transition">
+                {t.dashboard.viewProfile}
+              </Link>
             </div>
             <nav className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 space-y-1">
               <MenuButton id="wishes" icon="🎁" label={t.dashboard.myWishes} />
@@ -225,103 +219,153 @@ export default function Dashboard() {
 
               {activeTab === 'wishes' && (
                 <div className="space-y-4">
-                  {myWishes.length === 0 ? <EmptyState text={t.dashboard.noWishes} /> : myWishes.map(wish => (
-                    <div key={wish.id} className="group border border-gray-100 rounded-lg p-4 flex justify-between items-center hover:bg-gray-50">
-                      <Link href={`/wish/${wish.id}`} className="flex-grow font-bold text-gray-800 hover:text-blue-600">{wish.title}</Link>
-                      <button onClick={() => handleDeleteWish(wish.id)} className="text-gray-400 hover:text-red-500 p-2">🗑️</button>
-                    </div>
-                  ))}
+                  {myWishes.length === 0 ? (
+                    <EmptyState text={t.dashboard.noWishes} />
+                  ) : (
+                    myWishes.map((wish) => (
+                      <div key={wish.id} className="group border border-gray-100 rounded-lg p-4 flex justify-between items-center hover:bg-gray-50">
+                        <Link href={`/wish/${wish.id}`} className="flex-grow font-bold text-gray-800 hover:text-blue-600">
+                          {wish.title}
+                        </Link>
+                        <button onClick={() => handleDeleteWish(wish.id)} className="text-gray-400 hover:text-red-500 p-2" aria-label="刪除需求">
+                          🗑️
+                        </button>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
 
               {activeTab === 'trips' && (
                 <div className="space-y-4">
-                  {myTrips.length === 0 ? <EmptyState text={t.dashboard.noTrips} /> : myTrips.map(trip => (
-                    <div key={trip.id} className="border-l-4 border-blue-500 bg-gray-50 rounded-r-lg p-4 flex justify-between items-center">
-                      <div><h3 className="font-bold">{trip.destination}</h3><p className="text-sm text-gray-500">{trip.date}</p></div>
-                      <button onClick={() => handleDeleteTrip(trip.id)} className="text-red-400 hover:text-red-600 text-sm">刪除</button>
-                    </div>
-                  ))}
+                  {myTrips.length === 0 ? (
+                    <EmptyState text={t.dashboard.noTrips} />
+                  ) : (
+                    myTrips.map((trip) => (
+                      <div key={trip.id} className="border-l-4 border-blue-500 bg-gray-50 rounded-r-lg p-4 flex justify-between items-center">
+                        <div>
+                          <h3 className="font-bold">{trip.destination}</h3>
+                          <p className="text-sm text-gray-500">{trip.date}</p>
+                        </div>
+                        <button onClick={() => handleDeleteTrip(trip.id)} className="text-red-400 hover:text-red-600 text-sm">刪除</button>
+                      </div>
+                    ))
+                  )}
                 </div>
               )}
 
               {activeTab === 'favorites' && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  {myFavorites.length === 0 ? <p className="text-gray-500 text-center py-10 col-span-full">{t.dashboard.noFavorites}</p> : myFavorites.map(wish => (
-                    <Link key={wish.id} href={`/wish/${wish.id}`} className="block border border-gray-100 rounded-xl hover:shadow-md transition overflow-hidden">
-                      <div className="h-32 bg-gray-100 relative">{wish.images?.[0] ? <img src={wish.images[0]} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-2xl">🎁</div>}</div>
-                      <div className="p-3"><h4 className="font-bold text-gray-800 line-clamp-1">{wish.title}</h4><p className="text-blue-600 font-bold text-sm mt-1">${wish.budget}</p></div>
-                    </Link>
-                  ))}
+                  {myFavorites.length === 0 ? (
+                    <p className="text-gray-500 text-center py-10 col-span-full">{t.dashboard.noFavorites}</p>
+                  ) : (
+                    myFavorites.map((wish) => (
+                      <Link key={wish.id} href={`/wish/${wish.id}`} className="block border border-gray-100 rounded-xl hover:shadow-md transition overflow-hidden">
+                        <div className="h-32 bg-gray-100 relative">
+                          {wish.images?.[0] ? <img src={wish.images[0]} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-2xl">🎁</div>}
+                        </div>
+                        <div className="p-3">
+                          <h4 className="font-bold text-gray-800 line-clamp-1">{wish.title}</h4>
+                          <p className="text-blue-600 font-bold text-sm mt-1">${wish.budget}</p>
+                        </div>
+                      </Link>
+                    ))
+                  )}
                 </div>
               )}
 
               {activeTab === 'orders' && (
                 <div className="space-y-4">
-                  {myOrders.length === 0 ? <EmptyState text="目前沒有進行中的訂單" /> : 
-                    myOrders.map(order => {
+                  {myOrders.length === 0 ? (
+                    <EmptyState text="目前沒有進行中的訂單" />
+                  ) : (
+                    myOrders.map((order) => {
                       const isBuyer = user.id === order.buyer_id;
                       return (
-                        <div key={order.id} className="border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row gap-4 hover:shadow-md transition bg-white relative">
-                          
+                        <div
+                          key={order.id}
+                          className="border border-gray-200 rounded-xl p-5 flex flex-col sm:flex-row gap-4 hover:shadow-md transition bg-white relative"
+                        >
                           <div className="flex gap-4 flex-grow">
                             <div className="w-16 h-16 bg-gray-100 rounded-lg overflow-hidden shrink-0">
-                              {order.wish_requests?.images?.[0] ? <img src={order.wish_requests.images[0]} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full">🎁</div>}
+                              {order.wish_requests?.images?.[0] ? (
+                                <img src={order.wish_requests.images[0]} className="w-full h-full object-cover" />
+                              ) : (
+                                <div className="flex items-center justify-center h-full">🎁</div>
+                              )}
                             </div>
                             <div>
-                              <h4 className="font-bold text-lg text-gray-800">{order.wish_requests?.title || '商品已下架'}</h4>
+                              <h4 className="font-bold text-lg text-gray-800">{order.wish_requests?.title || '已刪除需求'}</h4>
                               <p className="text-sm text-gray-500">
-                                {isBuyer ? `接單人: ${order.profiles?.name}` : `買家: ${order.buyer_profile?.name}`}
+                                {isBuyer ? `代購：${order.profiles?.name}` : `買家：${order.buyer_profile?.name}`}
                               </p>
                               <p className="text-sm font-bold text-blue-600 mt-1">${order.price}</p>
                             </div>
                           </div>
 
                           <div className="flex flex-col items-end gap-2 min-w-[120px]">
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold 
-                              ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : 
-                                order.status === 'accepted' ? 'bg-blue-100 text-blue-700' :
-                                order.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                              {order.status === 'pending' ? '待確認' : 
-                               order.status === 'accepted' ? '進行中' : 
-                               order.status === 'completed' ? '已完成' : order.status}
+                            <span
+                              className={`px-3 py-1 rounded-full text-xs font-bold 
+                              ${
+                                order.status === 'pending'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : order.status === 'accepted'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : order.status === 'completed'
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-gray-100 text-gray-600'
+                              }`}
+                            >
+                              {order.status === 'pending'
+                                ? '待確認'
+                                : order.status === 'accepted'
+                                  ? '進行中'
+                                  : order.status === 'completed'
+                                    ? '已完成'
+                                    : order.status}
                             </span>
 
                             {isBuyer && order.status === 'pending' && (
-                              <button onClick={() => updateOrderStatus(order.id, 'accepted', order.wish_id)} className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-blue-700">
+                              <button
+                                onClick={() => updateOrderStatus(order.id, 'accepted', order.wish_id)}
+                                className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-blue-700"
+                              >
                                 確認委託
                               </button>
                             )}
-                            
+
                             {order.status === 'accepted' && (
-                              <button onClick={() => updateOrderStatus(order.id, 'completed', order.wish_id)} className="border border-green-600 text-green-600 px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-green-50">
+                              <button
+                                onClick={() => updateOrderStatus(order.id, 'completed', order.wish_id)}
+                                className="border border-green-600 text-green-600 px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-green-50"
+                              >
                                 完成訂單
                               </button>
                             )}
 
                             {order.status === 'completed' && (
-                              <button 
+                              <button
                                 onClick={() => {
                                   const targetId = isBuyer ? order.shopper_id : order.buyer_id;
                                   const targetName = isBuyer ? order.profiles?.name : order.buyer_profile?.name;
                                   setReviewModal({
                                     open: true,
                                     orderId: order.id,
-                                    targetId: targetId,
-                                    targetName: targetName || '對方'
+                                    targetId,
+                                    targetName: targetName || '對方',
                                   });
                                 }}
                                 className="text-sm text-blue-600 underline hover:text-blue-800"
                               >
-                                ✍️ 給予評價
+                                前往評價
                               </button>
                             )}
 
                             {(order.status === 'completed' || order.status === 'cancelled') && (
-                              <button 
+                              <button
                                 onClick={() => handleArchiveOrder(order)}
                                 className="text-gray-400 hover:text-gray-600 p-1 mt-1 transition text-xs flex items-center gap-1"
-                                title="從列表中隱藏"
+                                title="從列表隱藏"
                               >
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
@@ -333,10 +377,9 @@ export default function Dashboard() {
                         </div>
                       );
                     })
-                  }
+                  )}
                 </div>
               )}
-
             </div>
           </main>
         </div>
@@ -347,7 +390,7 @@ export default function Dashboard() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in">
             <div className="p-6 border-b border-gray-100 flex justify-between items-center">
               <h3 className="text-xl font-bold text-gray-800">編輯個人資料</h3>
-              <button onClick={() => setIsEditing(false)} className="text-gray-400 hover:text-gray-600">✕</button>
+              <button onClick={() => setIsEditing(false)} className="text-gray-400 hover:text-gray-600" aria-label="關閉">✕</button>
             </div>
             <form onSubmit={handleUpdateProfile} className="p-6 space-y-4">
               <div className="flex flex-col items-center mb-4">
@@ -358,22 +401,46 @@ export default function Dashboard() {
                     <img src={profile?.avatar_url || 'https://via.placeholder.com/150'} className="w-full h-full object-cover" />
                   )}
                   <label className="absolute inset-0 bg-black/40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition cursor-pointer">
-                    更換
+                    上傳
                     <input type="file" hidden accept="image/*" onChange={(e) => e.target.files && setAvatarFile(e.target.files[0])} />
                   </label>
                 </div>
-                <p className="text-xs text-gray-500">點擊圖片更換頭像</p>
+                <p className="text-xs text-gray-500">點擊更換頭貼</p>
               </div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">暱稱</label><input value={editForm.name} onChange={(e) => setEditForm({...editForm, name: e.target.value})} className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500" required/></div>
-              <div><label className="block text-sm font-medium text-gray-700 mb-1">自我介紹</label><textarea value={editForm.bio} onChange={(e) => setEditForm({...editForm, bio: e.target.value})} className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500" rows={4} placeholder="介紹一下你自己..."/></div>
-              <div className="flex gap-3 pt-2"><button type="button" onClick={() => setIsEditing(false)} className="flex-1 py-3 border border-gray-300 rounded-lg text-gray-600 font-medium hover:bg-gray-50">取消</button><button type="submit" disabled={updating} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400">{updating ? '儲存中...' : '儲存變更'}</button></div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">暱稱</label>
+                <input
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">自我介紹</label>
+                <textarea
+                  value={editForm.bio}
+                  onChange={(e) => setEditForm({ ...editForm, bio: e.target.value })}
+                  className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500"
+                  rows={4}
+                  placeholder="介紹一下你自己..."
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setIsEditing(false)} className="flex-1 py-3 border border-gray-300 rounded-lg text-gray-600 font-medium hover:bg-gray-50">
+                  取消
+                </button>
+                <button type="submit" disabled={updating} className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400">
+                  {updating ? '更新中...' : '儲存'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
       )}
 
       {reviewModal?.open && (
-        <ReviewModal 
+        <ReviewModal
           orderId={reviewModal.orderId}
           targetId={reviewModal.targetId}
           targetName={reviewModal.targetName}
@@ -387,7 +454,7 @@ export default function Dashboard() {
 
 const EmptyState = ({ text }: { text: string }) => (
   <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-    <span className="text-4xl mb-4 opacity-30">📂</span>
+    <span className="text-4xl mb-4 opacity-30">🗒️</span>
     <p>{text}</p>
   </div>
 );

@@ -4,8 +4,8 @@ import { supabase } from '@/lib/supabase';
 
 interface ReviewModalProps {
   orderId: string;
-  targetId: string; // 對方 ID
-  targetName: string; // 對方名字
+  targetId: string;
+  targetName: string;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -18,23 +18,27 @@ export default function ReviewModal({ orderId, targetId, targetName, onClose, on
   const handleSubmit = async () => {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      alert('請先登入');
+      setLoading(false);
+      return;
+    }
 
     const { error } = await supabase.from('reviews').insert([
       {
         order_id: orderId,
         reviewer_id: user.id,
         target_id: targetId,
-        rating: rating,
-        comment: comment
-      }
+        rating,
+        comment,
+      },
     ]);
 
     if (error) {
       alert('評價失敗：' + error.message);
       setLoading(false);
     } else {
-      alert('評價成功！');
+      alert('評價已送出');
       onSuccess();
       onClose();
     }
@@ -45,7 +49,7 @@ export default function ReviewModal({ orderId, targetId, targetName, onClose, on
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in">
         <div className="p-6">
           <h3 className="text-xl font-bold text-gray-800 text-center mb-2">評價 {targetName}</h3>
-          <p className="text-gray-500 text-sm text-center mb-6">這次的交易體驗如何？</p>
+          <p className="text-gray-500 text-sm text-center mb-6">這次的合作體驗如何？</p>
 
           <div className="flex justify-center gap-2 mb-6">
             {[1, 2, 3, 4, 5].map((star) => (
@@ -53,6 +57,7 @@ export default function ReviewModal({ orderId, targetId, targetName, onClose, on
                 key={star}
                 onClick={() => setRating(star)}
                 className={`text-4xl transition transform hover:scale-110 ${star <= rating ? 'text-yellow-400' : 'text-gray-200'}`}
+                aria-label={`給 ${star} 星`}
               >
                 ★
               </button>
@@ -62,7 +67,7 @@ export default function ReviewModal({ orderId, targetId, targetName, onClose, on
           <textarea
             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 mb-4"
             rows={3}
-            placeholder="寫點評語吧... (選填)"
+            placeholder="寫下你的評價...(選填)"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
           />
