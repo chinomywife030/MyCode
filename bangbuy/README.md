@@ -4,6 +4,44 @@
 
 ## 環境設定
 
+### 快速設定（推薦）⚡
+
+如果你想快速開始，只需 **5 分鐘**：
+
+1. **安裝依賴**
+   ```bash
+   npm install
+   ```
+
+2. **配置環境變數**
+   ```bash
+   cp .env.example .env.local
+   ```
+   然後在 `.env.local` 中填入你的 Supabase URL 和 API Key
+
+3. **設置資料庫（一鍵完成）** 🎯
+   - 登入 [Supabase Dashboard](https://app.supabase.com)
+   - 點擊左側 **"SQL Editor"**
+   - 點擊 **"New query"**
+   - 打開專案中的 `supabase-setup.sql` 檔案
+   - **複製全部內容並貼上**
+   - 點擊 **"Run"** 執行
+   - ✅ 完成！資料庫已包含測試資料
+
+4. **啟動開發伺服器**
+   ```bash
+   npm run dev
+   ```
+
+5. **打開瀏覽器**
+   訪問 http://localhost:3000，你會看到 6 個許願單和 5 個行程！
+
+---
+
+### 詳細設定步驟
+
+如果你想了解詳細的設定流程：
+
 ### 1. 安裝依賴
 
 ```bash
