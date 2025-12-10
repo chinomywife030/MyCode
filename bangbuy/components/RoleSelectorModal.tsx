@@ -9,8 +9,13 @@ export default function RoleSelectorModal() {
 
   useEffect(() => {
     // 檢查是否是第一次來 (如果沒有存過模式，就跳出視窗)
-    const savedMode = localStorage.getItem('bangbuy_mode');
-    if (!savedMode) {
+    try {
+      const savedMode = localStorage.getItem('bangbuy_mode');
+      if (!savedMode) {
+        setIsOpen(true);
+      }
+    } catch (err) {
+      // localStorage 不可用時，顯示選擇器
       setIsOpen(true);
     }
   }, []);

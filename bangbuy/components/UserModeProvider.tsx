@@ -18,19 +18,30 @@ const UserModeContext = createContext<UserModeContextType | undefined>(undefined
 export function UserModeProvider({ children }: { children: React.ReactNode }) {
   // 從 localStorage 讀取或預設為 requester
   const [mode, setModeState] = useState<UserMode>('requester');
+  const [isInitialized, setIsInitialized] = useState(false);
 
   // 初始化時從 localStorage 讀取
   useEffect(() => {
-    const saved = localStorage.getItem('bangbuy_mode');
-    if (saved === 'requester' || saved === 'shopper') {
-      setModeState(saved);
+    try {
+      const saved = localStorage.getItem('bangbuy_mode');
+      if (saved === 'requester' || saved === 'shopper') {
+        setModeState(saved);
+      }
+    } catch (err) {
+      // localStorage 不可用時使用預設值
+    } finally {
+      setIsInitialized(true);
     }
   }, []);
 
   // 設定模式並存到 localStorage
   const setMode = (newMode: UserMode) => {
     setModeState(newMode);
-    localStorage.setItem('bangbuy_mode', newMode);
+    try {
+      localStorage.setItem('bangbuy_mode', newMode);
+    } catch (err) {
+      // localStorage 不可用時忽略錯誤
+    }
   };
 
   // 切換功能的邏輯
@@ -41,6 +52,11 @@ export function UserModeProvider({ children }: { children: React.ReactNode }) {
 
   // 為了方便其他元件判斷，多傳一個布林值
   const isShopper = mode === 'shopper';
+
+  // 在初始化完成前顯示空白，避免閃爍
+  if (!isInitialized) {
+    return null;
+  }
 
   return (
     <UserModeContext.Provider value={{ mode, setMode, toggleMode, isShopper }}>

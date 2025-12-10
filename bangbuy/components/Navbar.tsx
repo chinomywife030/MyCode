@@ -26,15 +26,18 @@ export default function Navbar() {
 
   const fetchUserProfile = useCallback(async (userId: string) => {
     try {
-      const { data: profile } = await supabase
+      const { data: profile, error } = await supabase
         .from('profiles')
         .select('avatar_url')
         .eq('id', userId)
         .single();
 
-      if (profile) setAvatarUrl(profile.avatar_url || '');
+      if (!error && profile) {
+        setAvatarUrl(profile.avatar_url || '');
+      }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      // 靜默處理錯誤，使用預設頭像
+      setAvatarUrl('');
     }
   }, []);
 

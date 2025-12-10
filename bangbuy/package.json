@@ -5,12 +5,14 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:skip-lint": "SKIP_LINT=true next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "next lint"
   },
   "dependencies": {
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/supabase-js": "^2.86.0",
+    "dotenv": "^17.2.3",
     "next": "16.0.5",
     "react": "19.2.0",
     "react-dom": "19.2.0",

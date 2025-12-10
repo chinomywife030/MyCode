@@ -1,20 +1,56 @@
 import { createClient } from '@supabase/supabase-js';
 
 // --------------------------------------------------------
-// 👇 請去 Supabase 後台 -> Project Settings -> API 複製貼上
+// 👇 從環境變數讀取 Supabase 配置
 // --------------------------------------------------------
-const supabaseUrl = 'https://iaizclcplchjhbfafkiy.supabase.co'; // 您的 Project URL
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlhaXpjbGNwbGNoamhiZmFma2l5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0Mzg0ODMsImV4cCI6MjA4MDAxNDQ4M30.mKrm8yObbrpTZvt5Qp90mNy638qGPEjYtxHu_7cLTiI'; // 您的 Anon Public Key
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// 檢查是否填寫 (防呆)
-if (supabaseUrl.includes('xxxx') || !supabaseKey) {
-  console.error('❌ 錯誤：請在 lib/supabase.ts 填入正確的 Supabase 網址與 Key！');
+// 檢查是否設置環境變數 (防呆)
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables. Please check .env.local file.');
 }
+
+// 檢測 localStorage 是否可用，Edge 瀏覽器可能有限制
+const isLocalStorageAvailable = () => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const test = '__storage_test__';
+    localStorage.setItem(test, test);
+    localStorage.removeItem(test);
+    return true;
+  } catch (e) {
+    return false;
+  }
+};
 
 export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    persistSession: true,
+    persistSession: isLocalStorageAvailable(),
     autoRefreshToken: true,
-    detectSessionInUrl: true
+    detectSessionInUrl: true,
+    storage: isLocalStorageAvailable() ? undefined : {
+      // 如果 localStorage 不可用，使用內存存儲（Edge 私密模式的後備方案）
+      getItem: (key: string) => {
+        if (typeof window === 'undefined') return null;
+        return (window as any).__supabaseMemoryStorage?.[key] || null;
+      },
+      setItem: (key: string, value: string) => {
+        if (typeof window === 'undefined') return;
+        (window as any).__supabaseMemoryStorage = (window as any).__supabaseMemoryStorage || {};
+        (window as any).__supabaseMemoryStorage[key] = value;
+      },
+      removeItem: (key: string) => {
+        if (typeof window === 'undefined') return;
+        if ((window as any).__supabaseMemoryStorage) {
+          delete (window as any).__supabaseMemoryStorage[key];
+        }
+      }
+    }
   },
+  global: {
+    headers: {
+      'X-Client-Info': 'supabase-js-web'
+    }
+  }
 });

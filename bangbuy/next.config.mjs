@@ -4,10 +4,6 @@ const nextConfig = {
     // 忽略 TypeScript 錯誤，避免部署失敗
     ignoreBuildErrors: true,
   },
-  eslint: {
-    // 忽略 ESLint 錯誤，避免部署失敗
-    ignoreDuringBuilds: true,
-  },
   images: {
     remotePatterns: [
       // 1. 允許 Unsplash 圖片 (測試資料常用)
