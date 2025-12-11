@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import Logo from '@/components/Logo';
 import { useUserMode } from '@/components/UserModeProvider';
 import { useLanguage } from '@/components/LanguageProvider';
+import NotificationDrawer from '@/components/NotificationDrawer';
 
 export default function Navbar() {
   const { t } = useLanguage();
@@ -16,6 +17,11 @@ export default function Navbar() {
   const [user, setUser] = useState<User | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  
+  // 🎨 純 UI state：控制通知 drawer
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  // 🎨 假資料：未讀通知數量
+  const unreadNotificationCount = 2;
 
   const router = useRouter();
   const pathname = usePathname();
@@ -107,7 +113,28 @@ export default function Navbar() {
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            {user && (
+              <>
+                {/* 🔔 通知按鈕（純 UI） */}
+                <button
+                  onClick={() => setIsNotificationOpen(true)}
+                  className="relative p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-full transition"
+                  title="通知"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                  </svg>
+                  {/* 紅點 badge */}
+                  {unreadNotificationCount > 0 && (
+                    <span className="absolute top-1 right-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white">
+                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                    </span>
+                  )}
+                </button>
+              </>
+            )}
+            
             {user ? (
               <Link href="/dashboard" title="會員中心">
                 <div
@@ -207,6 +234,12 @@ export default function Navbar() {
           </div>
         )}
       </div>
+
+      {/* 🔔 通知 Drawer（純 UI） */}
+      <NotificationDrawer 
+        isOpen={isNotificationOpen} 
+        onClose={() => setIsNotificationOpen(false)} 
+      />
     </>
   );
 }

@@ -130,10 +130,33 @@ export default function WishDetailPage() {
         <div className="p-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
             <div>
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
                   {wish.target_country === 'JP' ? '🇯🇵 日本' : wish.target_country}
                 </span>
+                {/* ✨ 狀態標籤（純 UI） */}
+                {(() => {
+                  const mockStatus = wish.status || 'pending';
+                  const getStatusStyle = (status: string) => {
+                    switch(status) {
+                      case 'in_progress': return 'bg-blue-100 text-blue-700';
+                      case 'done': return 'bg-orange-100 text-orange-700';
+                      default: return 'bg-gray-100 text-gray-600';
+                    }
+                  };
+                  const getStatusText = (status: string) => {
+                    switch(status) {
+                      case 'in_progress': return '進行中';
+                      case 'done': return '已完成';
+                      default: return '待處理';
+                    }
+                  };
+                  return (
+                    <span className={`px-3 py-1 text-xs font-bold rounded-full ${getStatusStyle(mockStatus)}`}>
+                      {getStatusText(mockStatus)}
+                    </span>
+                  );
+                })()}
                 <span className="text-gray-500 text-sm">📅 截止：{wish.deadline}</span>
               </div>
               
@@ -180,7 +203,7 @@ export default function WishDetailPage() {
             </p>
           </div>
 
-          <div className="border-t border-gray-100 pt-8 text-center">
+          <div className="border-t border-gray-100 pt-8">
             
             {/* 接單報價區域 */}
             {!isOwner && user && (
@@ -205,14 +228,32 @@ export default function WishDetailPage() {
                 >
                   ✋ 我要接單報價
                 </button>
-                <Link href={`/chat?target=${wish.buyer_id}`} className="text-gray-500 hover:text-blue-600 text-sm underline">
-                  先私訊聊聊
+                {/* ✨ 「私訊接單」次要按鈕 */}
+                <Link
+                  href={`/chat?target=${wish.buyer_id}`}
+                  onClick={() => {
+                    console.log('私訊接單 clicked for wish:', wish.id, 'target:', wish.buyer_id);
+                  }}
+                  className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-orange-600 px-8 py-3 rounded-full text-base font-semibold transition border-2 border-orange-500 shadow-sm"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <span>私訊接單</span>
                 </Link>
               </div>
             )}
             
             {!isOwner && !user && (
-              <p className="text-gray-400">請先登入以進行接單。</p>
+              <div className="flex flex-col items-center gap-3">
+                <p className="text-gray-400 mb-2">請先登入以進行接單或私訊。</p>
+                <Link
+                  href="/login"
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-10 py-4 rounded-full text-lg font-bold transition shadow-lg hover:shadow-xl transform hover:-translate-y-1"
+                >
+                  登入以私訊接單
+                </Link>
+              </div>
             )}
 
             {isOwner && (

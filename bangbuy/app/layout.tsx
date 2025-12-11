@@ -1,6 +1,7 @@
 import './globals.css';
 import { LanguageProvider } from '@/components/LanguageProvider';
 import { UserModeProvider } from '@/components/UserModeProvider';
+import BottomNav from '@/components/BottomNav';
 
 export const metadata = {
   title: 'BangBuy 幫買',
@@ -18,6 +19,8 @@ export default function RootLayout({
         <LanguageProvider>
           <UserModeProvider>
             {children}
+            {/* 全局底部導航 - 在所有頁面顯示（僅 mobile） */}
+            <BottomNav />
           </UserModeProvider>
         </LanguageProvider>
       </body>

@@ -20,6 +20,9 @@ export default function Dashboard() {
   const [myFavorites, setMyFavorites] = useState<any[]>([]);
   const [myOrders, setMyOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // 🎨 純 UI state：用來控制收藏按鈕的視覺狀態
+  const [likedWishes, setLikedWishes] = useState<Record<string, boolean>>({});
 
   const [reviewModal, setReviewModal] = useState<{ open: boolean; orderId: string; targetId: string; targetName: string } | null>(null);
 
@@ -222,16 +225,43 @@ export default function Dashboard() {
                   {myWishes.length === 0 ? (
                     <EmptyState text={t.dashboard.noWishes} />
                   ) : (
-                    myWishes.map((wish) => (
-                      <div key={wish.id} className="group border border-gray-100 rounded-lg p-4 flex justify-between items-center hover:bg-gray-50">
-                        <Link href={`/wish/${wish.id}`} className="flex-grow font-bold text-gray-800 hover:text-blue-600">
-                          {wish.title}
-                        </Link>
-                        <button onClick={() => handleDeleteWish(wish.id)} className="text-gray-400 hover:text-red-500 p-2" aria-label="刪除需求">
-                          🗑️
-                        </button>
+                    myWishes.map((wish) => {
+                      // 🎨 純 UI：模擬狀態
+                      const mockStatus = wish.status || 'pending';
+                      const getStatusStyle = (status: string) => {
+                        switch(status) {
+                          case 'in_progress': return 'bg-blue-100 text-blue-700 border-blue-200';
+                          case 'done': return 'bg-orange-100 text-orange-700 border-orange-200';
+                          default: return 'bg-gray-100 text-gray-600 border-gray-200';
+                        }
+                      };
+                      const getStatusText = (status: string) => {
+                        switch(status) {
+                          case 'in_progress': return '進行中';
+                          case 'done': return '已完成';
+                          default: return '待處理';
+                        }
+                      };
+
+                      return (
+                      <div key={wish.id} className="group border border-gray-100 rounded-lg p-4 hover:bg-gray-50">
+                        <div className="flex justify-between items-start gap-3 mb-2">
+                          <Link href={`/wish/${wish.id}`} className="flex-grow font-bold text-gray-800 hover:text-blue-600">
+                            {wish.title}
+                          </Link>
+                          <div className="flex items-center gap-2">
+                            {/* ✨ 狀態標籤（純 UI） */}
+                            <span className={`px-3 py-1 text-xs font-bold rounded-full border whitespace-nowrap ${getStatusStyle(mockStatus)}`}>
+                              {getStatusText(mockStatus)}
+                            </span>
+                            <button onClick={() => handleDeleteWish(wish.id)} className="text-gray-400 hover:text-red-500 p-2" aria-label="刪除需求">
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               )}
@@ -259,17 +289,75 @@ export default function Dashboard() {
                   {myFavorites.length === 0 ? (
                     <p className="text-gray-500 text-center py-10 col-span-full">{t.dashboard.noFavorites}</p>
                   ) : (
-                    myFavorites.map((wish) => (
-                      <Link key={wish.id} href={`/wish/${wish.id}`} className="block border border-gray-100 rounded-xl hover:shadow-md transition overflow-hidden">
-                        <div className="h-32 bg-gray-100 relative">
-                          {wish.images?.[0] ? <img src={wish.images[0]} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-2xl">🎁</div>}
-                        </div>
+                    myFavorites.map((wish) => {
+                      // 🎨 純 UI：模擬狀態和收藏功能
+                      const mockStatus = wish.status || 'pending';
+                      const isLiked = likedWishes[wish.id] !== undefined ? likedWishes[wish.id] : true; // 預設已收藏
+                      
+                      const getStatusStyle = (status: string) => {
+                        switch(status) {
+                          case 'in_progress': return 'bg-blue-100 text-blue-700';
+                          case 'done': return 'bg-orange-100 text-orange-700';
+                          default: return 'bg-gray-100 text-gray-600';
+                        }
+                      };
+                      const getStatusText = (status: string) => {
+                        switch(status) {
+                          case 'in_progress': return '進行中';
+                          case 'done': return '已完成';
+                          default: return '待處理';
+                        }
+                      };
+
+                      return (
+                      <div key={wish.id} className="group border border-gray-100 rounded-xl hover:shadow-md transition overflow-hidden bg-white">
+                        <Link href={`/wish/${wish.id}`} className="block">
+                          <div className="h-32 bg-gray-100 relative">
+                            {wish.images?.[0] ? <img src={wish.images[0]} className="w-full h-full object-cover" /> : <div className="flex items-center justify-center h-full text-2xl">🎁</div>}
+                            {/* ✨ 收藏按鈕（純 UI） */}
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setLikedWishes(prev => ({ ...prev, [wish.id]: !isLiked }));
+                              }}
+                              className="absolute top-2 right-2 p-2 rounded-full bg-white/90 hover:bg-white shadow-sm transition"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" fill={isLiked ? "#f97316" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke={isLiked ? "#f97316" : "#9ca3af"} className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z" />
+                              </svg>
+                            </button>
+                          </div>
+                        </Link>
                         <div className="p-3">
-                          <h4 className="font-bold text-gray-800 line-clamp-1">{wish.title}</h4>
-                          <p className="text-blue-600 font-bold text-sm mt-1">${wish.budget}</p>
+                          <Link href={`/wish/${wish.id}`}>
+                            <h4 className="font-bold text-gray-800 line-clamp-1 mb-2">{wish.title}</h4>
+                          </Link>
+                          <div className="flex items-center justify-between mb-3">
+                            <p className="text-blue-600 font-bold text-sm">${wish.budget}</p>
+                            {/* ✨ 狀態標籤（純 UI） */}
+                            <span className={`px-2 py-1 text-xs font-bold rounded-full ${getStatusStyle(mockStatus)}`}>
+                              {getStatusText(mockStatus)}
+                            </span>
+                          </div>
+                          {/* ✨ 「私訊接單」主按鈕（橘色，純 UI） */}
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              console.log('私訊接單 clicked for wish:', wish.id, 'target:', wish.buyer_id);
+                              router.push(`/chat?target=${wish.buyer_id}`);
+                            }}
+                            className="flex items-center justify-center gap-1.5 w-full py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition shadow-sm text-xs"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            <span>私訊接單</span>
+                          </button>
                         </div>
-                      </Link>
-                    ))
+                      </div>
+                      );
+                    })
                   )}
                 </div>
               )}
