@@ -49,6 +49,20 @@ function ChatContent() {
   const [loadingChat, setLoadingChat] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // 🔍 Debug：檢查 targetId
+  console.log('🔍 [DEBUG] Chat page targetId:', targetId);
+
+  // 🎯 檢查 targetId 是否無效（純 UI 邏輯）
+  const isInvalidTarget = !targetId || 
+                         targetId === '00000000-0000-0000-0000-000000000000' ||
+                         targetId === 'null' ||
+                         targetId === 'undefined' ||
+                         targetId.length < 10;
+
+  if (isInvalidTarget) {
+    console.warn('⚠️ [WARNING] targetId 無效:', targetId);
+  }
+
   // 初始化：載入用戶和對話列表
   useEffect(() => {
     async function init() {
@@ -69,6 +83,19 @@ function ChatContent() {
 
   // 直接跳轉到特定對話
   const handleDirectJump = async (myId: string, targetId: string) => {
+    // 🎯 檢查 targetId 是否無效（避免查詢全 0 UUID）
+    const isInvalidTarget = !targetId || 
+                           targetId === '00000000-0000-0000-0000-000000000000' ||
+                           targetId === 'null' ||
+                           targetId === 'undefined' ||
+                           targetId.length < 10;
+    
+    if (isInvalidTarget) {
+      console.error('❌ handleDirectJump: targetId 無效，中止操作:', targetId);
+      setLoadingChat(false);
+      return;
+    }
+    
     if (myId === targetId) return;
     setLoadingChat(true);
 
@@ -321,7 +348,26 @@ function ChatContent() {
           <div className={`w-full md:w-2/3 flex flex-col ${
             !activeChat ? 'hidden md:flex' : 'flex'
           }`}>
-            {loadingChat ? (
+            {/* 🎯 無效 target 的空狀態（純 UI 邏輯） */}
+            {isInvalidTarget && !activeChat ? (
+              <div className="flex-grow flex items-center justify-center bg-gray-50">
+                <div className="text-center max-w-md px-6">
+                  <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-6">
+                    <span className="text-5xl">💬</span>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3">請選擇一位會員開始聊天</h3>
+                  <p className="text-sm text-gray-500 mb-6">
+                    從左側的對話列表中選擇一個聯絡人，或通過願望卡片的「私訊接單」開始新的對話
+                  </p>
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-left">
+                    <p className="text-xs text-orange-700 font-semibold mb-1">💡 提示</p>
+                    <p className="text-xs text-orange-600">
+                      如果你是從通知或願望卡片跳轉過來的，但看到這個畫面，可能是目標用戶 ID 無效。請返回重新嘗試。
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : loadingChat ? (
               <div className="flex-grow flex items-center justify-center text-gray-500">
                 <div className="text-center">
                   <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>

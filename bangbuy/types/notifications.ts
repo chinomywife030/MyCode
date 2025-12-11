@@ -11,6 +11,8 @@ export interface Notification {
   isRead: boolean;
   avatarUrl?: string;
   targetPath?: string;
+  targetElementId?: string; // 🎯 用於滾動到特定區塊
+  targetUserId?: string; // 🎯 目標使用者 ID（用於跳轉聊天）
 }
 
 // 🎨 假資料：模擬通知列表
@@ -24,6 +26,7 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     isRead: false,
     avatarUrl: 'https://i.pravatar.cc/150?img=1',
     targetPath: '/chat',
+    targetUserId: 'user-001', // 🎯 點擊後跳轉到與小明的聊天
   },
   {
     id: 2,
@@ -33,7 +36,8 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     time: '10 分鐘前',
     isRead: false,
     avatarUrl: 'https://i.pravatar.cc/150?img=2',
-    targetPath: '/wish/123',
+    targetPath: '/',
+    targetElementId: 'wish-section',
   },
   {
     id: 3,
@@ -43,6 +47,8 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     time: '25 分鐘前',
     isRead: false,
     avatarUrl: 'https://i.pravatar.cc/150?img=3',
+    targetPath: '/dashboard',
+    targetElementId: 'orders-section',
   },
   {
     id: 4,
@@ -52,6 +58,7 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     time: '1 小時前',
     isRead: true,
     avatarUrl: 'https://i.pravatar.cc/150?img=4',
+    targetPath: '/dashboard',
   },
   {
     id: 5,
@@ -61,6 +68,7 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     time: '2 小時前',
     isRead: true,
     avatarUrl: 'https://i.pravatar.cc/150?img=5',
+    targetPath: '/dashboard',
   },
   {
     id: 6,
@@ -69,6 +77,7 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     description: '你的訂單「韓國代購」已完成',
     time: '3 小時前',
     isRead: true,
+    targetPath: '/dashboard',
   },
   {
     id: 7,
@@ -79,6 +88,7 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     isRead: true,
     avatarUrl: 'https://i.pravatar.cc/150?img=6',
     targetPath: '/chat',
+    targetUserId: 'user-002', // 🎯 點擊後跳轉到與 Alice 的聊天
   },
   {
     id: 8,
@@ -88,6 +98,8 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     time: '昨天',
     isRead: true,
     avatarUrl: 'https://i.pravatar.cc/150?img=7',
+    targetPath: '/dashboard',
+    targetUserId: 'user-003', // 🎯 可選：跳轉到與接單者的聊天
   },
   {
     id: 9,
@@ -96,6 +108,7 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     description: '你的帳戶安全設定已更新',
     time: '2 天前',
     isRead: true,
+    targetPath: '/dashboard',
   },
   {
     id: 10,
@@ -105,6 +118,7 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
     time: '3 天前',
     isRead: true,
     avatarUrl: 'https://i.pravatar.cc/150?img=8',
+    targetPath: '/',
   },
 ];
 
@@ -172,5 +186,22 @@ export const getNotificationTypeName = (type: NotificationType) => {
     default:
       return '其他';
   }
+};
+
+// 🎯 工具函數：處理通知點擊時的滾動行為（純前端）
+export const scrollToElement = (elementId: string, delay: number = 300) => {
+  setTimeout(() => {
+    const element = document.getElementById(elementId);
+    if (element) {
+      element.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start',
+        inline: 'nearest'
+      });
+      console.log('✅ Scrolled to element:', elementId);
+    } else {
+      console.log('⚠️ Element not found:', elementId);
+    }
+  }, delay);
 };
 

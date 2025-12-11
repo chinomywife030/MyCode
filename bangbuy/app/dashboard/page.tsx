@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLanguage } from '@/components/LanguageProvider';
 import ReviewModal from '@/components/ReviewModal';
+import ReviewSection from '@/components/ReviewSection';
+import UberStyleReviewSection from '@/components/UberStyleReviewSection';
+import EmptyState from '@/components/EmptyState';
 import { Profile } from '@/types';
 
 export default function Dashboard() {
@@ -13,7 +16,7 @@ export default function Dashboard() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [activeTab, setActiveTab] = useState<'wishes' | 'trips' | 'favorites' | 'orders'>('wishes');
+  const [activeTab, setActiveTab] = useState<'wishes' | 'trips' | 'favorites' | 'orders' | 'reviews'>('wishes');
 
   const [myWishes, setMyWishes] = useState<any[]>([]);
   const [myTrips, setMyTrips] = useState<any[]>([]);
@@ -208,6 +211,7 @@ export default function Dashboard() {
               <MenuButton id="trips" icon="✈️" label={t.dashboard.myTrips} />
               <MenuButton id="favorites" icon="❤️" label={t.dashboard.myFavorites} />
               <MenuButton id="orders" icon="📦" label="我的訂單" />
+              <MenuButton id="reviews" icon="⭐" label="評價紀錄" />
             </nav>
           </aside>
 
@@ -218,12 +222,19 @@ export default function Dashboard() {
                 {activeTab === 'trips' && `✈️ ${t.dashboard.myTrips}`}
                 {activeTab === 'favorites' && `❤️ ${t.dashboard.myFavorites}`}
                 {activeTab === 'orders' && `📦 我的訂單`}
+                {activeTab === 'reviews' && `⭐ 評價紀錄`}
               </h2>
 
               {activeTab === 'wishes' && (
                 <div className="space-y-4">
                   {myWishes.length === 0 ? (
-                    <EmptyState text={t.dashboard.noWishes} />
+                    <EmptyState 
+                      icon="🎁" 
+                      title="還沒有願望"
+                      description="你還沒有發布任何願望，開始發布你的第一個代購需求吧！"
+                      actionLabel="發布願望"
+                      actionHref="/create"
+                    />
                   ) : (
                     myWishes.map((wish) => {
                       // 🎨 純 UI：模擬狀態
@@ -269,7 +280,13 @@ export default function Dashboard() {
               {activeTab === 'trips' && (
                 <div className="space-y-4">
                   {myTrips.length === 0 ? (
-                    <EmptyState text={t.dashboard.noTrips} />
+                    <EmptyState 
+                      icon="✈️" 
+                      title="還沒有行程"
+                      description="你還沒有發布任何代購行程，開始規劃你的第一個行程吧！"
+                      actionLabel="發布行程"
+                      actionHref="/trips/create"
+                    />
                   ) : (
                     myTrips.map((trip) => (
                       <div key={trip.id} className="border-l-4 border-blue-500 bg-gray-50 rounded-r-lg p-4 flex justify-between items-center">
@@ -344,8 +361,25 @@ export default function Dashboard() {
                           <button
                             onClick={(e) => {
                               e.preventDefault();
-                              console.log('私訊接單 clicked for wish:', wish.id, 'target:', wish.buyer_id);
-                              router.push(`/chat?target=${wish.buyer_id}`);
+                              
+                              // 🔍 Debug：輸出完整願望物件
+                              console.log('🎁 [DEBUG] Dashboard Wish 完整資料:', wish);
+                              console.log('🎁 [DEBUG] wish.buyer_id:', wish.buyer_id);
+                              
+                              // 檢查 buyer_id 是否有效
+                              const targetUserId = wish.buyer_id;
+                              const isValidUUID = targetUserId && 
+                                               targetUserId !== '00000000-0000-0000-0000-000000000000' &&
+                                               targetUserId.length > 10;
+                              
+                              if (!isValidUUID) {
+                                console.error('❌ buyer_id 無效或為全 0 UUID:', targetUserId);
+                                alert('無法開啟聊天：發布者 ID 無效');
+                                return;
+                              }
+                              
+                              console.log('✅ 跳轉到聊天頁面，目標用戶:', targetUserId);
+                              router.push(`/chat?target=${targetUserId}`);
                             }}
                             className="flex items-center justify-center gap-1.5 w-full py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition shadow-sm text-xs"
                           >
@@ -365,7 +399,11 @@ export default function Dashboard() {
               {activeTab === 'orders' && (
                 <div className="space-y-4">
                   {myOrders.length === 0 ? (
-                    <EmptyState text="目前沒有進行中的訂單" />
+                    <EmptyState 
+                      icon="📦" 
+                      title="沒有訂單記錄"
+                      description="你目前沒有任何訂單，開始接單或發布需求來建立第一筆訂單吧！"
+                    />
                   ) : (
                     myOrders.map((order) => {
                       const isBuyer = user.id === order.buyer_id;
@@ -432,21 +470,38 @@ export default function Dashboard() {
                             )}
 
                             {order.status === 'completed' && (
-                              <button
-                                onClick={() => {
+                              <>
+                                {/* 🎨 Uber 式評價按鈕（假資料模擬狀態） */}
+                                {(() => {
                                   const targetId = isBuyer ? order.shopper_id : order.buyer_id;
                                   const targetName = isBuyer ? order.profiles?.name : order.buyer_profile?.name;
-                                  setReviewModal({
-                                    open: true,
-                                    orderId: order.id,
-                                    targetId,
-                                    targetName: targetName || '對方',
-                                  });
-                                }}
-                                className="text-sm text-blue-600 underline hover:text-blue-800"
-                              >
-                                前往評價
-                              </button>
+                                  // 🎨 純 UI：假設部分訂單已評價（模擬）
+                                  const hasReviewed = order.id.endsWith('1'); // 假資料：ID 結尾是 1 的已評價
+                                  
+                                  return hasReviewed ? (
+                                    <span className="text-xs text-gray-500 flex items-center gap-1">
+                                      <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                      </svg>
+                                      已評價
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => {
+                                        setReviewModal({
+                                          open: true,
+                                          orderId: order.id,
+                                          targetId,
+                                          targetName: targetName || '對方',
+                                        });
+                                      }}
+                                      className="text-sm bg-orange-500 text-white px-3 py-1 rounded-lg font-semibold hover:bg-orange-600 transition"
+                                    >
+                                      評價
+                                    </button>
+                                  );
+                                })()}
+                              </>
                             )}
 
                             {(order.status === 'completed' || order.status === 'cancelled') && (
@@ -467,6 +522,10 @@ export default function Dashboard() {
                     })
                   )}
                 </div>
+              )}
+
+              {activeTab === 'reviews' && (
+                <ReviewSection />
               )}
             </div>
           </main>
@@ -540,9 +599,4 @@ export default function Dashboard() {
   );
 }
 
-const EmptyState = ({ text }: { text: string }) => (
-  <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-    <span className="text-4xl mb-4 opacity-30">🗒️</span>
-    <p>{text}</p>
-  </div>
-);
+// EmptyState 已統一使用 components/EmptyState.tsx

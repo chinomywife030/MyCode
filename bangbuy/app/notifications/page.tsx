@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { MOCK_NOTIFICATIONS, getNotificationStyle, getNotificationTypeName } from '@/types/notifications';
 import type { Notification, NotificationType } from '@/types/notifications';
 import NotificationIcon from '@/components/NotificationIcon';
+import { handleNotificationClick as handleNotificationNavigation } from '@/lib/notificationHelpers';
 
 type FilterTab = 'all' | NotificationType;
 
@@ -26,20 +27,15 @@ export default function NotificationsPage() {
     ? notifications 
     : notifications.filter(n => n.type === activeFilter);
 
-  // 🎨 處理點擊通知（標記為已讀，純 UI 更新）
+  // 🎯 處理點擊通知：標記已讀 + 導頁 + 滾動（純前端）
   const handleNotificationClick = (notification: Notification) => {
-    console.log('notification clicked:', notification.id);
-    
-    // 標記為已讀
+    // 1. 標記為已讀（純 UI 更新）
     setNotifications(prev => 
       prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n)
     );
 
-    // 如果有目標路徑，可以跳轉（使用現有路由）
-    if (notification.targetPath) {
-      // router.push(notification.targetPath);
-      console.log('would navigate to:', notification.targetPath);
-    }
+    // 2. 使用統一的導航處理函數（純前端路由 + 滾動）
+    handleNotificationNavigation(notification, router);
   };
 
   // 🎨 標記所有通知為已讀（純 UI 更新）

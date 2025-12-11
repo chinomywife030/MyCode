@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { MOCK_NOTIFICATIONS, getNotificationStyle } from '@/types/notifications';
 import type { Notification } from '@/types/notifications';
 import NotificationIcon from '@/components/NotificationIcon';
+import { handleNotificationClick as handleNotificationNavigation } from '@/lib/notificationHelpers';
 
 interface NotificationDrawerProps {
   isOpen: boolean;
@@ -22,22 +23,18 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
   const recentNotifications = notifications.slice(0, 5);
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
+  // 🎯 處理通知點擊：標記已讀 + 導頁 + 滾動（純前端）
   const handleNotificationClick = (notification: Notification) => {
-    console.log('notification clicked:', notification.id);
-    
-    // 標記為已讀（純 UI 更新，不接後端）
+    // 1. 標記為已讀（純 UI 更新，不接後端）
     setNotifications(prev => 
       prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n)
     );
 
-    // 關閉 Drawer
+    // 2. 關閉 Drawer
     onClose();
 
-    // 如果有目標路徑，可以跳轉（使用現有路由）
-    if (notification.targetPath) {
-      // router.push(notification.targetPath);
-      console.log('would navigate to:', notification.targetPath);
-    }
+    // 3. 使用統一的導航處理函數（純前端路由 + 滾動）
+    handleNotificationNavigation(notification, router);
   };
 
   const handleMarkAllRead = () => {

@@ -24,3 +24,33 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* 🎯 通知系統：滾動目標高亮效果 */
+.notification-target-highlight {
+  animation: notificationHighlight 2s ease-in-out;
+}
+
+@keyframes notificationHighlight {
+  0% {
+    background-color: rgba(249, 115, 22, 0.2);
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
+  }
+  50% {
+    background-color: rgba(249, 115, 22, 0.3);
+    box-shadow: 0 0 0 10px rgba(249, 115, 22, 0);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
+  }
+}
+
+/* 隱藏捲軸 */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

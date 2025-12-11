@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/Navbar';
 import { useUserMode } from '@/components/UserModeProvider';
 import RoleSelectorModal from '@/components/RoleSelectorModal';
+import EmptyState from '@/components/EmptyState';
 
 export default function Home() {
   const { mode } = useUserMode();
@@ -287,19 +288,13 @@ export default function Home() {
             {/* Requester Mode - Trips Feed */}
             {mode === 'requester' ? (
               trips.length === 0 ? (
-                <div className="bg-white rounded-xl p-10 text-center shadow-sm">
-                  <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-3xl">✈️</span>
-                  </div>
-                  <h3 className="text-base font-semibold text-gray-900 mb-2">目前沒有行程</h3>
-                  <p className="text-sm text-gray-500 mb-4">等待代購者發布行程資訊</p>
-                  <Link 
-                    href="/trips"
-                    className="inline-block text-sm text-blue-600 font-semibold hover:text-blue-700"
-                  >
-                    了解更多 →
-                  </Link>
-                </div>
+                <EmptyState
+                  icon="✈️"
+                  title="目前沒有代購行程"
+                  description="還沒有代購者發布行程，你可以先發布需求，等待代購者聯繫你"
+                  actionLabel="探索功能"
+                  actionHref="/trips"
+                />
               ) : (
                 <div className="space-y-4">
                   {trips.map((trip) => (
@@ -366,21 +361,15 @@ export default function Home() {
             ) : (
               /* Shopper Mode - Wishes Feed */
               wishes.length === 0 ? (
-                <div className="bg-white rounded-xl p-10 text-center shadow-sm">
-                  <div className="w-16 h-16 rounded-full bg-orange-50 flex items-center justify-center mx-auto mb-4">
-                    <span className="text-3xl">🎁</span>
-                  </div>
-                  <h3 className="text-base font-semibold text-gray-900 mb-2">目前沒有需求</h3>
-                  <p className="text-sm text-gray-500 mb-4">等待買家發布代購需求</p>
-                  <Link 
-                    href="/create"
-                    className="inline-block text-sm text-orange-600 font-semibold hover:text-orange-700"
-                  >
-                    發布第一個需求 →
-                  </Link>
-                </div>
+                <EmptyState
+                  icon="🎁"
+                  title="目前沒有代購需求"
+                  description="還沒有買家發布需求，你可以先探索其他功能，或等待新需求出現"
+                  actionLabel="發布第一個需求"
+                  actionHref="/create"
+                />
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                   {wishes.map((wish) => {
                     // 🎨 純 UI：模擬狀態（之後可從真實資料讀取）
                     const mockStatus = wish.status || 'pending';
@@ -403,100 +392,132 @@ export default function Home() {
                     <Link 
                       key={wish.id} 
                       href={`/wish/${wish.id}`}
-                      className="block bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+                      className="group block bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden h-full border border-gray-100 hover:border-orange-200"
                     >
+                      {/* Card Image - 固定比例 */}
+                      {wish.images?.[0] ? (
+                        <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">
+                          <img 
+                            src={wish.images[0]} 
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            alt={wish.title}
+                          />
+                          {/* 收藏按鈕 - 圖片右上角 */}
+                          <button 
+                            onClick={(e) => toggleFavorite(e, wish.id)}
+                            className={`absolute top-3 right-3 p-2.5 rounded-full backdrop-blur-md transition-all ${
+                              myFavorites.includes(wish.id)
+                                ? 'bg-red-500 text-white shadow-lg'
+                                : 'bg-white/90 text-gray-600 hover:bg-white hover:text-red-500 shadow-md'
+                            }`}
+                          >
+                            <svg className="w-5 h-5" fill={myFavorites.includes(wish.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                            </svg>
+                          </button>
+                          {/* 國家標籤 - 圖片左上角 */}
+                          <div className="absolute top-3 left-3 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-orange-700 text-xs font-bold rounded-full shadow-md flex items-center gap-1.5">
+                            <span className="text-base">{getFlag(wish.target_country)}</span>
+                            <span>{wish.target_country}</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-orange-50 to-blue-50 flex items-center justify-center">
+                          <span className="text-6xl opacity-20">🎁</span>
+                          {/* 收藏按鈕 */}
+                          <button 
+                            onClick={(e) => toggleFavorite(e, wish.id)}
+                            className={`absolute top-3 right-3 p-2.5 rounded-full backdrop-blur-md transition-all ${
+                              myFavorites.includes(wish.id)
+                                ? 'bg-red-500 text-white shadow-lg'
+                                : 'bg-white/90 text-gray-600 hover:bg-white hover:text-red-500 shadow-md'
+                            }`}
+                          >
+                            <svg className="w-5 h-5" fill={myFavorites.includes(wish.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                            </svg>
+                          </button>
+                        </div>
+                      )}
+
                       <div className="p-5">
-                        {/* Card Header - 統一風格 */}
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold shadow-sm">
+                        {/* Card Header - 買家資訊 */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white font-bold shadow-sm shrink-0">
                               {wish.buyer?.avatar_url ? (
                                 <img src={wish.buyer.avatar_url} className="w-full h-full rounded-full object-cover" alt=""/>
                               ) : (
-                                <span className="text-base">{wish.buyer?.name?.[0]}</span>
+                                <span className="text-sm">{wish.buyer?.name?.[0]}</span>
                               )}
                             </div>
-                            <div>
-                              <p className="text-base font-semibold text-gray-900">{wish.buyer?.name || '匿名'}</p>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-bold text-gray-900 truncate">{wish.buyer?.name || '匿名'}</p>
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-md text-[10px] font-bold shrink-0">
+                                  ⭐ 4.8
+                                </span>
+                              </div>
                               <p className="text-xs text-gray-500">需要幫助</p>
                             </div>
                           </div>
-                          <div className="flex flex-col items-end gap-2">
-                            <span className="px-3 py-1.5 bg-orange-50 text-orange-700 text-xs font-semibold rounded-full border border-orange-100 flex items-center gap-1">
-                              <span>{getFlag(wish.target_country)}</span>
-                              <span>{wish.target_country}</span>
-                            </span>
-                            {/* ✨ 狀態標籤（純 UI） */}
-                            <span className={`px-3 py-1 text-xs font-bold rounded-full border ${getStatusStyle(mockStatus)}`}>
-                              {getStatusText(mockStatus)}
-                            </span>
-                          </div>
+                          {/* 狀態標籤 */}
+                          <span className={`px-2.5 py-1 text-[10px] font-bold rounded-lg border shrink-0 ${getStatusStyle(mockStatus)}`}>
+                            {getStatusText(mockStatus)}
+                          </span>
                         </div>
 
-                        {/* Card Image */}
-                        {wish.images?.[0] && (
-                          <div className="relative w-full h-56 rounded-xl overflow-hidden mb-4 bg-gray-100">
-                            <img 
-                              src={wish.images[0]} 
-                              className="w-full h-full object-cover"
-                              alt={wish.title}
-                            />
-                          </div>
-                        )}
+                        {/* Card Title */}
+                        <h3 className="text-base font-bold text-gray-900 mb-3 line-clamp-2 leading-snug group-hover:text-orange-600 transition-colors">
+                          {wish.title}
+                        </h3>
 
-                        {/* Card Content - 統一風格 */}
-                        <div className="mb-4">
-                          <h3 className="text-lg font-semibold text-gray-900 mb-3 line-clamp-2">
-                            {wish.title}
-                          </h3>
-                          <div className="inline-flex items-baseline gap-1.5 px-4 py-2 bg-orange-50 rounded-full border border-orange-100">
-                            <span className="text-xs font-semibold text-orange-700">NT$</span>
-                            <span className="text-xl font-bold text-orange-600">
+                        {/* Card Footer */}
+                        <div className="space-y-3 pt-3 border-t border-gray-100">
+                          {/* 價格 */}
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-xs font-semibold text-gray-500">NT$</span>
+                            <span className="text-2xl font-bold text-orange-600">
                               {Number(wish.budget).toLocaleString()}
                             </span>
                           </div>
-                        </div>
-
-                        {/* Card Actions - 統一風格 */}
-                        <div className="pt-4 border-t border-gray-100">
-                          <div className="flex items-center justify-between mb-3">
-                            <button 
-                              onClick={(e) => toggleFavorite(e, wish.id)}
-                              className={`flex items-center gap-2 text-sm font-semibold transition ${
-                                myFavorites.includes(wish.id)
-                                  ? 'text-red-500'
-                                  : 'text-gray-500 hover:text-red-500'
-                              }`}
-                            >
-                              <svg className="w-5 h-5" fill={myFavorites.includes(wish.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                              </svg>
-                              <span>{myFavorites.includes(wish.id) ? '已收藏' : '收藏'}</span>
-                            </button>
-                            <div className="text-sm text-gray-500 font-medium flex items-center gap-1">
-                              <span>查看詳情</span>
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                              </svg>
-                            </div>
-                          </div>
-                          {/* ✨ 「私訊接單」主按鈕（橘色，純 UI） */}
+                          
+                          {/* 🎯 私訊接單按鈕 */}
                           <button
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              console.log('私訊接單 clicked for wish:', wish.id, 'target:', wish.buyer_id);
-                              router.push(`/chat?target=${wish.buyer_id}`);
+                              
+                              // 🔍 Debug：輸出完整願望物件
+                              console.log('🎁 [DEBUG] Wish 完整資料:', wish);
+                              console.log('🎁 [DEBUG] wish.buyer_id:', wish.buyer_id);
+                              console.log('🎁 [DEBUG] wish.id:', wish.id);
+                              
+                              // 檢查 buyer_id 是否有效
+                              const targetUserId = wish.buyer_id;
+                              const isValidUUID = targetUserId && 
+                                               targetUserId !== '00000000-0000-0000-0000-000000000000' &&
+                                               targetUserId.length > 10;
+                              
+                              if (!isValidUUID) {
+                                console.error('❌ buyer_id 無效或為全 0 UUID:', targetUserId);
+                                alert('無法開啟聊天：發布者 ID 無效');
+                                return;
+                              }
+                              
+                              console.log('✅ 跳轉到聊天頁面，目標用戶:', targetUserId);
+                              router.push(`/chat?target=${targetUserId}`);
                             }}
-                            className="flex items-center justify-center gap-2 w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition shadow-sm hover:shadow-md text-sm"
+                            className="w-full flex items-center justify-center gap-2 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition shadow-sm hover:shadow-md text-sm"
                           >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                             </svg>
                             <span>私訊接單</span>
                           </button>
                         </div>
                       </div>
+
                     </Link>
                     );
                   })}

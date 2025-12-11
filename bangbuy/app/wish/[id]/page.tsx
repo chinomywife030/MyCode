@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ReviewModal from '@/components/ReviewModal';
+import UberStyleReviewSection from '@/components/UberStyleReviewSection';
 
 export default function WishDetailPage() {
   const params = useParams();
@@ -15,6 +17,9 @@ export default function WishDetailPage() {
   // 收藏與使用者狀態
   const [isFavorited, setIsFavorited] = useState(false);
   const [user, setUser] = useState<any>(null);
+  
+  // 🎨 純 UI state：評價 Modal
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -261,6 +266,25 @@ export default function WishDetailPage() {
             )}
 
           </div>
+          
+          {/* 🎨 Uber 式評價區域（純 UI，假資料示範） */}
+          {!isOwner && user && (
+            <div className="mt-8 pt-8 border-t border-gray-100">
+              <UberStyleReviewSection
+                orderStatus={{
+                  orderId: wish.id,
+                  canCurrentUserReview: true,
+                  hasCurrentUserReviewed: false, // 🎨 假資料：改成 true 看看已評價狀態
+                  hasOtherSideReviewed: true, // 🎨 假資料：對方是否已評價
+                  otherSideName: wish.buyer?.name || '買家',
+                  otherSideType: 'buyer'
+                }}
+              />
+              <p className="text-xs text-gray-400 text-center mt-4">
+                💡 這是 Uber 式雙向評價 UI prototype（純前端假資料）
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </div>
