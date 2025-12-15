@@ -1,18 +1,30 @@
 'use client';
 
+/**
+ * useConversations - 對話列表 Hook
+ * 
+ * 設計原則：
+ * 1. fetch 和 realtime 完全分離
+ * 2. loading 只跟 fetch 有關
+ * 3. Realtime 失敗不影響 UI
+ */
+
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { safeQuery } from '@/lib/safeCall';
 import { registerRefetchCallback } from '@/lib/AppStatusProvider';
 import { eventBus, Events } from '@/lib/events';
+import { useSimpleRealtime } from '@/lib/realtime';
 
-// 開發模式日誌
+// 日誌
 const isDev = process.env.NODE_ENV === 'development';
-const log = (message: string, data?: any) => {
-  if (isDev) {
-    console.log(`[conversations] ${message}`, data || '');
-  }
+const log = (msg: string, data?: any) => {
+  if (isDev) console.log(`[conversations] ${msg}`, data ?? '');
 };
+
+// ============================================
+// Types
+// ============================================
 
 export interface Conversation {
   id: string;
@@ -38,17 +50,24 @@ interface UseConversationsReturn {
   loading: boolean;
   error: string | null;
   totalUnread: number;
+  realtimeConnected: boolean;
   refresh: () => Promise<void>;
 }
+
+// ============================================
+// Hook
+// ============================================
 
 export function useConversations(options: UseConversationsOptions = {}): UseConversationsReturn {
   const { autoRefresh = true } = options;
 
+  // State
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   
+  // Refs
   const isFetchingRef = useRef(false);
   const hasFetchedRef = useRef(false);
 
@@ -67,7 +86,10 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
     getUser();
   }, []);
 
-  // 載入對話列表（直接查詢，不用 RPC）
+  // ============================================
+  // Fetch 對話列表
+  // ============================================
+
   const fetchConversations = useCallback(async () => {
     if (!currentUserId || isFetchingRef.current) return;
 
@@ -76,7 +98,6 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
     setError(null);
 
     try {
-      // Step 1: 獲取我參與的對話（使用 safeQuery）
       const { data: convData, error: convError } = await safeQuery(
         () => supabase
           .from('conversations')
@@ -97,7 +118,7 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
         return;
       }
 
-      // Step 2: 獲取對方用戶資料
+      // 獲取對方用戶資料
       const otherUserIds = convData.map(c => 
         c.user1_id === currentUserId ? c.user2_id : c.user1_id
       );
@@ -109,7 +130,7 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
 
       const profileMap = new Map((profiles || []).map(p => [p.id, p]));
 
-      // Step 3: 獲取每個對話的最後一則訊息
+      // 獲取最後一則訊息
       const conversationIds = convData.map(c => c.id);
       const { data: lastMessages } = await supabase
         .from('messages')
@@ -117,7 +138,6 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
         .in('conversation_id', conversationIds)
         .order('created_at', { ascending: false });
 
-      // 取每個對話的第一則（最新的）
       const lastMsgMap = new Map<string, string>();
       for (const msg of (lastMessages || [])) {
         if (!lastMsgMap.has(msg.conversation_id)) {
@@ -125,7 +145,7 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
         }
       }
 
-      // Step 4: 組裝結果
+      // 組裝結果
       const newConversations: Conversation[] = convData.map(c => {
         const otherId = c.user1_id === currentUserId ? c.user2_id : c.user1_id;
         const profile = profileMap.get(otherId);
@@ -140,7 +160,7 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
           source_title: c.source_title,
           last_message_at: c.last_message_at,
           last_message_preview: lastMsgMap.get(c.id) || null,
-          unread_count: 0, // 簡化版不計算未讀
+          unread_count: 0,
           is_blocked: false,
           created_at: c.created_at,
         };
@@ -153,39 +173,18 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
       console.error('[useConversations] Error:', err);
       setError(err.message || '載入對話失敗');
     } finally {
+      // ⚠️ 重要：無論成功失敗，loading 都要結束
       setLoading(false);
       isFetchingRef.current = false;
     }
   }, [currentUserId]);
 
-  // 重新整理
+  // 刷新
   const refresh = useCallback(async () => {
-    log('Refreshing conversations...');
+    log('Refreshing conversations');
     hasFetchedRef.current = false;
     await fetchConversations();
   }, [fetchConversations]);
-
-  // 註冊到全域 refetchAll
-  useEffect(() => {
-    if (!currentUserId) return;
-    
-    const unregister = registerRefetchCallback(refresh);
-    return () => {
-      unregister();
-    };
-  }, [currentUserId, refresh]);
-
-  // 監聽 EventBus 的 CONVERSATIONS_REFRESH 事件
-  useEffect(() => {
-    const unsubscribe = eventBus.on(Events.CONVERSATIONS_REFRESH, () => {
-      log('CONVERSATIONS_REFRESH event received');
-      refresh();
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [refresh]);
 
   // 初始載入
   useEffect(() => {
@@ -194,81 +193,70 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
     }
   }, [currentUserId, fetchConversations]);
 
-  // Realtime 訂閱（帶自動重連）
-  const channelRef = useRef<any>(null);
-  const reconnectAttemptRef = useRef<number>(0);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const setupChannel = useCallback(() => {
+  // 全域 refetch
+  useEffect(() => {
     if (!currentUserId) return;
-
-    // 清理舊的
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-
-    log('Setting up Realtime channel...');
-
-    channelRef.current = supabase
-      .channel('conversations_list_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'messages',
-        },
-        () => {
-          refresh();
-        }
-      )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          log('Realtime channel SUBSCRIBED');
-          reconnectAttemptRef.current = 0;
-        } else if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          log(`Realtime channel ${status}`, err);
-
-          // Exponential backoff
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
-          reconnectAttemptRef.current += 1;
-
-          log(`Realtime disconnected -> retry in ${delay}ms`);
-
-          if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-          }
-
-          reconnectTimeoutRef.current = setTimeout(() => {
-            setupChannel();
-            refresh();
-          }, delay);
-        }
-      });
+    const unregister = registerRefetchCallback(refresh);
+    return () => unregister();
   }, [currentUserId, refresh]);
 
+  // EventBus 監聽
   useEffect(() => {
-    if (!autoRefresh || !currentUserId) return;
+    const unsubscribe = eventBus.on(Events.CONVERSATIONS_REFRESH, () => {
+      log('CONVERSATIONS_REFRESH event');
+      refresh();
+    });
+    return () => unsubscribe();
+  }, [refresh]);
 
-    setupChannel();
+  // ============================================
+  // Realtime（增量更新，失敗不影響 UI）
+  // ============================================
 
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-    };
-  }, [autoRefresh, currentUserId, setupChannel]);
+  const handleConversationChange = useCallback(() => {
+    log('Conversation change via realtime, refreshing');
+    refresh();
+  }, [refresh]);
+
+  const realtimeKey = useMemo(() => 
+    currentUserId ? `conversations:${currentUserId}` : ''
+  , [currentUserId]);
+
+  // ✅ 修正：監聽 conversations 表而非 messages，並加上過濾條件
+  // 只監聽與當前用戶相關的對話更新
+  const { isConnected: realtimeConnected } = useSimpleRealtime({
+    key: realtimeKey,
+    enabled: autoRefresh && !!currentUserId,
+    table: 'conversations',
+    // 過濾：只監聽自己參與的對話
+    filter: currentUserId ? `user1_id=eq.${currentUserId}` : undefined,
+    event: '*',
+    onChange: handleConversationChange,
+  });
+  
+  // 額外監聽 user2_id 的變化（因為 Supabase filter 不支援 OR）
+  const realtimeKey2 = useMemo(() => 
+    currentUserId ? `conversations2:${currentUserId}` : ''
+  , [currentUserId]);
+  
+  useSimpleRealtime({
+    key: realtimeKey2,
+    enabled: autoRefresh && !!currentUserId,
+    table: 'conversations',
+    filter: currentUserId ? `user2_id=eq.${currentUserId}` : undefined,
+    event: '*',
+    onChange: handleConversationChange,
+  });
 
   return {
     conversations,
     loading,
     error,
     totalUnread,
+    realtimeConnected,
     refresh,
   };
 }
+
+// 向後兼容
+export type ConversationHookStatus = 'ok' | 'recovering' | 'error';

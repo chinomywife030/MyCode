@@ -68,16 +68,26 @@ function isNetworkError(error: any): boolean {
 }
 
 // ============================================
-// Session 刷新
+// Session 刷新（加強版）
 // ============================================
 
 let isRefreshing = false;
 let refreshPromise: Promise<boolean> | null = null;
+let lastRefreshTime = 0;
+const REFRESH_COOLDOWN_MS = 5000; // 5 秒內不重複刷新
 
 async function refreshSession(): Promise<boolean> {
   // 避免多個請求同時刷新
   if (isRefreshing && refreshPromise) {
+    log('Waiting for existing refresh...');
     return refreshPromise;
+  }
+  
+  // 🆕 Cooldown：避免短時間內重複刷新
+  const now = Date.now();
+  if (now - lastRefreshTime < REFRESH_COOLDOWN_MS) {
+    log('Refresh cooldown active, skipping');
+    return true; // 假設最近的刷新還有效
   }
 
   isRefreshing = true;
@@ -86,22 +96,45 @@ async function refreshSession(): Promise<boolean> {
       log('Attempting to refresh session...');
       
       // 先檢查是否有 session
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session }, error: getError } = await supabase.auth.getSession();
+      
+      if (getError) {
+        log('getSession error', getError);
+        return false;
+      }
       
       if (!session) {
         log('No session found');
         return false;
       }
+      
+      // 🆕 檢查 token 是否真的需要刷新
+      const expiresAt = session.expires_at;
+      if (expiresAt) {
+        const expiresIn = expiresAt * 1000 - Date.now();
+        // 如果還有超過 5 分鐘，不需要刷新
+        if (expiresIn > 5 * 60 * 1000) {
+          log('Token still valid, no refresh needed');
+          lastRefreshTime = now;
+          return true;
+        }
+      }
 
       // 嘗試刷新
-      const { error } = await supabase.auth.refreshSession();
+      const { data, error } = await supabase.auth.refreshSession();
       
       if (error) {
         log('Refresh failed', error);
         return false;
       }
+      
+      if (!data.session) {
+        log('Refresh returned no session');
+        return false;
+      }
 
       log('Session refreshed successfully');
+      lastRefreshTime = Date.now();
       return true;
     } catch (err) {
       log('Refresh exception', err);
@@ -113,6 +146,14 @@ async function refreshSession(): Promise<boolean> {
   })();
 
   return refreshPromise;
+}
+
+/**
+ * 🆕 強制刷新 session（忽略 cooldown）
+ */
+export async function forceRefreshSession(): Promise<boolean> {
+  lastRefreshTime = 0; // 重置 cooldown
+  return refreshSession();
 }
 
 // ============================================

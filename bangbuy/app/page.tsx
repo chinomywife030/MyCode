@@ -8,6 +8,7 @@ import Navbar from '@/components/Navbar';
 import { useUserMode } from '@/components/UserModeProvider';
 import RoleSelectorModal from '@/components/RoleSelectorModal';
 import EmptyState from '@/components/EmptyState';
+import { navigateWithOneReload } from '@/lib/navigateWithReload';
 
 export default function Home() {
   const { mode } = useUserMode();
@@ -526,7 +527,8 @@ export default function Home() {
                               console.log('✅ 跳轉到聊天頁面，目標用戶:', targetUserId);
                               // 🔐 P0-2：傳入來源上下文
                               const chatUrl = `/chat?target=${targetUserId}&source_type=wish_request&source_id=${wish.id}&source_title=${encodeURIComponent(wish.title || '')}`;
-                              router.push(chatUrl);
+                              // ✅ 使用 navigateWithOneReload 確保跳轉後資料正確
+                              navigateWithOneReload(router, chatUrl, `chat:wish:${wish.id}`);
                             }}
                             className="w-full flex items-center justify-center gap-2 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition shadow-sm hover:shadow-md text-sm"
                           >

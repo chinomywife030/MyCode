@@ -52,6 +52,26 @@ function ChatContent() {
   // 防止重複初始化（用 conversationKey 作為 key）
   const inFlightKeyRef = useRef<string | null>(null);
   const currentUserRef = useRef<{ id: string } | null>(null);
+  const hasInitializedRef = useRef(false);
+
+  // 🆕 獨立的用戶初始化（不依賴 loadConversation）
+  useEffect(() => {
+    if (hasInitializedRef.current) return;
+    
+    async function initUser() {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) {
+        router.push('/login');
+        return;
+      }
+      currentUserRef.current = { id: user.id };
+      setCurrentUser({ id: user.id });
+      hasInitializedRef.current = true;
+      log('User initialized', user.id);
+    }
+    
+    initUser();
+  }, [router]);
 
   // 檢舉 Modal
   const [showReportModal, setShowReportModal] = useState(false);
@@ -68,76 +88,8 @@ function ChatContent() {
     return true;
   };
 
-  // 載入對話（核心函數）
-  const loadConversation = useCallback(async (key: string | null) => {
-    // 並發鎖：避免同一個 key 重複載入
-    if (inFlightKeyRef.current === key) {
-      log('Already loading this conversation, skipping...', key);
-      return;
-    }
-
-    inFlightKeyRef.current = key;
-    setLoading(true);
-    setError(null);
-
-    try {
-      // 先確認用戶
-      let user = currentUserRef.current;
-      
-      if (!user) {
-        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-        
-        if (authError || !authUser) {
-          router.push('/login');
-          return;
-        }
-        
-        user = { id: authUser.id };
-        currentUserRef.current = user;
-        setCurrentUser(user);
-      }
-
-      log('Loading conversation', { key, conversationParam, targetId });
-
-      // 如果有 conversation 參數，直接打開該對話
-      if (conversationParam) {
-        await handleOpenConversation(conversationParam);
-      }
-      // 如果有 target 參數，使用 RPC 獲取或創建對話
-      else if (isValidTarget(targetId)) {
-        await handleGetOrCreateConversation(user.id, targetId!);
-      } else {
-        // 沒有參數，只顯示列表
-        setLoading(false);
-      }
-    } catch (err: any) {
-      console.error('[ChatPage] loadConversation error:', err);
-      setError('載入失敗，請重新整理頁面');
-      setLoading(false);
-    } finally {
-      inFlightKeyRef.current = null;
-    }
-  }, [conversationParam, targetId, router]);
-
-  // 初始化 + 依賴 URL 參數變化重新載入
-  useEffect(() => {
-    log('conversationKey changed', conversationKey);
-    loadConversation(conversationKey);
-  }, [conversationKey, loadConversation]);
-
-  // 監聽 EventBus 的 CHAT_OPEN 事件
-  useEffect(() => {
-    const unsubscribe = eventBus.on(Events.CHAT_OPEN, (convId: string) => {
-      log('CHAT_OPEN event received', convId);
-      handleOpenConversation(convId);
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
-
   // 使用 RPC 獲取或創建對話（防止重複創建）
+  // ⚠️ 移到 loadConversation 之前，避免 stale closure
   const handleGetOrCreateConversation = useCallback(async (myId: string, targetUserId: string) => {
     if (!targetUserId || targetUserId === myId) {
       setLoading(false);
@@ -276,32 +228,124 @@ function ChatContent() {
     }
   }, [router]);
 
-  // 選擇對話（從列表）
-  const handleSelectConversation = useCallback(async (conversation: Conversation) => {
-    const { data: otherUser } = await supabase
-      .from('profiles')
-      .select('id, name, avatar_url')
-      .eq('id', conversation.other_user_id)
-      .single();
+  // ============================================
+  // 載入對話（核心函數）- 放在 handler 之後避免 stale closure
+  // ============================================
+  const loadConversation = useCallback(async (key: string | null) => {
+    // 等待用戶初始化完成
+    if (!currentUserRef.current) {
+      log('Waiting for user initialization...', key);
+      return;
+    }
+    
+    // 並發鎖：避免同一個 key 重複載入
+    if (inFlightKeyRef.current === key) {
+      log('Already loading this conversation, skipping...', key);
+      return;
+    }
 
-    setActiveConversation({
-      id: conversation.id,
-      otherUser: otherUser || { 
-        id: conversation.other_user_id, 
-        name: conversation.other_user_name, 
-        avatar_url: conversation.other_user_avatar 
-      },
-      sourceType: conversation.source_type || undefined,
-      sourceId: conversation.source_id,
-      sourceTitle: conversation.source_title,
-      isBlocked: conversation.is_blocked,
+    inFlightKeyRef.current = key;
+    setLoading(true);
+    setError(null);
+
+    try {
+      const user = currentUserRef.current;
+
+      log('Loading conversation', { key, conversationParam, targetId });
+
+      // 如果有 conversation 參數，直接打開該對話
+      if (conversationParam) {
+        await handleOpenConversation(conversationParam);
+      }
+      // 如果有 target 參數，使用 RPC 獲取或創建對話
+      else if (isValidTarget(targetId)) {
+        await handleGetOrCreateConversation(user.id, targetId!);
+      } else {
+        // 沒有參數，只顯示列表
+        setLoading(false);
+      }
+    } catch (err: any) {
+      console.error('[ChatPage] loadConversation error:', err);
+      setError('載入失敗，請重新整理頁面');
+      setLoading(false);
+    } finally {
+      inFlightKeyRef.current = null;
+    }
+  }, [conversationParam, targetId, handleOpenConversation, handleGetOrCreateConversation]);
+
+  // 初始化 + 依賴 URL 參數變化重新載入
+  useEffect(() => {
+    if (!currentUser) return; // 等待用戶初始化
+    
+    log('conversationKey changed', conversationKey);
+    loadConversation(conversationKey);
+  }, [conversationKey, loadConversation, currentUser]);
+
+  // 監聽 EventBus 的 CHAT_OPEN 事件
+  useEffect(() => {
+    const unsubscribe = eventBus.on(Events.CHAT_OPEN, (convId: string) => {
+      log('CHAT_OPEN event received', convId);
+      handleOpenConversation(convId);
     });
-    setShowMobileList(false);
+
+    return () => unsubscribe();
+  }, [handleOpenConversation]);
+
+  // 選擇對話（從列表）- 加上 safeQuery 錯誤處理
+  const handleSelectConversation = useCallback(async (conversation: Conversation) => {
+    try {
+      const { data: otherUser, error } = await safeQuery(
+        () => supabase
+          .from('profiles')
+          .select('id, name, avatar_url')
+          .eq('id', conversation.other_user_id)
+          .single(),
+        'getProfileForSelect'
+      );
+
+      if (error) {
+        console.error('[handleSelectConversation] Error:', error);
+      }
+
+      setActiveConversation({
+        id: conversation.id,
+        otherUser: otherUser || { 
+          id: conversation.other_user_id, 
+          name: conversation.other_user_name, 
+          avatar_url: conversation.other_user_avatar 
+        },
+        sourceType: conversation.source_type || undefined,
+        sourceId: conversation.source_id,
+        sourceTitle: conversation.source_title,
+        isBlocked: conversation.is_blocked,
+      });
+      setShowMobileList(false);
+    } catch (err) {
+      console.error('[handleSelectConversation] Exception:', err);
+      // 即使失敗也嘗試使用現有資料
+      setActiveConversation({
+        id: conversation.id,
+        otherUser: { 
+          id: conversation.other_user_id, 
+          name: conversation.other_user_name, 
+          avatar_url: conversation.other_user_avatar 
+        },
+        sourceType: conversation.source_type || undefined,
+        sourceId: conversation.source_id,
+        sourceTitle: conversation.source_title,
+        isBlocked: conversation.is_blocked,
+      });
+      setShowMobileList(false);
+    }
   }, []);
 
   // 封鎖用戶
   const handleBlock = async () => {
-    if (!activeConversation) return;
+    // ✅ 修復：確保 currentUser 和 activeConversation 都存在
+    if (!currentUser || !activeConversation) {
+      console.error('[handleBlock] Missing currentUser or activeConversation');
+      return;
+    }
 
     const confirmed = confirm(
       activeConversation.isBlocked 
@@ -316,7 +360,7 @@ function ChatContent() {
         await supabase
           .from('blocks')
           .delete()
-          .eq('blocker_id', currentUser?.id)
+          .eq('blocker_id', currentUser.id)
           .eq('blocked_id', activeConversation.otherUser.id);
         
         setActiveConversation(prev => prev ? { ...prev, isBlocked: false } : null);
@@ -325,7 +369,7 @@ function ChatContent() {
         await supabase
           .from('blocks')
           .insert({
-            blocker_id: currentUser?.id,
+            blocker_id: currentUser.id,
             blocked_id: activeConversation.otherUser.id,
           });
         

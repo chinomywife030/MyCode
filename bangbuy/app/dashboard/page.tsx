@@ -5,6 +5,8 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useLanguage } from '@/components/LanguageProvider';
+import { navigateWithOneReload } from '@/lib/navigateWithReload';
+import { cleanupAllChannels } from '@/lib/realtime';
 import ReviewModal from '@/components/ReviewModal';
 import ReviewSection from '@/components/ReviewSection';
 import UberStyleReviewSection from '@/components/UberStyleReviewSection';
@@ -33,6 +35,9 @@ export default function Dashboard() {
   const [editForm, setEditForm] = useState({ name: '', bio: '' });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [updating, setUpdating] = useState(false);
+  
+  // 🆕 登出狀態
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     async function initData() {
@@ -169,6 +174,61 @@ export default function Dashboard() {
     }
   };
 
+  // 🆕 回到首頁
+  const handleGoHome = () => {
+    router.push('/');
+  };
+
+  // 🆕 登出
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    
+    setIsLoggingOut(true);
+    
+    try {
+      // 1. 清理 Realtime 訂閱
+      cleanupAllChannels();
+      
+      // 2. 登出 Supabase
+      const { error } = await supabase.auth.signOut();
+      
+      if (error) {
+        throw error;
+      }
+      
+      // 3. 清除本地儲存（只清 supabase 相關的 key）
+      if (typeof window !== 'undefined') {
+        // 清除 sessionStorage
+        const sessionKeysToRemove: string[] = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const key = sessionStorage.key(i);
+          if (key && (key.includes('supabase') || key.includes('sb-'))) {
+            sessionKeysToRemove.push(key);
+          }
+        }
+        sessionKeysToRemove.forEach(key => sessionStorage.removeItem(key));
+        
+        // 清除 localStorage
+        const localKeysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.includes('supabase') || key.includes('sb-'))) {
+            localKeysToRemove.push(key);
+          }
+        }
+        localKeysToRemove.forEach(key => localStorage.removeItem(key));
+      }
+      
+      // 4. 導向登入頁
+      router.replace('/login');
+      
+    } catch (error: any) {
+      console.error('[Logout] Error:', error);
+      alert('登出失敗，請重試');
+      setIsLoggingOut(false);
+    }
+  };
+
   if (loading) return <div className="min-h-screen flex items-center justify-center text-gray-500">載入會員資料...</div>;
 
   const MenuButton = ({ id, icon, label }: { id: typeof activeTab; icon: string; label: string }) => (
@@ -230,6 +290,28 @@ export default function Dashboard() {
               <MenuButton id="favorites" icon="❤️" label={t.dashboard.myFavorites} />
               <MenuButton id="orders" icon="📦" label="我的訂單" />
               <MenuButton id="reviews" icon="⭐" label="評價紀錄" />
+              
+              {/* 🆕 分隔線 + 操作按鈕 */}
+              <div className="border-t border-gray-100 my-3 pt-3 space-y-2">
+                {/* 回到首頁 */}
+                <button
+                  onClick={handleGoHome}
+                  className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 text-gray-600 hover:bg-gray-100 hover:text-gray-900 border border-gray-200"
+                >
+                  <span className="text-xl">🏠</span>
+                  <span>回到首頁</span>
+                </button>
+                
+                {/* 登出 */}
+                <button
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 text-red-600 hover:bg-red-50 hover:text-red-700 border border-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <span className="text-xl">{isLoggingOut ? '⏳' : '🚪'}</span>
+                  <span>{isLoggingOut ? '登出中...' : '登出'}</span>
+                </button>
+              </div>
             </nav>
           </aside>
 
@@ -399,7 +481,8 @@ export default function Dashboard() {
                               console.log('✅ 跳轉到聊天頁面，目標用戶:', targetUserId);
                               // 🔐 P0-2：傳入來源上下文
                               const chatUrl = `/chat?target=${targetUserId}&source_type=wish_request&source_id=${wish.id}&source_title=${encodeURIComponent(wish.title || '')}`;
-                              router.push(chatUrl);
+                              // ✅ 使用 navigateWithOneReload 確保跳轉後資料正確
+                              navigateWithOneReload(router, chatUrl, `chat:wish:${wish.id}`);
                             }}
                             className="flex items-center justify-center gap-1.5 w-full py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition shadow-sm text-xs"
                           >

@@ -13,6 +13,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { forceRefreshSession } from '@/lib/safeCall';
 
 // ============================================
 // 類型定義
@@ -83,9 +84,9 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ============================================
-  // 檢查 Session 有效性
+  // 檢查 Session 有效性（加強版）
   // ============================================
-  const checkSession = useCallback(async (): Promise<boolean> => {
+  const checkSession = useCallback(async (forceRefresh: boolean = false): Promise<boolean> => {
     try {
       const { data: { session }, error } = await supabase.auth.getSession();
       
@@ -96,17 +97,17 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
 
       // 檢查 token 是否快過期（5 分鐘內）
       const expiresAt = session.expires_at;
-      if (expiresAt) {
-        const expiresIn = expiresAt * 1000 - Date.now();
-        if (expiresIn < 5 * 60 * 1000) {
-          log('auth', 'Token expiring soon, refreshing...');
-          const { error: refreshError } = await supabase.auth.refreshSession();
-          if (refreshError) {
-            log('auth', 'Token refresh failed', refreshError);
-            return false;
-          }
-          log('auth', 'Token refreshed successfully');
+      const expiresIn = expiresAt ? expiresAt * 1000 - Date.now() : Infinity;
+      
+      // 🆕 如果是強制刷新，或 token 即將過期，則刷新
+      if (forceRefresh || expiresIn < 5 * 60 * 1000) {
+        log('auth', forceRefresh ? 'Force refreshing token...' : 'Token expiring soon, refreshing...');
+        const refreshed = await forceRefreshSession();
+        if (!refreshed) {
+          log('auth', 'Token refresh failed');
+          return false;
         }
+        log('auth', 'Token refreshed successfully');
       }
 
       return true;
@@ -226,37 +227,71 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
   }, [router, refetchAll]);
 
   // ============================================
-  // Visibility + Online 事件監聽
+  // Visibility + Online 事件監聽（🔨 暴力版：直接 reload）
   // ============================================
+  const lastHiddenTimeRef = useRef<number>(0);
+  const lastActivityTimeRef = useRef<number>(Date.now());
+  
+  // ⚠️ 常數
+  const FORCE_RELOAD_THRESHOLD = 60 * 1000; // 離開超過 60 秒才刷新
+  const ACTIVITY_GRACE_PERIOD = 5 * 1000;   // 最近 5 秒內有活動就不刷新
+  
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
+    // 🆕 追蹤用戶活動（點擊、滾動、鍵盤）
+    const updateActivity = () => {
+      lastActivityTimeRef.current = Date.now();
+    };
+    
     // 頁面可見性變化
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'visible') {
-        log('app', 'Page became visible, checking session...');
-        
-        const hasSession = await checkSession();
-        
-        if (!hasSession) {
-          // 用戶可能未登入，檢查是否在需要登入的頁面
-          const pathname = window.location.pathname;
-          const publicPaths = ['/login', '/register', '/', '/calculator'];
-          
-          if (!publicPaths.some(p => pathname === p || pathname.startsWith(p + '/'))) {
-            await handleSignOut();
-          }
-        } else {
-          // 有 session，刷新資料
-          await refetchAll();
-        }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // 記錄切到背景的時間
+        lastHiddenTimeRef.current = Date.now();
+        log('app', 'Page hidden, recording time');
+        return;
       }
+      
+      // visible - 回到前景
+      const now = Date.now();
+      const timeInBackground = lastHiddenTimeRef.current > 0 
+        ? now - lastHiddenTimeRef.current 
+        : 0;
+      
+      // 🆕 檢查最近是否有用戶活動（避免誤判）
+      const timeSinceLastActivity = now - lastActivityTimeRef.current;
+      
+      log('app', `Page visible after ${Math.round(timeInBackground / 1000)}s in background`);
+      
+      // 🆕 如果最近有活動，不要刷新（用戶正在使用）
+      if (timeSinceLastActivity < ACTIVITY_GRACE_PERIOD) {
+        log('app', 'Recent activity detected, skipping reload');
+        return;
+      }
+      
+      // 🔨 暴力解法：超過閾值就直接 reload
+      if (timeInBackground > FORCE_RELOAD_THRESHOLD) {
+        log('app', '🔄 Force reloading page (was in background too long)');
+        window.location.reload();
+        return;
+      }
+      
+      // 短時間背景：不需要特別處理
+      log('app', 'Short background - no action needed');
     };
 
     // 網路恢復
-    const handleOnline = async () => {
-      log('app', 'Network back online, reconnecting...');
-      await forceReconnect();
+    const handleOnline = () => {
+      // 🆕 網路恢復時，如果最近有活動，不要刷新
+      const timeSinceLastActivity = Date.now() - lastActivityTimeRef.current;
+      if (timeSinceLastActivity < ACTIVITY_GRACE_PERIOD) {
+        log('app', 'Network online but user active, skipping reload');
+        return;
+      }
+      
+      log('app', 'Network back online - reloading page');
+      window.location.reload();
     };
 
     // 網路斷開
@@ -265,16 +300,27 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
       setStatus('reconnecting');
     };
 
+    // 監聽用戶活動
+    document.addEventListener('click', updateActivity, { passive: true });
+    document.addEventListener('keydown', updateActivity, { passive: true });
+    document.addEventListener('scroll', updateActivity, { passive: true });
+    document.addEventListener('touchstart', updateActivity, { passive: true });
+    
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
     return () => {
+      document.removeEventListener('click', updateActivity);
+      document.removeEventListener('keydown', updateActivity);
+      document.removeEventListener('scroll', updateActivity);
+      document.removeEventListener('touchstart', updateActivity);
+      
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [checkSession, handleSignOut, refetchAll, forceReconnect]);
+  }, []);
 
   // ============================================
   // 清理 timeout

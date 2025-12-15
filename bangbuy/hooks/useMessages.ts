@@ -1,17 +1,30 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+/**
+ * useMessages - 聊天訊息 Hook
+ * 
+ * 設計原則：
+ * 1. fetch 和 realtime 完全分離
+ * 2. loading 只跟 fetch 有關，不跟 realtime 連線狀態綁定
+ * 3. Realtime 失敗不影響 UI（頁面仍然可用）
+ */
+
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { safeQuery } from '@/lib/safeCall';
 import { eventBus, Events } from '@/lib/events';
+import { useSimpleRealtime } from '@/lib/realtime';
+import { registerRefetchCallback } from '@/lib/AppStatusProvider';
 
-// 開發模式日誌
+// 日誌
 const isDev = process.env.NODE_ENV === 'development';
-const log = (message: string, data?: any) => {
-  if (isDev) {
-    console.log(`[messages] ${message}`, data || '');
-  }
+const log = (msg: string, data?: any) => {
+  if (isDev) console.log(`[messages] ${msg}`, data ?? '');
 };
+
+// ============================================
+// Types
+// ============================================
 
 export type MessageStatus = 'sending' | 'sent' | 'failed';
 
@@ -35,26 +48,35 @@ interface UseMessagesReturn {
   messages: Message[];
   loading: boolean;
   error: string | null;
+  realtimeConnected: boolean; // 只是顯示用，不影響功能
   sendMessage: (content: string) => Promise<boolean>;
   resendMessage: (clientMessageId: string) => Promise<boolean>;
   markAsRead: () => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 function generateClientMessageId(): string {
   return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 }
 
+// ============================================
+// Hook
+// ============================================
+
 export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
   const { conversationId } = options;
 
+  // State
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [userProfile, setUserProfile] = useState<{ name: string; avatar_url: string | null } | null>(null);
   
+  // Refs
   const processedIds = useRef<Set<string>>(new Set());
   const isFetchingRef = useRef(false);
+  const hasFetchedRef = useRef(false);
 
   // 獲取當前用戶
   useEffect(() => {
@@ -73,7 +95,10 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
     getUser();
   }, []);
 
-  // 載入訊息（直接查詢，不用 RPC）
+  // ============================================
+  // Fetch 訊息（獨立於 Realtime）
+  // ============================================
+
   const fetchMessages = useCallback(async () => {
     if (!conversationId || isFetchingRef.current) return;
     
@@ -81,10 +106,9 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
     setLoading(true);
     setError(null);
 
-    log('Fetching messages for', conversationId);
+    log('Fetching messages', conversationId);
 
     try {
-      // 直接查詢 messages 表（使用 safeQuery）
       const { data, error: queryError } = await safeQuery(
         () => supabase
           .from('messages')
@@ -114,32 +138,138 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
 
       const newMessages: Message[] = (data || []).map(m => {
         const profile = profileMap.get(m.sender_id);
-        const clientMsgId = m.id; // 使用 id 作為 client_message_id
         return {
           id: m.id,
           sender_id: m.sender_id,
           sender_name: profile?.name || null,
           sender_avatar: profile?.avatar_url || null,
           content: m.content,
-          client_message_id: clientMsgId,
+          client_message_id: m.id,
           status: 'sent' as MessageStatus,
           created_at: m.created_at,
         };
       });
 
       setMessages(newMessages);
-      processedIds.current = new Set(newMessages.map(m => m.client_message_id));
+      processedIds.current = new Set(newMessages.map(m => m.id));
+      hasFetchedRef.current = true;
 
     } catch (err: any) {
       console.error('[useMessages] Error:', err);
       setError(err.message || '載入訊息失敗');
     } finally {
+      // ⚠️ 重要：無論成功失敗，loading 都要結束
       setLoading(false);
       isFetchingRef.current = false;
     }
   }, [conversationId]);
 
-  // 發送訊息（樂觀更新）
+  // 刷新
+  const refresh = useCallback(async () => {
+    log('Refreshing messages');
+    processedIds.current.clear();
+    await fetchMessages();
+  }, [fetchMessages]);
+
+  // 初始載入
+  useEffect(() => {
+    if (conversationId) {
+      hasFetchedRef.current = false;
+      setMessages([]);
+      processedIds.current.clear();
+      fetchMessages();
+    }
+  }, [conversationId, fetchMessages]);
+
+  // EventBus 監聽
+  useEffect(() => {
+    const unsubscribe = eventBus.on(Events.MESSAGES_REFRESH, (convId: string) => {
+      if (convId === conversationId) {
+        log('MESSAGES_REFRESH event');
+        refresh();
+      }
+    });
+    return () => unsubscribe();
+  }, [conversationId, refresh]);
+
+  // 全域 refetch
+  useEffect(() => {
+    if (!conversationId) return;
+    const unregister = registerRefetchCallback(refresh);
+    return () => unregister();
+  }, [conversationId, refresh]);
+
+  // ============================================
+  // Realtime（增量更新，失敗不影響 UI）
+  // ============================================
+
+  const handleNewMessage = useCallback((payload: any) => {
+    const newMsg = payload.new;
+    if (!newMsg || newMsg.conversation_id !== conversationId) return;
+
+    // 去重
+    if (processedIds.current.has(newMsg.id)) return;
+    processedIds.current.add(newMsg.id);
+    
+    log('New message via realtime', newMsg.id);
+
+    const message: Message = {
+      id: newMsg.id,
+      sender_id: newMsg.sender_id,
+      sender_name: null,
+      sender_avatar: null,
+      content: newMsg.content,
+      client_message_id: newMsg.id,
+      status: 'sent',
+      created_at: newMsg.created_at,
+    };
+
+    setMessages(prev => {
+      // 再次檢查避免重複
+      if (prev.some(m => m.id === newMsg.id || (m.isOptimistic && m.content === newMsg.content))) {
+        return prev;
+      }
+      return [...prev, message];
+    });
+
+    // 異步獲取發送者資料
+    supabase
+      .from('profiles')
+      .select('name, avatar_url')
+      .eq('id', newMsg.sender_id)
+      .single()
+      .then(({ data }) => {
+        if (data) {
+          setMessages(prev =>
+            prev.map(m =>
+              m.id === newMsg.id
+                ? { ...m, sender_name: data.name, sender_avatar: data.avatar_url }
+                : m
+            )
+          );
+        }
+      });
+  }, [conversationId]);
+
+  // Realtime key
+  const realtimeKey = useMemo(() => 
+    conversationId ? `messages:${conversationId}` : ''
+  , [conversationId]);
+
+  // Realtime hook（失敗不影響 UI）
+  const { isConnected: realtimeConnected } = useSimpleRealtime({
+    key: realtimeKey,
+    enabled: !!conversationId,
+    table: 'messages',
+    filter: conversationId ? `conversation_id=eq.${conversationId}` : undefined,
+    event: 'INSERT',
+    onInsert: handleNewMessage,
+  });
+
+  // ============================================
+  // 發送訊息
+  // ============================================
+
   const sendMessage = useCallback(async (content: string): Promise<boolean> => {
     if (!conversationId || !currentUserId || !content.trim()) return false;
 
@@ -161,7 +291,6 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
     processedIds.current.add(clientMessageId);
 
     try {
-      // 直接插入 messages（不用 RPC）
       const { data: insertData, error: insertError } = await supabase
         .from('messages')
         .insert({
@@ -174,7 +303,7 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
 
       if (insertError) throw insertError;
 
-      // 更新訊息狀態為 sent
+      // 更新為 sent
       setMessages(prev =>
         prev.map(m =>
           m.client_message_id === clientMessageId
@@ -193,7 +322,7 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
     } catch (err: any) {
       console.error('[useMessages] Send error:', err);
       
-      // 更新訊息狀態為 failed
+      // 更新為 failed
       setMessages(prev =>
         prev.map(m =>
           m.client_message_id === clientMessageId
@@ -206,7 +335,7 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
     }
   }, [conversationId, currentUserId, userProfile]);
 
-  // 重送失敗的訊息
+  // 重送
   const resendMessage = useCallback(async (clientMessageId: string): Promise<boolean> => {
     const failedMessage = messages.find(
       m => m.client_message_id === clientMessageId && m.status === 'failed'
@@ -214,7 +343,6 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
 
     if (!failedMessage || !conversationId || !currentUserId) return false;
 
-    // 更新狀態為 sending
     setMessages(prev =>
       prev.map(m =>
         m.client_message_id === clientMessageId
@@ -257,12 +385,11 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
     }
   }, [conversationId, currentUserId, messages]);
 
-  // 標記已讀（直接更新，不用 RPC）
+  // 標記已讀
   const markAsRead = useCallback(async () => {
     if (!conversationId || !currentUserId) return;
 
     try {
-      // 直接更新 conversations 表
       await supabase
         .from('conversations')
         .update({
@@ -275,156 +402,17 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
     }
   }, [conversationId, currentUserId]);
 
-  // 處理 Realtime 新訊息
-  const handleNewMessage = useCallback((payload: any) => {
-    const newMsg = payload.new;
-    if (!newMsg || newMsg.conversation_id !== conversationId) return;
-
-    // 去重
-    if (processedIds.current.has(newMsg.id)) {
-      return;
-    }
-
-    processedIds.current.add(newMsg.id);
-    
-    const message: Message = {
-      id: newMsg.id,
-      sender_id: newMsg.sender_id,
-      sender_name: null,
-      sender_avatar: null,
-      content: newMsg.content,
-      client_message_id: newMsg.id,
-      status: 'sent',
-      created_at: newMsg.created_at,
-    };
-
-    setMessages(prev => {
-      // 檢查是否已存在（可能是樂觀更新的訊息）
-      const exists = prev.some(m => m.id === newMsg.id || (m.isOptimistic && m.content === newMsg.content));
-      if (exists) return prev;
-      return [...prev, message];
-    });
-
-    // 異步獲取發送者資料
-    supabase
-      .from('profiles')
-      .select('name, avatar_url')
-      .eq('id', newMsg.sender_id)
-      .single()
-      .then(({ data }) => {
-        if (data) {
-          setMessages(prev =>
-            prev.map(m =>
-              m.id === newMsg.id
-                ? { ...m, sender_name: data.name, sender_avatar: data.avatar_url }
-                : m
-            )
-          );
-        }
-      });
-  }, [conversationId]);
-
-  // 初始載入
-  useEffect(() => {
-    if (conversationId) {
-      log('Conversation changed, reloading messages', conversationId);
-      setMessages([]);
-      processedIds.current.clear();
-      fetchMessages();
-    }
-  }, [conversationId, fetchMessages]);
-
-  // 監聽 EventBus 的 MESSAGES_REFRESH 事件
-  useEffect(() => {
-    const unsubscribe = eventBus.on(Events.MESSAGES_REFRESH, (convId: string) => {
-      if (convId === conversationId) {
-        log('MESSAGES_REFRESH event received', convId);
-        setMessages([]);
-        processedIds.current.clear();
-        fetchMessages();
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, [conversationId, fetchMessages]);
-
-  // Realtime 訂閱（帶自動重連）
-  const channelRef = useRef<any>(null);
-  const reconnectAttemptRef = useRef<number>(0);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  const setupChannel = useCallback(() => {
-    if (!conversationId) return;
-
-    // 清理舊的
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-      channelRef.current = null;
-    }
-
-    log('Setting up Realtime channel for messages', conversationId);
-
-    channelRef.current = supabase
-      .channel(`messages:${conversationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        handleNewMessage
-      )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          log('Messages Realtime channel SUBSCRIBED');
-          reconnectAttemptRef.current = 0;
-        } else if (status === 'TIMED_OUT' || status === 'CLOSED' || status === 'CHANNEL_ERROR') {
-          log(`Messages Realtime channel ${status}`, err);
-
-          // Exponential backoff
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current), 30000);
-          reconnectAttemptRef.current += 1;
-
-          log(`Messages realtime disconnected -> retry in ${delay}ms`);
-
-          if (reconnectTimeoutRef.current) {
-            clearTimeout(reconnectTimeoutRef.current);
-          }
-
-          reconnectTimeoutRef.current = setTimeout(() => {
-            setupChannel();
-            fetchMessages();
-          }, delay);
-        }
-      });
-  }, [conversationId, handleNewMessage, fetchMessages]);
-
-  useEffect(() => {
-    if (!conversationId) return;
-
-    setupChannel();
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-    };
-  }, [conversationId, setupChannel]);
-
   return {
     messages,
     loading,
     error,
+    realtimeConnected,
     sendMessage,
     resendMessage,
     markAsRead,
+    refresh,
   };
 }
+
+// 向後兼容
+export type MessageHookStatus = 'ok' | 'recovering' | 'error';

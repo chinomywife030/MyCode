@@ -7,6 +7,7 @@ import Link from 'next/link';
 import ReviewModal from '@/components/ReviewModal';
 import UberStyleReviewSection from '@/components/UberStyleReviewSection';
 import ExternalLink, { ExternalLinkWarning } from '@/components/ExternalLink';
+import { navigateWithOneReload } from '@/lib/navigateWithReload';
 
 export default function WishDetailPage() {
   const params = useParams();
@@ -276,7 +277,8 @@ export default function WishDetailPage() {
                     console.log('✅ 跳轉到聊天頁面，目標用戶:', targetUserId);
                     // 🔐 P0-2：傳入來源上下文
                     const chatUrl = `/chat?target=${targetUserId}&source_type=wish_request&source_id=${wish.id}&source_title=${encodeURIComponent(wish.title || '')}`;
-                    router.push(chatUrl);
+                    // ✅ 使用 navigateWithOneReload 確保跳轉後資料正確
+                    navigateWithOneReload(router, chatUrl, `chat:wish:${wish.id}`);
                   }}
                   className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-orange-600 px-8 py-3 rounded-full text-base font-semibold transition border-2 border-orange-500 shadow-sm"
                 >

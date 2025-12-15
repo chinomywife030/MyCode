@@ -6,7 +6,8 @@ import Image from 'next/image';
 
 interface ConversationListProps {
   activeConversationId?: string | null;
-  onSelectConversation: (conversation: Conversation) => void;
+  // ✅ 支援 async callback（Promise<void>）
+  onSelectConversation: (conversation: Conversation) => void | Promise<void>;
 }
 
 export default function ConversationList({

@@ -37,13 +37,16 @@ export default function ChatRoom({
   const {
     messages,
     loading,
-    loadingMore,
-    hasMore,
+    realtimeConnected,
     sendMessage,
     resendMessage,
-    loadMore,
     markAsRead,
+    refresh: refreshMessages,
   } = useMessages({ conversationId });
+  
+  // 目前簡化版不支援分頁載入
+  const loadingMore = false;
+  const hasMore = false;
 
   const { isConnected, typingUsers, setTyping } = useRealtimeChat({
     conversationId,
@@ -57,6 +60,7 @@ export default function ChatRoom({
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   // 獲取當前用戶
   useEffect(() => {
@@ -66,6 +70,29 @@ export default function ChatRoom({
     }
     getUser();
   }, []);
+
+  // ✅ 清理 typingTimeout（組件卸載時）
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // ✅ 點擊外部關閉選單
+  useEffect(() => {
+    if (!showMenu) return;
+    
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showMenu]);
 
   // 滾動到底部
   const scrollToBottom = useCallback(() => {
@@ -97,25 +124,8 @@ export default function ChatRoom({
     return () => window.removeEventListener('focus', handleFocus);
   }, [conversationId, markAsRead]);
 
-  // 無限滾動載入更多
-  useEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      if (container.scrollTop < 100 && hasMore && !loadingMore) {
-        const oldScrollHeight = container.scrollHeight;
-        loadMore().then(() => {
-          // 保持滾動位置
-          const newScrollHeight = container.scrollHeight;
-          container.scrollTop = newScrollHeight - oldScrollHeight;
-        });
-      }
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [hasMore, loadingMore, loadMore]);
+  // 無限滾動載入更多（目前簡化版不支援，未來可在此實作）
+  // TODO: 實作分頁載入
 
   // 處理輸入變化（打字狀態）
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -280,7 +290,7 @@ export default function ChatRoom({
         </div>
 
         {/* 選單 */}
-        <div className="relative">
+        <div className="relative" ref={menuRef}>
           <button
             onClick={() => setShowMenu(!showMenu)}
             className="p-2 hover:bg-gray-100 rounded-full"

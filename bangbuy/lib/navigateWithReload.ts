@@ -75,11 +75,10 @@ export function checkAndReload(): boolean {
       return false;
     }
 
-    // 添加 __reloaded 參數並 reload
-    url.searchParams.set('__reloaded', '1');
-    
-    log('Executing reload');
-    window.location.href = url.toString();
+    // ✅ 使用 replace 而不是 href，這樣不會在歷史記錄中添加新條目
+    // 返回鍵可以正常回到上一頁
+    log('Executing reload (replace)');
+    window.location.replace(window.location.href);
     return true;
   }
 
@@ -89,6 +88,9 @@ export function checkAndReload(): boolean {
 /**
  * 清除 URL 中的 __reloaded 參數（美化 URL）
  * 應在頁面載入後呼叫
+ * 
+ * 注意：現在使用 replace 刷新，不再添加 __reloaded 參數，
+ * 但保留此函數以清理舊的 URL
  */
 export function cleanReloadedParam(): void {
   if (typeof window === 'undefined') return;
