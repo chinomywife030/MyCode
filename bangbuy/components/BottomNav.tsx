@@ -4,14 +4,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { useUserMode } from '@/components/UserModeProvider';
+import { useNotificationBadge } from '@/hooks/useNotifications';
 
 export default function BottomNav() {
   const pathname = usePathname();
   const { mode } = useUserMode();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   
-  // 🎨 假資料：未讀通知數量
-  const unreadNotificationCount = 2;
+  // 🔔 使用真實的通知未讀數
+  const { unreadCount: unreadNotificationCount } = useNotificationBadge();
   
   // 純 UI state，判斷當前頁面
   const isActive = (path: string) => pathname === path;

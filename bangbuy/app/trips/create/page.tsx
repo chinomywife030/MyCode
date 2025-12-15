@@ -43,11 +43,17 @@ export default function CreateTripPage() {
     try {
       // 2. 確保 Profile 存在 (如果是新用戶)
       const userName = user.email?.split('@')[0] || '代購夥伴';
-      await supabase.from('profiles').upsert({
+      const { error: profileError } = await supabase.from('profiles').upsert({
         id: user.id,
         name: userName,
         role: 'shopper', // 這裡標記為代購者
       }, { onConflict: 'id' });
+
+      // Fix: check profile upsert error
+      if (profileError) {
+        console.error('[CreateTrip] Profile upsert failed:', profileError);
+        throw profileError;
+      }
 
       // 3. 寫入行程 (用真正的 ID)
       const { error } = await supabase.from('trips').insert([
@@ -60,14 +66,17 @@ export default function CreateTripPage() {
         },
       ]);
 
-      if (error) throw error;
+      if (error) {
+        console.error('[CreateTrip] Trip insert failed:', error);
+        throw error;
+      }
 
       alert('🎉 行程發布成功！');
       router.push('/trips');
 
     } catch (error: any) {
-      console.error(error);
-      alert('發生錯誤：' + error.message);
+      console.error('[CreateTrip] Error:', error);
+      alert('發生錯誤：' + (error.message || '未知錯誤'));
     } finally {
       setLoading(false);
     }
@@ -116,6 +125,29 @@ export default function CreateTripPage() {
               className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm"
               onChange={handleChange}
             />
+          </div>
+
+          {/* 🔐 內容合法提示（UGC 風險管理） */}
+          <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-lg space-y-2">
+            <div className="flex items-start gap-2">
+              <span className="text-xl flex-shrink-0">⚠️</span>
+              <div className="flex-1 space-y-2">
+                <p className="text-xs text-amber-900 font-semibold leading-relaxed">
+                  發布內容即表示您同意
+                  <Link href="/terms" target="_blank" className="text-blue-600 hover:underline font-bold mx-1">
+                    《使用條款》
+                  </Link>
+                  ，並保證內容合法、不侵權。
+                </p>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  本平台可在不另行通知下移除內容、限制功能或停權（詳見
+                  <Link href="/terms" target="_blank" className="text-blue-600 hover:underline font-semibold mx-1">
+                    《使用條款》
+                  </Link>
+                  ）。
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-4 pt-2">

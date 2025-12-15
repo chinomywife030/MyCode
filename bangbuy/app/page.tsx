@@ -55,8 +55,25 @@ export default function Home() {
           if (!isMounted) return;
 
           if (wishError) {
+            console.error('[首頁] 獲取願望列表失敗:', wishError);
             setWishes([]);
           } else {
+            // Fix: Debug - 檢查 buyer_id 是否正確
+            console.log('✅ [首頁] 成功獲取', wishData?.length || 0, '筆願望');
+            if (wishData && wishData.length > 0) {
+              console.log('🔍 [首頁] 第一筆願望的 buyer_id:', wishData[0].buyer_id);
+              // 檢查是否有無效的 buyer_id
+              const invalidWishes = wishData.filter((w: any) => 
+                !w.buyer_id || 
+                w.buyer_id === '00000000-0000-0000-0000-000000000000'
+              );
+              if (invalidWishes.length > 0) {
+                console.warn('⚠️ [首頁] 發現', invalidWishes.length, '筆願望的 buyer_id 無效！');
+                console.warn('⚠️ [首頁] 這些願望的私訊按鈕將無法使用');
+                console.warn('⚠️ [首頁] 願望 IDs:', invalidWishes.map((w: any) => w.id));
+              }
+            }
+            
             const processedWishes = (wishData || []).map((wish: any) => ({
               ...wish,
               buyer: { name: '匿名', avatar_url: '' }
@@ -64,6 +81,7 @@ export default function Home() {
             setWishes(processedWishes);
           }
         } catch (err) {
+          console.error('[首頁] 獲取願望列表時發生異常:', err);
           if (!isMounted) return;
           setWishes([]);
         }
@@ -347,7 +365,7 @@ export default function Home() {
                             聯繫
                           </div>
                           <Link 
-                            href={`/chat?target=${trip.shopper_id}`}
+                            href={`/chat?target=${trip.shopper_id}&source_type=trip&source_id=${trip.id}&source_title=${encodeURIComponent(trip.destination || '')}`}
                             className="px-5 py-2 bg-blue-500 text-white rounded-full font-semibold hover:bg-blue-600 transition text-sm shadow-sm"
                           >
                             私訊
@@ -506,7 +524,9 @@ export default function Home() {
                               }
                               
                               console.log('✅ 跳轉到聊天頁面，目標用戶:', targetUserId);
-                              router.push(`/chat?target=${targetUserId}`);
+                              // 🔐 P0-2：傳入來源上下文
+                              const chatUrl = `/chat?target=${targetUserId}&source_type=wish_request&source_id=${wish.id}&source_title=${encodeURIComponent(wish.title || '')}`;
+                              router.push(chatUrl);
                             }}
                             className="w-full flex items-center justify-center gap-2 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition shadow-sm hover:shadow-md text-sm"
                           >

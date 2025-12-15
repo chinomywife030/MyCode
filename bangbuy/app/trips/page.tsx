@@ -27,10 +27,14 @@ export default function TripsPage() {
   }, []);
 
   // 根據搜尋關鍵字過濾 (搜尋地點或說明)
-  const filteredTrips = trips.filter(trip => 
-    trip.destination.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (trip.description && trip.description.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  // Fix: safe string method calls with null checks
+  const filteredTrips = trips.filter(trip => {
+    if (!trip) return false;
+    const searchLower = searchTerm.toLowerCase();
+    const destinationMatch = trip.destination?.toLowerCase().includes(searchLower);
+    const descriptionMatch = trip.description?.toLowerCase().includes(searchLower);
+    return destinationMatch || descriptionMatch;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 py-10 px-4">
@@ -82,7 +86,8 @@ export default function TripsPage() {
                   {/* 日期標籤 */}
                   <div className="flex justify-between items-start mb-4">
                     <span className="bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1 rounded-full border border-blue-100 flex items-center gap-1">
-                      📅 {new Date(trip.date).toLocaleDateString()} 出發
+                      {/* Fix: safe date parsing */}
+                      📅 {trip.date ? new Date(trip.date).toLocaleDateString() : '日期未定'} 出發
                     </span>
                   </div>
 
@@ -102,7 +107,8 @@ export default function TripsPage() {
                           <img src={trip.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-500">
-                            {trip.profiles?.name?.[0]}
+                            {/* Fix: safe string access with fallback */}
+                            {trip.profiles?.name?.[0]?.toUpperCase() || '?'}
                           </div>
                         )}
                       </div>
@@ -112,7 +118,7 @@ export default function TripsPage() {
                     </Link>
 
                     <Link 
-                      href={`/chat?target=${trip.shopper_id}`}
+                      href={`/chat?target=${trip.shopper_id}&source_type=trip&source_id=${trip.id}&source_title=${encodeURIComponent(trip.destination || '')}`}
                       className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition active:scale-95 shadow-md shadow-blue-100"
                     >
                       💬 私訊

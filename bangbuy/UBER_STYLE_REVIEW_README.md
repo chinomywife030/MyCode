@@ -498,3 +498,4 @@ const averageRating = reviews.length > 0
 **完全使用前端技術實作，不動任何底層邏輯、Supabase、或資料流！** 🎉
 
 
+

@@ -1,483 +1,494 @@
 'use client';
 
-import { useEffect, useState, useRef, Suspense } from 'react';
+import { useEffect, useState, Suspense, useCallback, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { safeRpc, safeQuery } from '@/lib/safeCall';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Navbar from '@/components/Navbar';
-import { sendMessageNotification } from '@/app/actions';
+import { ConversationList, ChatRoom } from '@/components/chat';
+import { eventBus, Events } from '@/lib/events';
+import type { Conversation } from '@/hooks/useConversations';
+
+// 開發模式日誌
+const isDev = process.env.NODE_ENV === 'development';
+const log = (message: string, data?: any) => {
+  if (isDev) {
+    console.log(`[chat] ${message}`, data || '');
+  }
+};
 
 function ChatContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  
+  // URL 參數
   const targetId = searchParams.get('target');
+  const conversationParam = searchParams.get('conversation'); // 支援直接跳轉到對話
+  const sourceType = searchParams.get('source_type') || 'direct';
+  const sourceId = searchParams.get('source_id') || null;
+  const sourceTitle = searchParams.get('source_title') || null;
 
-  interface User {
+  // 計算唯一的 conversation key（用於觸發重新載入）
+  const conversationKey = useMemo(() => {
+    if (conversationParam) return `conv:${conversationParam}`;
+    if (targetId) return `target:${targetId}:${sourceType}:${sourceId || 'null'}`;
+    return null;
+  }, [conversationParam, targetId, sourceType, sourceId]);
+
+  // 狀態
+  const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null);
+  const [activeConversation, setActiveConversation] = useState<{
     id: string;
-    email?: string;
-    user_metadata?: {
-      name?: string;
-    };
-  }
+    otherUser: { id: string; name: string | null; avatar_url: string | null };
+    sourceType?: string;
+    sourceId?: string | null;
+    sourceTitle?: string | null;
+    isBlocked?: boolean;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showMobileList, setShowMobileList] = useState(true);
 
-  interface Profile {
-    id: string;
-    name: string;
-    avatar_url?: string;
-  }
+  // 防止重複初始化（用 conversationKey 作為 key）
+  const inFlightKeyRef = useRef<string | null>(null);
+  const currentUserRef = useRef<{ id: string } | null>(null);
 
-  interface Conversation {
-    id: string;
-    user1_id: string;
-    user2_id: string;
-    updated_at?: string;
-    otherUser?: Profile;
-  }
+  // 檢舉 Modal
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
 
-  interface Message {
-    id?: string;
-    conversation_id: string;
-    sender_id: string;
-    content: string;
-    created_at?: string;
-  }
+  // 驗證 targetId
+  const isValidTarget = (id: string | null): boolean => {
+    if (!id) return false;
+    if (id === '00000000-0000-0000-0000-000000000000') return false;
+    if (id.startsWith('11111111') || id.startsWith('22222222')) return false;
+    if (id === 'null' || id === 'undefined') return false;
+    if (id.length < 10) return false;
+    return true;
+  };
 
-  const [user, setUser] = useState<User | null>(null);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeChat, setActiveChat] = useState<Conversation | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [loadingChat, setLoadingChat] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // 載入對話（核心函數）
+  const loadConversation = useCallback(async (key: string | null) => {
+    // 並發鎖：避免同一個 key 重複載入
+    if (inFlightKeyRef.current === key) {
+      log('Already loading this conversation, skipping...', key);
+      return;
+    }
 
-  // 🔍 Debug：檢查 targetId
-  console.log('🔍 [DEBUG] Chat page targetId:', targetId);
+    inFlightKeyRef.current = key;
+    setLoading(true);
+    setError(null);
 
-  // 🎯 檢查 targetId 是否無效（純 UI 邏輯）
-  const isInvalidTarget = !targetId || 
-                         targetId === '00000000-0000-0000-0000-000000000000' ||
-                         targetId === 'null' ||
-                         targetId === 'undefined' ||
-                         targetId.length < 10;
+    try {
+      // 先確認用戶
+      let user = currentUserRef.current;
+      
+      if (!user) {
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+        
+        if (authError || !authUser) {
+          router.push('/login');
+          return;
+        }
+        
+        user = { id: authUser.id };
+        currentUserRef.current = user;
+        setCurrentUser(user);
+      }
 
-  if (isInvalidTarget) {
-    console.warn('⚠️ [WARNING] targetId 無效:', targetId);
-  }
+      log('Loading conversation', { key, conversationParam, targetId });
 
-  // 初始化：載入用戶和對話列表
+      // 如果有 conversation 參數，直接打開該對話
+      if (conversationParam) {
+        await handleOpenConversation(conversationParam);
+      }
+      // 如果有 target 參數，使用 RPC 獲取或創建對話
+      else if (isValidTarget(targetId)) {
+        await handleGetOrCreateConversation(user.id, targetId!);
+      } else {
+        // 沒有參數，只顯示列表
+        setLoading(false);
+      }
+    } catch (err: any) {
+      console.error('[ChatPage] loadConversation error:', err);
+      setError('載入失敗，請重新整理頁面');
+      setLoading(false);
+    } finally {
+      inFlightKeyRef.current = null;
+    }
+  }, [conversationParam, targetId, router]);
+
+  // 初始化 + 依賴 URL 參數變化重新載入
   useEffect(() => {
-    async function init() {
+    log('conversationKey changed', conversationKey);
+    loadConversation(conversationKey);
+  }, [conversationKey, loadConversation]);
+
+  // 監聽 EventBus 的 CHAT_OPEN 事件
+  useEffect(() => {
+    const unsubscribe = eventBus.on(Events.CHAT_OPEN, (convId: string) => {
+      log('CHAT_OPEN event received', convId);
+      handleOpenConversation(convId);
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // 使用 RPC 獲取或創建對話（防止重複創建）
+  const handleGetOrCreateConversation = useCallback(async (myId: string, targetUserId: string) => {
+    if (!targetUserId || targetUserId === myId) {
+      setLoading(false);
+      return;
+    }
+
+    log('handleGetOrCreateConversation', { myId, targetUserId });
+
+    try {
+      // 1. 獲取目標用戶資料
+      const { data: targetUser, error: profileError } = await safeQuery(
+        () => supabase
+          .from('profiles')
+          .select('id, name, avatar_url')
+          .eq('id', targetUserId)
+          .single(),
+        'getTargetProfile'
+      );
+      
+      if (!targetUser || profileError) {
+        console.error('[handleGetOrCreateConversation] Target user not found');
+        setError('找不到該用戶');
+        setLoading(false);
+        return;
+      }
+
+      // 2. 使用 RPC 獲取或創建對話（DB 層保證唯一性）
+      const { data: rpcResult, error: rpcError } = await safeRpc('get_or_create_conversation', {
+        p_target: targetUserId,
+        p_source_type: sourceType || 'direct',
+        p_source_id: sourceId || null,
+        p_source_title: sourceTitle || null,
+      });
+
+      if (rpcError) {
+        console.error('[handleGetOrCreateConversation] RPC error:', rpcError);
+        throw rpcError;
+      }
+
+      const conversationId = rpcResult?.[0]?.conversation_id;
+
+      if (!conversationId) {
+        setError('無法建立對話');
+        setLoading(false);
+        return;
+      }
+
+      log('Conversation loaded/created', conversationId);
+
+      // 成功！
+      setActiveConversation({
+        id: conversationId,
+        otherUser: targetUser,
+        sourceType: sourceType,
+        sourceId: sourceId,
+        sourceTitle: sourceTitle,
+        isBlocked: false,
+      });
+      setShowMobileList(false);
+      setLoading(false);
+
+      // 清除 URL 參數，避免刷新時重複處理
+      router.replace('/chat', { scroll: false });
+
+      // 觸發對話列表刷新
+      eventBus.emit(Events.CONVERSATIONS_REFRESH);
+
+    } catch (err: any) {
+      console.error('[handleGetOrCreateConversation] Error:', err);
+      setError(err.message || '發生錯誤');
+      setLoading(false);
+    }
+  }, [sourceType, sourceId, sourceTitle, router]);
+
+  // 直接打開現有對話
+  const handleOpenConversation = useCallback(async (convId: string) => {
+    log('handleOpenConversation', convId);
+    setLoading(true);
+
+    try {
+      // 獲取對話資料
+      const { data: conv, error: convError } = await safeQuery(
+        () => supabase
+          .from('conversations')
+          .select('id, user1_id, user2_id, source_type, source_id, source_title')
+          .eq('id', convId)
+          .single(),
+        'getConversation'
+      );
+
+      if (!conv || convError) {
+        setError('找不到該對話');
+        setLoading(false);
+        return;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push('/login');
         return;
       }
-      setUser(user);
-      fetchConversations(user.id);
-      
-      if (targetId) {
-        handleDirectJump(user.id, targetId);
-      }
-    }
-    init();
-  }, [targetId]);
 
-  // 直接跳轉到特定對話
-  const handleDirectJump = async (myId: string, targetId: string) => {
-    // 🎯 檢查 targetId 是否無效（避免查詢全 0 UUID）
-    const isInvalidTarget = !targetId || 
-                           targetId === '00000000-0000-0000-0000-000000000000' ||
-                           targetId === 'null' ||
-                           targetId === 'undefined' ||
-                           targetId.length < 10;
-    
-    if (isInvalidTarget) {
-      console.error('❌ handleDirectJump: targetId 無效，中止操作:', targetId);
-      setLoadingChat(false);
-      return;
+      // 確定對方 ID
+      const otherId = conv.user1_id === user.id ? conv.user2_id : conv.user1_id;
+
+      // 獲取對方資料
+      const { data: otherUser } = await safeQuery(
+        () => supabase
+          .from('profiles')
+          .select('id, name, avatar_url')
+          .eq('id', otherId)
+          .single(),
+        'getOtherProfile'
+      );
+
+      log('Conversation opened', { convId, otherId });
+
+      setActiveConversation({
+        id: conv.id,
+        otherUser: otherUser || { id: otherId, name: null, avatar_url: null },
+        sourceType: conv.source_type || undefined,
+        sourceId: conv.source_id,
+        sourceTitle: conv.source_title,
+        isBlocked: false,
+      });
+      setShowMobileList(false);
+
+      // 觸發訊息刷新事件
+      eventBus.emit(Events.MESSAGES_REFRESH, convId);
+
+    } catch (err: any) {
+      console.error('[handleOpenConversation] Error:', err);
+      setError(err.message || '發生錯誤');
+    } finally {
+      setLoading(false);
     }
-    
-    if (myId === targetId) return;
-    setLoadingChat(true);
+  }, [router]);
+
+  // 選擇對話（從列表）
+  const handleSelectConversation = useCallback(async (conversation: Conversation) => {
+    const { data: otherUser } = await supabase
+      .from('profiles')
+      .select('id, name, avatar_url')
+      .eq('id', conversation.other_user_id)
+      .single();
+
+    setActiveConversation({
+      id: conversation.id,
+      otherUser: otherUser || { 
+        id: conversation.other_user_id, 
+        name: conversation.other_user_name, 
+        avatar_url: conversation.other_user_avatar 
+      },
+      sourceType: conversation.source_type || undefined,
+      sourceId: conversation.source_id,
+      sourceTitle: conversation.source_title,
+      isBlocked: conversation.is_blocked,
+    });
+    setShowMobileList(false);
+  }, []);
+
+  // 封鎖用戶
+  const handleBlock = async () => {
+    if (!activeConversation) return;
+
+    const confirmed = confirm(
+      activeConversation.isBlocked 
+        ? '確定要解除封鎖此用戶嗎？' 
+        : '確定要封鎖此用戶嗎？封鎖後將無法互相發送訊息。'
+    );
+
+    if (!confirmed) return;
 
     try {
-      const { data: targetUser } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', targetId)
-        .single();
-      
-      if (!targetUser) {
-        setLoadingChat(false);
-        return;
-      }
-
-      let { data: existing } = await supabase
-        .from('conversations')
-        .select('*')
-        .or(`and(user1_id.eq.${myId},user2_id.eq.${targetId}),and(user1_id.eq.${targetId},user2_id.eq.${myId})`)
-        .maybeSingle();
-
-      if (!existing) {
-        const { data: newChat } = await supabase
-          .from('conversations')
-          .insert([{ user1_id: myId, user2_id: targetId }])
-          .select()
-          .single();
-        existing = newChat;
-        fetchConversations(myId);
-      }
-
-      if (existing) {
-        setActiveChat({ ...existing, otherUser: targetUser });
-        loadMessages(existing.id);
-      }
-    } catch (error) {
-      // 錯誤處理
-    } finally {
-      setLoadingChat(false);
-    }
-  };
-
-  // Realtime 訂閱：監聽新訊息
-  useEffect(() => {
-    if (!activeChat) return;
-    
-    const channel = supabase
-      .channel(`chat:${activeChat.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `conversation_id=eq.${activeChat.id}`
-        },
-        (payload) => {
-          const newMsg = payload.new as Message;
-          // 移除臨時訊息，添加真實訊息（避免重複）
-          setMessages((prev) => {
-            const filtered = prev.filter(m => !m.id?.startsWith('temp-'));
-            const exists = filtered.some(m => m.id === newMsg.id);
-            if (exists) return prev;
-            return [...filtered, newMsg];
+      if (activeConversation.isBlocked) {
+        await supabase
+          .from('blocks')
+          .delete()
+          .eq('blocker_id', currentUser?.id)
+          .eq('blocked_id', activeConversation.otherUser.id);
+        
+        setActiveConversation(prev => prev ? { ...prev, isBlocked: false } : null);
+        alert('已解除封鎖');
+      } else {
+        await supabase
+          .from('blocks')
+          .insert({
+            blocker_id: currentUser?.id,
+            blocked_id: activeConversation.otherUser.id,
           });
-          scrollToBottom();
-        }
-      )
-      .subscribe();
-    
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [activeChat?.id]);
-
-  // 載入對話列表
-  const fetchConversations = async (userId: string) => {
-    const { data: convs } = await supabase
-      .from('conversations')
-      .select('*')
-      .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
-      .order('updated_at', { ascending: false });
-    
-    if (convs && convs.length > 0) {
-      const otherUserIds = convs.map(c => 
-        c.user1_id === userId ? c.user2_id : c.user1_id
-      );
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, name, avatar_url')
-        .in('id', otherUserIds);
-      
-      const enriched = convs.map(conv => {
-        const otherId = conv.user1_id === userId ? conv.user2_id : conv.user1_id;
-        const profile = profiles?.find(p => p.id === otherId);
-        return { ...conv, otherUser: profile };
-      });
-      setConversations(enriched);
+        
+        setActiveConversation(prev => prev ? { ...prev, isBlocked: true } : null);
+        alert('已封鎖此用戶');
+      }
+    } catch (err: any) {
+      console.error('[handleBlock] Error:', err);
+      alert('操作失敗：' + (err.message || '請稍後再試'));
     }
   };
 
-  // 載入訊息歷史
-  const loadMessages = async (chatId: string) => {
-    const { data: msgs } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', chatId)
-      .order('created_at', { ascending: true });
-    
-    setMessages(msgs || []);
-    scrollToBottom();
+  // 檢舉用戶
+  const handleReport = () => {
+    setShowReportModal(true);
   };
 
-  // 發送訊息（Enter 送出，Shift+Enter 換行）
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !activeChat || !user) return;
-    
-    const msg = newMessage.trim();
-    setNewMessage('');
+  const submitReport = async () => {
+    if (!activeConversation || !reportReason || !currentUser) return;
 
-    // 樂觀更新：立即顯示訊息（UI 優化）
-    const tempMessage: Message = {
-      id: `temp-${Date.now()}`,
-      conversation_id: activeChat.id,
-      sender_id: user.id,
-      content: msg,
-      created_at: new Date().toISOString()
-    };
-    setMessages((prev) => [...prev, tempMessage]);
-    scrollToBottom();
-
-    const { error } = await supabase
-      .from('messages')
-      .insert([{
-        conversation_id: activeChat.id,
-        sender_id: user.id,
-        content: msg
-      }]);
-    
-    if (!error) {
+    try {
       await supabase
-        .from('conversations')
-        .update({ updated_at: new Date() })
-        .eq('id', activeChat.id);
+        .from('reports')
+        .insert({
+          reporter_id: currentUser.id,
+          reported_id: activeConversation.otherUser.id,
+          reason: reportReason,
+          description: reportDescription || null,
+          conversation_id: activeConversation.id,
+        });
 
-      // 寄信通知對方
-      if (activeChat.otherUser?.id) {
-        const myName = user.user_metadata?.name || '使用者';
-        sendMessageNotification(activeChat.otherUser.id, myName, msg);
-      }
-    } else {
-      // 如果發送失敗，移除暫時訊息
-      setMessages((prev) => prev.filter(m => m.id !== tempMessage.id));
-      alert('訊息發送失敗，請稍後再試');
+      alert('檢舉已提交，我們會盡快處理。');
+      setShowReportModal(false);
+      setReportReason('');
+      setReportDescription('');
+    } catch (err: any) {
+      console.error('[submitReport] Error:', err);
+      alert('檢舉失敗：' + (err.message || '請稍後再試'));
     }
   };
 
-  // Enter 送出，Shift+Enter 換行（UI 行為優化）
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      if (newMessage.trim()) {
-        handleSend(e as any);
-      }
-    }
-  };
-
-  // 滾動到底部
-  const scrollToBottom = () => {
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-  };
-
-  // 格式化時間（純 UI 工具函數）
-  const formatTime = (dateString?: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col pb-16 md:pb-0">
-      <Navbar />
-      
-      <div className="flex-grow max-w-6xl mx-auto w-full p-4 h-[calc(100vh-144px)] md:h-[calc(100vh-80px)]">
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden flex h-full">
-          
-          {/* 左側：對話列表 - 統一風格 */}
-          <div className={`w-full md:w-1/3 border-r border-gray-100 flex flex-col ${
-            activeChat ? 'hidden md:flex' : 'flex'
-          }`}>
-            <div className="p-5 border-b border-gray-100 bg-gradient-to-r from-blue-500 to-blue-600">
-              <h2 className="font-bold text-lg text-white flex items-center gap-2">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <span>訊息列表</span>
-              </h2>
-            </div>
-            
-            <div className="flex-grow overflow-y-auto">
-              {conversations.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full p-6 text-center">
-                  <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4">
-                    <span className="text-3xl">👋</span>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-2 font-semibold">還沒有訊息</p>
-                  <p className="text-xs text-gray-400">開始聊天來連接代購吧</p>
-                </div>
-              ) : (
-                conversations.map((conv) => (
-                  <div
-                    key={conv.id}
-                    onClick={() => {
-                      setActiveChat(conv);
-                      loadMessages(conv.id);
-                    }}
-                    className={`p-4 flex items-center gap-3 cursor-pointer hover:bg-blue-50 transition border-b border-gray-50 ${
-                      activeChat?.id === conv.id
-                        ? 'bg-blue-50 border-l-4 border-blue-500'
-                        : ''
-                    }`}
-                  >
-                    <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full overflow-hidden shrink-0 flex items-center justify-center text-white font-bold shadow-sm">
-                      {conv.otherUser?.avatar_url ? (
-                        <img
-                          src={conv.otherUser.avatar_url}
-                          className="w-full h-full object-cover"
-                          alt=""
-                        />
-                      ) : (
-                        (conv.otherUser?.name?.[0] || '?').toUpperCase()
-                      )}
-                    </div>
-                    <div className="overflow-hidden flex-1">
-                      <p className="font-semibold text-gray-900 truncate text-sm">
-                        {conv.otherUser?.name || '會員'}
-                      </p>
-                      <p className="text-xs text-gray-400">點擊查看訊息</p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* 右側：訊息視窗 - 統一風格 */}
-          <div className={`w-full md:w-2/3 flex flex-col ${
-            !activeChat ? 'hidden md:flex' : 'flex'
-          }`}>
-            {/* 🎯 無效 target 的空狀態（純 UI 邏輯） */}
-            {isInvalidTarget && !activeChat ? (
-              <div className="flex-grow flex items-center justify-center bg-gray-50">
-                <div className="text-center max-w-md px-6">
-                  <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-6">
-                    <span className="text-5xl">💬</span>
-                  </div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-3">請選擇一位會員開始聊天</h3>
-                  <p className="text-sm text-gray-500 mb-6">
-                    從左側的對話列表中選擇一個聯絡人，或通過願望卡片的「私訊接單」開始新的對話
-                  </p>
-                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-left">
-                    <p className="text-xs text-orange-700 font-semibold mb-1">💡 提示</p>
-                    <p className="text-xs text-orange-600">
-                      如果你是從通知或願望卡片跳轉過來的，但看到這個畫面，可能是目標用戶 ID 無效。請返回重新嘗試。
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ) : loadingChat ? (
-              <div className="flex-grow flex items-center justify-center text-gray-500">
-                <div className="text-center">
-                  <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
-                  <p className="text-sm">正在連接代購...</p>
-                </div>
-              </div>
-            ) : activeChat ? (
-              <>
-                {/* 對話標題 - 統一風格 */}
-                <div className="p-4 border-b border-gray-100 flex items-center gap-3 bg-white shadow-sm z-10">
-                  <button
-                    onClick={() => {
-                      setActiveChat(null);
-                      router.push('/chat');
-                    }}
-                    className="md:hidden text-gray-500 hover:text-gray-700 transition p-2 -ml-2 rounded-lg hover:bg-gray-100"
-                  >
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full flex items-center justify-center text-white font-bold shadow-sm">
-                    {activeChat.otherUser?.avatar_url ? (
-                      <img src={activeChat.otherUser.avatar_url} className="w-full h-full rounded-full object-cover" alt=""/>
-                    ) : (
-                      (activeChat.otherUser?.name?.[0] || '?').toUpperCase()
-                    )}
-                  </div>
-                  <h3 className="font-bold text-gray-900 text-base">
-                    {activeChat.otherUser?.name || '會員'}
-                  </h3>
-                </div>
-
-                {/* 訊息列表 - 統一風格 */}
-                <div className="flex-grow overflow-y-auto p-4 bg-gray-50 space-y-4">
-                  {messages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-center">
-                      <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mb-4">
-                        <span className="text-3xl">💬</span>
-                      </div>
-                      <p className="text-sm text-gray-600 font-semibold mb-1">這是你們的第一段對話！</p>
-                      <p className="text-xs text-gray-400">開始聊天吧 👇</p>
-                    </div>
-                  ) : (
-                    messages.map((msg) => {
-                      const isMe = msg.sender_id === user?.id;
-                      return (
-                        <div
-                          key={msg.id}
-                          className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
-                        >
-                          <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[75%]`}>
-                            <div
-                              className={`px-4 py-2.5 rounded-2xl text-sm shadow-sm break-words ${
-                                isMe
-                                  ? 'bg-orange-500 text-white rounded-br-sm'
-                                  : 'bg-white text-gray-800 border border-gray-200 rounded-bl-sm'
-                              }`}
-                            >
-                              {msg.content}
-                            </div>
-                            <span className="text-[10px] text-gray-400 mt-1 px-1">
-                              {formatTime(msg.created_at)}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                  <div ref={messagesEndRef} />
-                </div>
-
-                {/* 訊息輸入框 - 統一風格，Enter 送出 */}
-                <form
-                  onSubmit={handleSend}
-                  className="p-4 bg-white border-t border-gray-100 flex gap-3"
-                >
-                  <textarea
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="輸入訊息... (Enter 送出 / Shift+Enter 換行)"
-                    rows={1}
-                    className="flex-grow p-3 bg-gray-50 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none text-sm border border-gray-200 focus:border-blue-500 transition"
-                    style={{ minHeight: '44px', maxHeight: '120px' }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={!newMessage.trim()}
-                    className="bg-orange-500 text-white px-6 py-2 rounded-xl font-bold hover:bg-orange-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition shadow-sm flex items-center gap-2 self-end"
-                  >
-                    <span className="hidden sm:inline">發送</span>
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                  </button>
-                </form>
-              </>
-            ) : (
-              <div className="flex-grow flex items-center justify-center flex-col text-gray-400 bg-gray-50">
-                <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mb-4">
-                  <span className="text-4xl">💬</span>
-                </div>
-                <p className="text-base font-semibold text-gray-600 mb-1">選擇一個聊天對象</p>
-                <p className="text-sm text-gray-400">開始對話吧 👈</p>
-              </div>
-            )}
+  // 渲染
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navbar />
+        <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-gray-500">載入中...</p>
           </div>
         </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      
+      <div className="max-w-6xl mx-auto px-4 py-4">
+        {error && (
+          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+            <p>{error}</p>
+            <button onClick={() => setError(null)} className="text-sm underline mt-2">
+              關閉
+            </button>
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden" style={{ height: 'calc(100vh - 140px)' }}>
+          <div className="flex h-full">
+            {/* 對話列表 */}
+            <div className={`w-full md:w-80 border-r ${showMobileList ? 'block' : 'hidden md:block'}`}>
+              <ConversationList
+                activeConversationId={activeConversation?.id}
+                onSelectConversation={handleSelectConversation}
+              />
+            </div>
+
+            {/* 聊天室 */}
+            <div className={`flex-1 ${!showMobileList ? 'block' : 'hidden md:block'}`}>
+              {activeConversation ? (
+                <ChatRoom
+                  conversationId={activeConversation.id}
+                  otherUser={activeConversation.otherUser}
+                  sourceType={activeConversation.sourceType}
+                  sourceId={activeConversation.sourceId}
+                  sourceTitle={activeConversation.sourceTitle}
+                  isBlocked={activeConversation.isBlocked}
+                  onBack={() => setShowMobileList(true)}
+                  onBlock={handleBlock}
+                  onReport={handleReport}
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                  <svg className="w-24 h-24 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  <p className="text-lg font-medium">選擇一個對話開始聊天</p>
+                  <p className="text-sm mt-2">或從願望單/行程頁面發起對話</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 檢舉 Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold mb-4">檢舉用戶</h3>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                檢舉原因
+              </label>
+              <select
+                value={reportReason}
+                onChange={(e) => setReportReason(e.target.value)}
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">請選擇原因</option>
+                <option value="scam">詐騙/可疑交易</option>
+                <option value="harassment">騷擾/霸凌</option>
+                <option value="fake_goods">假貨/虛假資訊</option>
+                <option value="personal_info">散布個資</option>
+                <option value="other">其他</option>
+              </select>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                補充說明（選填）
+              </label>
+              <textarea
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+                placeholder="請描述發生了什麼事..."
+                rows={4}
+                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowReportModal(false)}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={submitReport}
+                disabled={!reportReason}
+                className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:bg-gray-300"
+              >
+                提交檢舉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -486,10 +497,7 @@ export default function ChatPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mx-auto mb-3"></div>
-          <p className="text-sm text-gray-600">載入聊天室...</p>
-        </div>
+        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
       </div>
     }>
       <ChatContent />

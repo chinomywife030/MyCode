@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS profiles (
   rating_count INTEGER DEFAULT 0,
   deals_count INTEGER DEFAULT 0,
   bio TEXT,
+  -- 🔐 法務條款同意記錄（用於證明用戶已同意）
+  terms_accepted_at TIMESTAMPTZ,
+  terms_version TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

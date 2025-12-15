@@ -48,8 +48,15 @@ export default function CreatePage() {
   };
 
   const handleFileChange = (e: any) => {
+    // Fix: safe file access with validation
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
+      // Basic file type validation
+      const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      if (!validTypes.includes(selectedFile.type)) {
+        alert('請上傳有效的圖片格式 (JPG, PNG, GIF, WEBP)');
+        return;
+      }
       setFile(selectedFile);
       setPreviewUrl(URL.createObjectURL(selectedFile));
     }
@@ -74,7 +81,11 @@ export default function CreatePage() {
         const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
         const { error: uploadError } = await supabase.storage.from('wish-images').upload(fileName, file);
         
-        if (uploadError) throw uploadError;
+        // Fix: early return on upload error to prevent undefined URL
+        if (uploadError) {
+          console.error('[Create] Image upload failed:', uploadError);
+          throw uploadError;
+        }
         
         const { data: publicUrlData } = supabase.storage.from('wish-images').getPublicUrl(fileName);
         imageUrl = publicUrlData.publicUrl;
@@ -161,6 +172,29 @@ export default function CreatePage() {
           <div className="grid grid-cols-2 gap-6">
             <div><label className="font-bold text-sm">截止日期</label><input name="deadline" type="date" required className="w-full p-3 border rounded-xl mt-1" onChange={handleChange}/></div>
             <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-gray-50 mt-6"><input name="is_urgent" type="checkbox" onChange={handleChange} className="w-5 h-5 text-red-600"/> <span className="font-bold text-red-500">這是急單！🔥</span></label>
+          </div>
+
+          {/* 🔐 內容合法提示（UGC 風險管理） */}
+          <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-lg space-y-2">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⚠️</span>
+              <div className="flex-1 space-y-2">
+                <p className="text-sm text-amber-900 font-semibold leading-relaxed">
+                  發布內容即表示您同意
+                  <Link href="/terms" target="_blank" className="text-blue-600 hover:underline font-bold mx-1">
+                    《使用條款》
+                  </Link>
+                  ，並保證內容合法、不侵權，且不得包含個資或詐騙導流。
+                </p>
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  本平台可在不另行通知下移除內容、限制功能或停權（詳見
+                  <Link href="/terms" target="_blank" className="text-blue-600 hover:underline font-semibold mx-1">
+                    《使用條款》
+                  </Link>
+                  ）。請勿發布違法商品、虛假資訊、個資、詐騙連結或侵權內容。
+                </p>
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-4 pt-4">

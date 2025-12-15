@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import ReviewModal from '@/components/ReviewModal';
 import UberStyleReviewSection from '@/components/UberStyleReviewSection';
+import ExternalLink, { ExternalLinkWarning } from '@/components/ExternalLink';
 
 export default function WishDetailPage() {
   const params = useParams();
@@ -208,6 +209,26 @@ export default function WishDetailPage() {
             </p>
           </div>
 
+          {/* 🔗 商品參考連結（如有） */}
+          {wish.product_url && (
+            <div className="bg-blue-50 border border-blue-100 p-5 rounded-xl mb-8">
+              <h3 className="text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                商品參考連結
+              </h3>
+              <ExternalLink 
+                href={wish.product_url}
+                className="text-blue-600 hover:text-blue-700 font-medium break-all"
+                showWarning={true}
+              >
+                {wish.product_url}
+              </ExternalLink>
+              <ExternalLinkWarning />
+            </div>
+          )}
+
           <div className="border-t border-gray-100 pt-8">
             
             {/* 接單報價區域 */}
@@ -234,10 +255,28 @@ export default function WishDetailPage() {
                   ✋ 我要接單報價
                 </button>
                 {/* ✨ 「私訊接單」次要按鈕 */}
-                <Link
-                  href={`/chat?target=${wish.buyer_id}`}
+                <button
                   onClick={() => {
-                    console.log('私訊接單 clicked for wish:', wish.id, 'target:', wish.buyer_id);
+                    // 🔍 Debug：輸出完整願望物件
+                    console.log('🎁 [DEBUG] Wish 完整資料:', wish);
+                    console.log('🎁 [DEBUG] wish.buyer_id:', wish.buyer_id);
+                    
+                    // 檢查 buyer_id 是否有效
+                    const targetUserId = wish.buyer_id;
+                    const isValidUUID = targetUserId && 
+                                     targetUserId !== '00000000-0000-0000-0000-000000000000' &&
+                                     targetUserId.length > 10;
+                    
+                    if (!isValidUUID) {
+                      console.error('❌ buyer_id 無效或為全 0 UUID:', targetUserId);
+                      alert('無法開啟聊天：發布者 ID 無效');
+                      return;
+                    }
+                    
+                    console.log('✅ 跳轉到聊天頁面，目標用戶:', targetUserId);
+                    // 🔐 P0-2：傳入來源上下文
+                    const chatUrl = `/chat?target=${targetUserId}&source_type=wish_request&source_id=${wish.id}&source_title=${encodeURIComponent(wish.title || '')}`;
+                    router.push(chatUrl);
                   }}
                   className="flex items-center justify-center gap-2 bg-white hover:bg-gray-50 text-orange-600 px-8 py-3 rounded-full text-base font-semibold transition border-2 border-orange-500 shadow-sm"
                 >
@@ -245,7 +284,7 @@ export default function WishDetailPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                   <span>私訊接單</span>
-                </Link>
+                </button>
               </div>
             )}
             

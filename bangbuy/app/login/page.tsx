@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import LegalConsentBlock from '@/components/LegalConsentBlock';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,7 +15,6 @@ export default function LoginPage() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-
   const handleSocialLogin = async (provider: 'google' | 'facebook' | 'apple') => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
@@ -27,12 +27,13 @@ export default function LoginPage() {
 
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     setLoading(true);
     setErrorMsg('');
 
     try {
       if (view === 'signup') {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -41,7 +42,31 @@ export default function LoginPage() {
             },
           },
         });
+        
         if (error) throw error;
+        
+        // 🔐 記錄條款同意資訊（寫入 profile）
+        if (data.user) {
+          try {
+            await supabase.from('profiles').upsert({
+              id: data.user.id,
+              name: name || email.split('@')[0],
+              terms_accepted_at: new Date().toISOString(),
+              terms_version: '2025-12-13',
+            }, { onConflict: 'id' });
+            
+            // 同時記錄到 localStorage（備份）
+            localStorage.setItem('bangbuy_terms_accepted', JSON.stringify({
+              timestamp: new Date().toISOString(),
+              version: '2025-12-13',
+              userId: data.user.id,
+            }));
+          } catch (profileError) {
+            console.error('[註冊] 記錄條款同意失敗:', profileError);
+            // 不中斷註冊流程
+          }
+        }
+        
         alert('註冊成功！請登入開始使用');
         router.push('/');
         router.refresh();
@@ -154,10 +179,20 @@ export default function LoginPage() {
               />
             </div>
 
+            {/* 🔐 法務條款告知（純文字，不阻斷流程） */}
+            <div className="pt-2">
+              <LegalConsentBlock
+                mode={view}
+                checked={false}
+                onChange={() => {}}
+                showError={false}
+              />
+            </div>
+
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-200 active:scale-[0.98] disabled:bg-gray-400 disabled:shadow-none"
+              className="w-full bg-blue-600 text-white py-3.5 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg shadow-blue-200 active:scale-[0.98] disabled:bg-gray-400 disabled:shadow-none disabled:cursor-not-allowed"
             >
               {loading ? '處理中...' : view === 'login' ? '立即登入' : '免費註冊'}
             </button>

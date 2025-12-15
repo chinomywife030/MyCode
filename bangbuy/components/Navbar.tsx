@@ -9,6 +9,7 @@ import Logo from '@/components/Logo';
 import { useUserMode } from '@/components/UserModeProvider';
 import { useLanguage } from '@/components/LanguageProvider';
 import NotificationDrawer from '@/components/NotificationDrawer';
+import { useNotificationBadge } from '@/hooks/useNotifications';
 
 export default function Navbar() {
   const { t } = useLanguage();
@@ -18,10 +19,17 @@ export default function Navbar() {
   const [avatarUrl, setAvatarUrl] = useState<string>('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   
-  // 🎨 純 UI state：控制通知 drawer
+  // 🔔 通知 drawer
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  // 🎨 假資料：未讀通知數量
-  const unreadNotificationCount = 2;
+  
+  // 🔔 使用真實的通知未讀數（帶 revalidate 功能）
+  const { unreadCount: unreadNotificationCount, revalidate: revalidateNotifications } = useNotificationBadge();
+
+  // 每次打開通知 Drawer 時 revalidate
+  const handleOpenNotifications = () => {
+    setIsNotificationOpen(true);
+    revalidateNotifications();
+  };
 
   const router = useRouter();
   const pathname = usePathname();
@@ -32,17 +40,26 @@ export default function Navbar() {
 
   const fetchUserProfile = useCallback(async (userId: string) => {
     try {
+      // Fix: use maybeSingle() to handle case when profile doesn't exist yet
       const { data: profile, error } = await supabase
         .from('profiles')
         .select('avatar_url')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (!error && profile) {
+      if (error) {
+        // Only log actual errors (not "profile not found")
+        console.error('[Navbar] Error fetching user profile:', error);
+        setAvatarUrl('');
+      } else if (profile) {
         setAvatarUrl(profile.avatar_url || '');
+      } else {
+        // Profile doesn't exist yet - this is normal for new users
+        setAvatarUrl('');
       }
     } catch (error) {
-      // 靜默處理錯誤，使用預設頭像
+      // Fix: log unexpected errors
+      console.error('[Navbar] Unexpected error fetching profile:', error);
       setAvatarUrl('');
     }
   }, []);
@@ -116,9 +133,9 @@ export default function Navbar() {
           <div className="flex items-center gap-2">
             {user && (
               <>
-                {/* 🔔 通知按鈕（純 UI） */}
+                {/* 🔔 通知按鈕 */}
                 <button
-                  onClick={() => setIsNotificationOpen(true)}
+                  onClick={handleOpenNotifications}
                   className="relative p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-full transition"
                   title="通知"
                 >
@@ -144,7 +161,8 @@ export default function Navbar() {
                       : 'border-blue-100 hover:border-blue-300 bg-blue-50 text-blue-600'
                   }`}
                 >
-                  {avatarUrl ? <img src={avatarUrl} alt="User" className="w-full h-full object-cover" /> : <span>{user.email?.[0].toUpperCase()}</span>}
+                  {/* Fix: safe email access with fallback */}
+                  {avatarUrl ? <img src={avatarUrl} alt="User" className="w-full h-full object-cover" /> : <span>{user.email?.[0]?.toUpperCase() || 'U'}</span>}
                 </div>
               </Link>
             ) : (
@@ -166,11 +184,12 @@ export default function Navbar() {
           {user ? (
             <div className="flex items-center gap-3 pr-8">
               <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden border-4 border-white shadow-sm shrink-0 flex items-center justify-center">
-                {avatarUrl ? <img src={avatarUrl} alt="User" className="w-full h-full object-cover" /> : <span className="font-bold text-gray-500 text-2xl">{user.email?.[0].toUpperCase()}</span>}
+                {/* Fix: safe email access with fallback */}
+                {avatarUrl ? <img src={avatarUrl} alt="User" className="w-full h-full object-cover" /> : <span className="font-bold text-gray-500 text-2xl">{user.email?.[0]?.toUpperCase() || 'U'}</span>}
               </div>
               <div className="overflow-hidden">
                 <p className="font-bold text-gray-800 truncate text-lg">會員中心</p>
-                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                <p className="text-xs text-gray-500 truncate">{user.email || '用戶'}</p>
               </div>
             </div>
           ) : (

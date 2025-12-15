@@ -88,7 +88,8 @@ export default function ProfilePage() {
                     <img src={profile.avatar_url} alt={profile.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-500 text-4xl font-bold">
-                      {profile.name?.[0]?.toUpperCase()}
+                      {/* Fix: safe string access with fallback */}
+                      {profile.name?.[0]?.toUpperCase() || 'U'}
                     </div>
                   )}
                 </div>
@@ -110,7 +111,7 @@ export default function ProfilePage() {
 
               <div className="w-full sm:w-auto mt-4 sm:mt-0">
                 <Link
-                  href={`/chat?target=${profile.id}`}
+                  href={`/chat?target=${profile.id}&source_type=direct`}
                   className="w-full sm:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold hover:bg-blue-700 transition shadow-md active:scale-95 text-center block"
                 >
                   {t.profile.contact}
@@ -193,7 +194,7 @@ export default function ProfilePage() {
                       <div key={order.id} className="flex gap-4 p-4 border border-gray-100 rounded-xl bg-gray-50/50 hover:bg-white hover:shadow-sm transition">
                         <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden shrink-0">
                           {order.wish_requests?.images?.[0] ? (
-                            <img src={order.wish_requests.images[0]} className="w-full h-full object-cover grayscale opacity-80" />
+                            <img src={order.wish_requests.images[0]} className="w-full h-full object-cover grayscale opacity-80" alt="Product" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center text-xl">🎁</div>
                           )}
@@ -201,10 +202,11 @@ export default function ProfilePage() {
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded">已完成</span>
-                            <span className="text-xs text-gray-500">{new Date(order.created_at).toLocaleDateString()}</span>
+                            {/* Fix: safe date access */}
+                            <span className="text-xs text-gray-500">{order.created_at ? new Date(order.created_at).toLocaleDateString() : '未知日期'}</span>
                           </div>
                           <h4 className="font-bold text-gray-700">{order.wish_requests?.title || '未知商品'}</h4>
-                          <p className="text-sm text-gray-500">代購地：{order.wish_requests?.target_country}</p>
+                          <p className="text-sm text-gray-500">代購地：{order.wish_requests?.target_country || '未知'}</p>
                         </div>
                       </div>
                     ))}
@@ -221,20 +223,22 @@ export default function ProfilePage() {
                       <div key={review.id} className="bg-gray-50 p-4 rounded-xl flex gap-4">
                         <div className="w-10 h-10 bg-gray-200 rounded-full overflow-hidden shrink-0">
                           {review.reviewer?.avatar_url ? (
-                            <img src={review.reviewer.avatar_url} className="w-full h-full object-cover" />
+                            <img src={review.reviewer.avatar_url} className="w-full h-full object-cover" alt="Reviewer avatar" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-500 font-bold">
-                              {review.reviewer?.name?.[0]}
+                              {/* Fix: safe string access with fallback */}
+                              {review.reviewer?.name?.[0]?.toUpperCase() || '?'}
                             </div>
                           )}
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-gray-800">{review.reviewer?.name}</span>
-                            <span className="text-yellow-500 text-sm">{'★'.repeat(review.rating)}</span>
+                            <span className="font-bold text-gray-800">{review.reviewer?.name || '匿名'}</span>
+                            {/* Fix: ensure rating is a valid number */}
+                            <span className="text-yellow-500 text-sm">{'★'.repeat(Math.min(Math.max(review.rating || 0, 0), 5))}</span>
                           </div>
                           <p className="text-gray-600 text-sm mt-1">{review.comment || '尚無文字評論'}</p>
-                          <p className="text-gray-400 text-xs mt-2">{new Date(review.created_at).toLocaleDateString()}</p>
+                          <p className="text-gray-400 text-xs mt-2">{review.created_at ? new Date(review.created_at).toLocaleDateString() : '未知日期'}</p>
                         </div>
                       </div>
                     ))}

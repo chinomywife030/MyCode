@@ -1,12 +1,10 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
+import { useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { MOCK_NOTIFICATIONS, getNotificationStyle } from '@/types/notifications';
-import type { Notification } from '@/types/notifications';
-import NotificationIcon from '@/components/NotificationIcon';
-import { handleNotificationClick as handleNotificationNavigation } from '@/lib/notificationHelpers';
+import { useNotifications, type Notification } from '@/hooks/useNotifications';
+import { eventBus, Events } from '@/lib/events';
+import { navigateWithOneReload, shouldUseReloadNavigation } from '@/lib/navigateWithReload';
 
 interface NotificationDrawerProps {
   isOpen: boolean;
@@ -16,37 +14,150 @@ interface NotificationDrawerProps {
 export default function NotificationDrawer({ isOpen, onClose }: NotificationDrawerProps) {
   const router = useRouter();
   
-  // 🎨 純 UI state：用於控制每個通知的已讀狀態
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    markRead,
+    markAllRead,
+    fetchNotifications,
+    revalidateUnreadCount,
+  } = useNotifications({ autoSubscribe: true, limit: 20 });
 
-  // 🎨 只顯示最近的 5 則通知
-  const recentNotifications = notifications.slice(0, 5);
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  // 當 Drawer 打開時：刷新列表 + 背景 revalidate unreadCount
+  useEffect(() => {
+    if (isOpen) {
+      // 刷新通知列表
+      fetchNotifications(20, null);
+      // 背景 revalidate（不影響 UX）
+      revalidateUnreadCount();
+    }
+  }, [isOpen, fetchNotifications, revalidateUnreadCount]);
 
-  // 🎯 處理通知點擊：標記已讀 + 導頁 + 滾動（純前端）
-  const handleNotificationClick = (notification: Notification) => {
-    // 1. 標記為已讀（純 UI 更新，不接後端）
-    setNotifications(prev => 
-      prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n)
-    );
+  // 只顯示前 10 則
+  const recentNotifications = notifications.slice(0, 10);
+
+  // 格式化時間
+  const formatTime = useCallback((dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const minutes = Math.floor(diff / (1000 * 60));
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    if (minutes < 1) return '剛剛';
+    if (minutes < 60) return `${minutes} 分鐘前`;
+    if (hours < 24) return `${hours} 小時前`;
+    if (days === 1) return '昨天';
+    if (days < 7) return `${days} 天前`;
+    return date.toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' });
+  }, []);
+
+  // 獲取通知類型圖標
+  const getTypeIcon = useCallback((type: string) => {
+    switch (type) {
+      case 'message':
+      case 'message.new':
+        return (
+          <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        );
+      case 'order':
+      case 'order.new':
+      case 'order.accepted':
+        return (
+          <svg className="w-5 h-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        );
+      case 'wish':
+        return (
+          <svg className="w-5 h-5 text-pink-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        );
+      case 'trip':
+        return (
+          <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+          </svg>
+        );
+      case 'system':
+        return (
+          <svg className="w-5 h-5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        );
+      default:
+        return (
+          <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+        );
+    }
+  }, []);
+
+  // 獲取通知類型背景色
+  const getTypeBgColor = useCallback((type: string) => {
+    switch (type) {
+      case 'message':
+      case 'message.new': return 'bg-blue-100';
+      case 'order':
+      case 'order.new':
+      case 'order.accepted': return 'bg-orange-100';
+      case 'wish': return 'bg-pink-100';
+      case 'trip': return 'bg-green-100';
+      case 'system': return 'bg-purple-100';
+      default: return 'bg-gray-100';
+    }
+  }, []);
+
+  // 處理通知點擊：標記已讀 + 跳轉
+  const handleNotificationClick = useCallback(async (notification: Notification) => {
+    // 1. 如果該筆未讀：呼叫 markRead（optimistic update，立即更新紅點）
+    if (!notification.is_read) {
+      // 不等待 RPC 完成，使用 fire-and-forget + optimistic update
+      markRead(notification.id);
+    }
 
     // 2. 關閉 Drawer
     onClose();
 
-    // 3. 使用統一的導航處理函數（純前端路由 + 滾動）
-    handleNotificationNavigation(notification, router);
-  };
+    // 3. 若該筆有 href：跳轉
+    const targetHref = notification.href || notification.deep_link;
+    if (targetHref) {
+      // 觸發對話列表刷新
+      eventBus.emit(Events.CONVERSATIONS_REFRESH);
+      
+      // 如果是 chat 相關的通知，額外觸發 CHAT_OPEN
+      if (targetHref.includes('/chat') && targetHref.includes('conversation=')) {
+        const convMatch = targetHref.match(/conversation=([^&]+)/);
+        if (convMatch) {
+          eventBus.emit(Events.CHAT_OPEN, convMatch[1]);
+        }
+      }
 
-  const handleMarkAllRead = () => {
-    console.log('mark all as read');
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
-  };
+      // 導航（使用一次性 reload 保底機制）
+      if (shouldUseReloadNavigation(targetHref)) {
+        navigateWithOneReload(router, targetHref, `notif:${notification.id}`);
+      } else {
+        router.push(targetHref);
+      }
+    }
+  }, [markRead, onClose, router]);
 
-  const handleViewAll = () => {
-    console.log('view all notifications');
+  // 處理全部已讀
+  const handleMarkAllRead = useCallback(async () => {
+    await markAllRead();
+  }, [markAllRead]);
+
+  // 查看所有通知
+  const handleViewAll = useCallback(() => {
     onClose();
     router.push('/notifications');
-  };
+  }, [onClose, router]);
 
   return (
     <>
@@ -97,7 +208,19 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
 
         {/* Notifications List */}
         <div className="flex-1 overflow-y-auto">
-          {recentNotifications.length === 0 ? (
+          {loading && notifications.length === 0 ? (
+            <div className="p-4 space-y-3">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="flex gap-3 animate-pulse">
+                  <div className="w-10 h-10 rounded-full bg-gray-200" />
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 rounded w-32 mb-2" />
+                    <div className="h-3 bg-gray-200 rounded w-48" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : recentNotifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-gray-400 p-8">
               <svg className="w-16 h-16 mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
@@ -107,35 +230,35 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
           ) : (
             <div className="divide-y divide-gray-100">
               {recentNotifications.map((notification) => {
-                const style = getNotificationStyle(notification.type);
+                const isUnread = !notification.is_read;
                 
                 return (
                   <button
                     key={notification.id}
                     onClick={() => handleNotificationClick(notification)}
                     className={`w-full text-left p-4 hover:bg-gray-50 transition-colors ${
-                      !notification.isRead ? 'bg-orange-50/30' : ''
+                      isUnread ? 'bg-orange-50/30' : ''
                     }`}
                   >
                     <div className="flex gap-3">
                       {/* Avatar or Icon */}
-                      {notification.avatarUrl ? (
+                      {notification.actor_avatar ? (
                         <div className="relative shrink-0">
                           <img
-                            src={notification.avatarUrl}
+                            src={notification.actor_avatar}
                             alt=""
                             className="w-10 h-10 rounded-full object-cover"
                           />
-                          {!notification.isRead && (
+                          {isUnread && (
                             <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full border-2 border-white" />
                           )}
                         </div>
                       ) : (
                         <div className="relative shrink-0">
-                          <div className={`w-10 h-10 rounded-full ${style.bgColor} flex items-center justify-center`}>
-                            <NotificationIcon type={notification.type} className={`w-5 h-5 ${style.iconColor}`} />
+                          <div className={`w-10 h-10 rounded-full ${getTypeBgColor(notification.type)} flex items-center justify-center`}>
+                            {getTypeIcon(notification.type)}
                           </div>
-                          {!notification.isRead && (
+                          {isUnread && (
                             <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-500 rounded-full border-2 border-white" />
                           )}
                         </div>
@@ -144,16 +267,23 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
                       {/* Content */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2 mb-1">
-                          <h3 className={`text-sm font-bold ${!notification.isRead ? 'text-gray-900' : 'text-gray-700'}`}>
+                          <h3 className={`text-sm font-bold ${isUnread ? 'text-gray-900' : 'text-gray-700'}`}>
                             {notification.title}
                           </h3>
                           <span className="text-xs text-gray-400 whitespace-nowrap shrink-0">
-                            {notification.time}
+                            {formatTime(notification.created_at)}
                           </span>
                         </div>
-                        <p className={`text-sm ${!notification.isRead ? 'text-gray-700' : 'text-gray-500'} line-clamp-2`}>
-                          {notification.description}
-                        </p>
+                        {notification.body && (
+                          <p className={`text-sm ${isUnread ? 'text-gray-700' : 'text-gray-500'} line-clamp-2`}>
+                            {notification.body}
+                          </p>
+                        )}
+                        {notification.actor_name && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            來自 {notification.actor_name}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </button>
@@ -170,7 +300,7 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
             className="w-full py-2.5 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition shadow-sm"
           >
             查看所有通知
-            {notifications.length > 5 && (
+            {notifications.length > 10 && (
               <span className="ml-1.5 text-xs opacity-90">
                 ({notifications.length})
               </span>
@@ -181,4 +311,3 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
     </>
   );
 }
-

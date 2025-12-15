@@ -44,7 +44,7 @@ export default function Dashboard() {
       setUser(user);
 
       const { data: profileData } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-      setProfile(profileData);
+      setProfile(profileData || null); // Fix: ensure null if no data
       setEditForm({ name: profileData?.name || '', bio: profileData?.bio || '' });
 
       const { data: wishes } = await supabase.from('wish_requests').select('*').eq('buyer_id', user.id).order('created_at', { ascending: false });
@@ -54,7 +54,22 @@ export default function Dashboard() {
       setMyTrips(trips || []);
 
       const { data: favs } = await supabase.from('favorites').select(`wish_id, wish_requests (*)`).eq('user_id', user.id);
-      if (favs) setMyFavorites(favs.map((f: any) => f.wish_requests).filter(Boolean));
+      if (favs) {
+        const favorites = favs.map((f: any) => f.wish_requests).filter(Boolean);
+        // Fix: Debug - 檢查收藏的願望是否有無效 buyer_id
+        console.log('✅ [Dashboard] 獲取', favorites.length, '筆收藏的願望');
+        if (favorites.length > 0) {
+          const invalidFavs = favorites.filter((w: any) => 
+            !w.buyer_id || 
+            w.buyer_id === '00000000-0000-0000-0000-000000000000'
+          );
+          if (invalidFavs.length > 0) {
+            console.warn('⚠️ [Dashboard] 收藏中有', invalidFavs.length, '筆願望的 buyer_id 無效！');
+            console.warn('⚠️ [Dashboard] 願望 IDs:', invalidFavs.map((w: any) => w.id));
+          }
+        }
+        setMyFavorites(favorites);
+      }
 
       const { data: orders } = await supabase
         .from('orders')
@@ -193,12 +208,15 @@ export default function Dashboard() {
               <button onClick={() => setIsEditing(true)} className="absolute top-2 right-2 text-gray-400 hover:text-blue-600 p-2" aria-label="編輯個人資料">✏️</button>
               <div className="w-24 h-24 mx-auto mb-3 rounded-full overflow-hidden border-4 border-gray-100 shadow-sm bg-gray-200">
                 {profile?.avatar_url ? (
-                  <img src={profile.avatar_url} className="w-full h-full object-cover" />
+                  <img src={profile.avatar_url} className="w-full h-full object-cover" alt="Profile avatar" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-600 text-3xl font-bold">{profile?.name?.[0]?.toUpperCase()}</div>
+                  <div className="w-full h-full flex items-center justify-center bg-blue-100 text-blue-600 text-3xl font-bold">
+                    {/* Fix: safe string access with fallback */}
+                    {profile?.name?.[0]?.toUpperCase() || 'U'}
+                  </div>
                 )}
               </div>
-              <p className="font-bold text-gray-800 truncate text-lg">{profile?.name}</p>
+              <p className="font-bold text-gray-800 truncate text-lg">{profile?.name || '會員'}</p>
 
               {renderVerificationStatus()}
 
@@ -379,7 +397,9 @@ export default function Dashboard() {
                               }
                               
                               console.log('✅ 跳轉到聊天頁面，目標用戶:', targetUserId);
-                              router.push(`/chat?target=${targetUserId}`);
+                              // 🔐 P0-2：傳入來源上下文
+                              const chatUrl = `/chat?target=${targetUserId}&source_type=wish_request&source_id=${wish.id}&source_title=${encodeURIComponent(wish.title || '')}`;
+                              router.push(chatUrl);
                             }}
                             className="flex items-center justify-center gap-1.5 w-full py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg transition shadow-sm text-xs"
                           >
@@ -423,9 +443,10 @@ export default function Dashboard() {
                             <div>
                               <h4 className="font-bold text-lg text-gray-800">{order.wish_requests?.title || '已刪除需求'}</h4>
                               <p className="text-sm text-gray-500">
-                                {isBuyer ? `代購：${order.profiles?.name}` : `買家：${order.buyer_profile?.name}`}
+                                {/* Fix: safe access with fallback */}
+                                {isBuyer ? `代購：${order.profiles?.name || '未知'}` : `買家：${order.buyer_profile?.name || '未知'}`}
                               </p>
-                              <p className="text-sm font-bold text-blue-600 mt-1">${order.price}</p>
+                              <p className="text-sm font-bold text-blue-600 mt-1">${order.price || 0}</p>
                             </div>
                           </div>
 
@@ -474,9 +495,10 @@ export default function Dashboard() {
                                 {/* 🎨 Uber 式評價按鈕（假資料模擬狀態） */}
                                 {(() => {
                                   const targetId = isBuyer ? order.shopper_id : order.buyer_id;
-                                  const targetName = isBuyer ? order.profiles?.name : order.buyer_profile?.name;
+                                  // Fix: safe access with fallback for target name
+                                  const targetName = isBuyer ? (order.profiles?.name || '代購') : (order.buyer_profile?.name || '買家');
                                   // 🎨 純 UI：假設部分訂單已評價（模擬）
-                                  const hasReviewed = order.id.endsWith('1'); // 假資料：ID 結尾是 1 的已評價
+                                  const hasReviewed = order.id?.endsWith('1') || false; // Fix: safe string method call
                                   
                                   return hasReviewed ? (
                                     <span className="text-xs text-gray-500 flex items-center gap-1">
@@ -543,13 +565,18 @@ export default function Dashboard() {
               <div className="flex flex-col items-center mb-4">
                 <div className="w-24 h-24 rounded-full bg-gray-200 overflow-hidden mb-2 relative group cursor-pointer">
                   {avatarFile ? (
-                    <img src={URL.createObjectURL(avatarFile)} className="w-full h-full object-cover" />
+                    <img src={URL.createObjectURL(avatarFile)} className="w-full h-full object-cover" alt="Avatar preview" />
                   ) : (
-                    <img src={profile?.avatar_url || 'https://via.placeholder.com/150'} className="w-full h-full object-cover" />
+                    <img src={profile?.avatar_url || 'https://via.placeholder.com/150'} className="w-full h-full object-cover" alt="Current avatar" />
                   )}
                   <label className="absolute inset-0 bg-black/40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition cursor-pointer">
                     上傳
-                    <input type="file" hidden accept="image/*" onChange={(e) => e.target.files && setAvatarFile(e.target.files[0])} />
+                    {/* Fix: safe file access */}
+                    <input type="file" hidden accept="image/*" onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        setAvatarFile(e.target.files[0]);
+                      }
+                    }} />
                   </label>
                 </div>
                 <p className="text-xs text-gray-500">點擊更換頭貼</p>
