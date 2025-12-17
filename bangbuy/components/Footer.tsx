@@ -96,6 +96,14 @@ export default function Footer() {
           <div>
             <h3 className="text-sm font-bold text-gray-900 mb-3">聯絡我們</h3>
             <ul className="space-y-2">
+              <li>
+                <a 
+                  href="mailto:support@bangbuy.app" 
+                  className="text-sm text-gray-600 hover:text-blue-600 transition"
+                >
+                  📧 support@bangbuy.app
+                </a>
+              </li>
               <li className="text-sm text-gray-600">
                 透過平台聯絡功能
               </li>

@@ -1,3 +1,5 @@
+import TrustFooter from '@/components/TrustFooter';
+
 export const metadata = {
   title: '隱私權政策 - BangBuy',
   description: 'BangBuy 隱私權政策與個人資料保護說明（符合 GDPR）',
@@ -154,8 +156,16 @@ export default function PrivacyPage() {
           </p>
         </div>
       </div>
+
+      {/* 🔒 Trust Footer */}
+      <TrustFooter className="py-8" />
     </div>
   );
 }
+
+
+
+
+
 
 

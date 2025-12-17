@@ -496,3 +496,8 @@ SELECT '✅ notifications system ready' AS status;
 SELECT '✅ conversations dedupe completed' AS status;
 SELECT '✅ get_or_create_conversation RPC ready' AS status;
 
+
+
+
+
+

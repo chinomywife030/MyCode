@@ -5,6 +5,7 @@
  * 1. 提供單一真實來源的使用者狀態
  * 2. 避免不同頁面各自判斷登入狀態
  * 3. 確保狀態未確認前不執行需要使用者的操作
+ * 4. 🆕 檢查 email 驗證狀態
  */
 
 'use client';
@@ -19,6 +20,8 @@ interface AuthState {
   loading: boolean;
   initialized: boolean;
   error: string | null;
+  /** 🆕 Email 是否已驗證 */
+  emailVerified: boolean;
 }
 
 interface AuthContextType extends AuthState {
@@ -34,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading: true,
     initialized: false,
     error: null,
+    emailVerified: false,
   });
 
   // 初始化使用者狀態
@@ -58,6 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             loading: false,
             initialized: true,
             error: '無法獲取使用者狀態',
+            emailVerified: false,
           });
           return;
         }
@@ -67,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loading: false,
           initialized: true,
           error: null,
+          emailVerified: !!user?.email_confirmed_at,
         });
       } catch (err: any) {
         if (!mounted) return;
@@ -82,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loading: false,
           initialized: true,
           error: '初始化失敗',
+          emailVerified: false,
         });
       }
     }
@@ -97,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ...prev,
           user: session?.user || null,
           loading: false,
+          emailVerified: !!session?.user?.email_confirmed_at,
         }));
       }
     );
@@ -115,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading: false,
         initialized: true,
         error: null,
+        emailVerified: false,
       });
     } catch (err: any) {
       logError(err, {
@@ -138,6 +147,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading: false,
         initialized: true,
         error: null,
+        emailVerified: !!user?.email_confirmed_at,
       });
     } catch (err: any) {
       logError(err, {
@@ -199,5 +209,6 @@ export function useRequireAuth() {
     ready: checked && !!auth.user,
   };
 }
+
 
 

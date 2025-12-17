@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import TrustFooter from '@/components/TrustFooter';
 
 export default function VerifyPage() {
   const router = useRouter();
@@ -111,6 +112,9 @@ export default function VerifyPage() {
           </div>
         </form>
       </div>
+
+      {/* 🔒 Trust Footer */}
+      <TrustFooter className="mt-8" />
     </div>
   );
 }

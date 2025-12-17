@@ -14,6 +14,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef, Re
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { forceRefreshSession } from '@/lib/safeCall';
+import { cleanupAllChannels } from '@/lib/realtime/simpleRealtime';
 
 // ============================================
 // 類型定義
@@ -123,6 +124,13 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
   const handleSignOut = useCallback(async () => {
     log('auth', 'Signing out and redirecting to login');
     setStatus('authExpired');
+
+    // 🆕 先清理所有 realtime channels（避免重連刷屏）
+    try {
+      cleanupAllChannels();
+    } catch (err) {
+      console.error('[auth] cleanup channels error:', err);
+    }
 
     try {
       await supabase.auth.signOut();

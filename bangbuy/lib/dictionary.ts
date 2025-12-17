@@ -15,6 +15,16 @@ export const dictionary = {
     allCountries: '所有國家',
     trips: '行程',
     calculator: '匯率計算器',
+    // 模式切換相關
+    requesterMode: '買家',
+    shopperMode: '代購',
+    // Hero 文案
+    heroRequesterTitle: '找到可靠的代購',
+    heroRequesterSubtitle: '發布需求，輕鬆購買全球商品',
+    heroRequesterCTA: '發布需求',
+    heroShopperTitle: '開始接單賺錢',
+    heroShopperSubtitle: '利用你的行程，幫他人代購賺收入',
+    heroShopperCTA: '發布行程',
     dashboard: {
       title: '會員中心',
       myWishes: '我的需求',

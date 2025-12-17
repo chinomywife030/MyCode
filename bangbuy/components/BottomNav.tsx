@@ -17,25 +17,29 @@ export default function BottomNav() {
   // 純 UI state，判斷當前頁面
   const isActive = (path: string) => pathname === path;
   
+  // 🎨 依身份模式決定 active 色彩（藍色 = requester, 橘色 = shopper）
+  const activeColor = mode === 'requester' ? 'text-blue-500' : 'text-orange-500';
+  const activeBgColor = mode === 'requester' ? 'bg-blue-500' : 'bg-orange-500';
+  
   return (
     <>
-      {/* 手機版底部導航 - 使用橘藍配色 */}
+      {/* 手機版底部導航 - active 色彩跟隨身份模式 */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 shadow-lg">
         <div className="flex items-center justify-around h-16 px-2">
           
           {/* Home */}
           <Link 
             href="/" 
-            className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all duration-200 ${
               isActive('/') 
-                ? 'text-orange-500' 
+                ? activeColor 
                 : 'text-gray-400 hover:text-gray-600'
             }`}
           >
             <svg className="w-6 h-6 mb-0.5" fill={isActive('/') ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
             </svg>
-            <span className={`text-[10px] font-semibold ${isActive('/') ? 'text-orange-500' : ''}`}>
+            <span className={`text-[10px] font-semibold transition-colors duration-200 ${isActive('/') ? activeColor : ''}`}>
               首頁
             </span>
           </Link>
@@ -43,22 +47,22 @@ export default function BottomNav() {
           {/* 🔔 Notifications */}
           <Link 
             href="/notifications"
-            className={`relative flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all ${
+            className={`relative flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all duration-200 ${
               isActive('/notifications')
-                ? 'text-orange-500' 
+                ? activeColor 
                 : 'text-gray-400 hover:text-gray-600'
             }`}
           >
             <svg className="w-6 h-6 mb-0.5" fill={isActive('/notifications') ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
-            {/* 紅點 badge */}
+            {/* 紅點 badge - 固定紅色 */}
             {unreadNotificationCount > 0 && (
-              <span className="absolute top-1 right-3 flex items-center justify-center min-w-[16px] h-[16px] px-1 bg-orange-500 text-white text-[9px] font-bold rounded-full">
+              <span className="absolute top-1 right-3 flex items-center justify-center min-w-[16px] h-[16px] px-1 bg-red-500 text-white text-[9px] font-bold rounded-full">
                 {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
               </span>
             )}
-            <span className={`text-[10px] font-semibold ${isActive('/notifications') ? 'text-orange-500' : ''}`}>
+            <span className={`text-[10px] font-semibold transition-colors duration-200 ${isActive('/notifications') ? activeColor : ''}`}>
               通知
             </span>
           </Link>
@@ -66,16 +70,16 @@ export default function BottomNav() {
           {/* Messages */}
           <Link 
             href="/chat"
-            className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all duration-200 ${
               isActive('/chat')
-                ? 'text-orange-500' 
+                ? activeColor 
                 : 'text-gray-400 hover:text-gray-600'
             }`}
           >
             <svg className="w-6 h-6 mb-0.5" fill={isActive('/chat') ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
-            <span className={`text-[10px] font-semibold ${isActive('/chat') ? 'text-orange-500' : ''}`}>
+            <span className={`text-[10px] font-semibold transition-colors duration-200 ${isActive('/chat') ? activeColor : ''}`}>
               訊息
             </span>
           </Link>
@@ -83,20 +87,20 @@ export default function BottomNav() {
           {/* Profile */}
           <button 
             onClick={() => setShowProfileMenu(!showProfileMenu)}
-            className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all ${
+            className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all duration-200 ${
               isActive('/dashboard')
-                ? 'text-orange-500' 
+                ? activeColor 
                 : 'text-gray-400 hover:text-gray-600'
             }`}
           >
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-0.5 border-2 transition ${
+            <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs mb-0.5 border-2 transition-all duration-200 ${
               isActive('/dashboard')
-                ? 'bg-orange-500 text-white border-orange-500'
+                ? `${activeBgColor} text-white ${mode === 'requester' ? 'border-blue-500' : 'border-orange-500'}`
                 : 'bg-gray-100 text-gray-600 border-gray-200'
             }`}>
               W
             </div>
-            <span className={`text-[10px] font-semibold ${isActive('/dashboard') ? 'text-orange-500' : ''}`}>
+            <span className={`text-[10px] font-semibold transition-colors duration-200 ${isActive('/dashboard') ? activeColor : ''}`}>
               我的
             </span>
           </button>

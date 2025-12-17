@@ -13,6 +13,10 @@
  * 🆕 增強：
  * - visibilitychange 觸發自動重連斷開的 channel
  * - 記錄離開時間，過久則重置 retry count
+ * - 🆕 Exponential backoff (1s/2s/4s/8s...)
+ * - 🆕 達到上限後顯示「連線中斷，點此重試」按鈕
+ * - 🆕 背景時暫停重試（避免狂重連）
+ * - 🆕 處理 auth 錯誤時停止重連
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
@@ -51,8 +55,19 @@ interface ChannelState {
 // ============================================
 
 const MAX_RETRIES = 5;
-const BASE_DELAY = 2000;
+const BASE_DELAY = 1000; // 🆕 改為 1 秒起步（exponential: 1s, 2s, 4s, 8s, 16s）
+const MAX_DELAY = 16000; // 🆕 最大延遲 16 秒
 const BACKGROUND_THRESHOLD_MS = 60 * 1000; // 1 分鐘：背景超過此時間則重置 retry
+
+// 🆕 Auth 錯誤模式（遇到這些就停止重連）
+const AUTH_ERROR_PATTERNS = [
+  'JWT expired',
+  'invalid JWT',
+  'Not authenticated',
+  'PGRST301',
+  '401',
+  '403',
+];
 
 // ============================================
 // 全域狀態
@@ -62,12 +77,46 @@ const channelStates = new Map<string, ChannelState>();
 let isPageVisible = typeof document !== 'undefined' ? document.visibilityState === 'visible' : true;
 let isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
 let globalListenersSet = false;
-let lastHiddenTime = 0; // 🆕 記錄切到背景的時間
+let lastHiddenTime = 0; // 記錄切到背景的時間
+let isAuthFailed = false; // 🆕 auth 失敗時停止所有重連
+
+/**
+ * 🆕 檢查是否為 auth 相關錯誤
+ */
+function isAuthError(error: any): boolean {
+  if (!error) return false;
+  const message = String(error.message || error || '');
+  return AUTH_ERROR_PATTERNS.some(pattern => 
+    message.toLowerCase().includes(pattern.toLowerCase())
+  );
+}
+
+/**
+ * 🆕 標記 auth 失敗（從外部調用）
+ */
+export function markAuthFailed() {
+  isAuthFailed = true;
+  log('Auth failed, stopping all reconnects');
+}
+
+/**
+ * 🆕 重置 auth 狀態（登入成功時）
+ */
+export function resetAuthState() {
+  isAuthFailed = false;
+  log('Auth state reset');
+}
 
 /**
  * 🆕 嘗試重連所有非 connected 的 channel
  */
 function reconnectDisconnectedChannels() {
+  // 🆕 如果 auth 失敗，不重連
+  if (isAuthFailed) {
+    log('Skip reconnect - auth failed');
+    return;
+  }
+  
   const now = Date.now();
   const wasInBackgroundLong = lastHiddenTime > 0 && (now - lastHiddenTime) > BACKGROUND_THRESHOLD_MS;
   
@@ -248,6 +297,13 @@ export function useSimpleRealtime<T = any>(options: UseSimpleRealtimeOptions<T>)
     // 連接函數
     const connect = () => {
       if (!mountedRef.current) return;
+      
+      // 🆕 如果 auth 已失敗，不連接
+      if (isAuthFailed) {
+        log(`Skip connect "${key}" - auth failed`);
+        return;
+      }
+      
       if (!isPageVisible || !isOnline) {
         log(`Skip connect "${key}" (visible=${isPageVisible}, online=${isOnline})`);
         return;
@@ -317,7 +373,7 @@ export function useSimpleRealtime<T = any>(options: UseSimpleRealtimeOptions<T>)
             subscribeStatus === 'CLOSED' ||
             subscribeStatus === 'CHANNEL_ERROR'
           ) {
-            log(`"${key}" ${subscribeStatus}`);
+            log(`"${key}" ${subscribeStatus}${err ? `: ${err.message}` : ''}`);
             
             // 清理這個 channel
             try {
@@ -325,6 +381,27 @@ export function useSimpleRealtime<T = any>(options: UseSimpleRealtimeOptions<T>)
             } catch (e) {}
             
             s.channel = null;
+
+            // 🆕 檢查是否為 auth 錯誤（立刻停止重連）
+            if (err && isAuthError(err)) {
+              log(`"${key}" auth error, stopping reconnects`);
+              isAuthFailed = true;
+              s.status = 'failed';
+              if (mountedRef.current) {
+                setStatus('failed');
+              }
+              return;
+            }
+
+            // 🆕 如果 auth 已失敗，不重試
+            if (isAuthFailed) {
+              log(`"${key}" skipping retry - auth failed`);
+              s.status = 'failed';
+              if (mountedRef.current) {
+                setStatus('failed');
+              }
+              return;
+            }
 
             // 檢查是否超過重試上限
             if (s.retryCount >= MAX_RETRIES) {
@@ -336,18 +413,26 @@ export function useSimpleRealtime<T = any>(options: UseSimpleRealtimeOptions<T>)
               return;
             }
 
-            // 排程重試
+            // 🆕 如果在背景，暫停重試
+            if (!isPageVisible) {
+              log(`"${key}" in background, pausing retries`);
+              s.status = 'idle';
+              return;
+            }
+
+            // 排程重試（🆕 exponential backoff with max cap）
             s.retryCount++;
-            const delay = BASE_DELAY * Math.pow(2, s.retryCount - 1);
+            const delay = Math.min(BASE_DELAY * Math.pow(2, s.retryCount - 1), MAX_DELAY);
             
-            log(`"${key}" retry in ${delay}ms`);
+            log(`"${key}" retry ${s.retryCount}/${MAX_RETRIES} in ${delay}ms`);
 
             if (s.retryTimer) {
               clearTimeout(s.retryTimer);
             }
 
             s.retryTimer = setTimeout(() => {
-              if (mountedRef.current && isPageVisible && isOnline) {
+              // 🆕 雙重檢查
+              if (mountedRef.current && isPageVisible && isOnline && !isAuthFailed) {
                 connect();
               }
             }, delay);
@@ -406,5 +491,7 @@ export function cleanupAllChannels() {
     cleanupChannel(key);
   }
   channelStates.clear();
+  // 🆕 登出時重置 auth 狀態，以便下次登入可以重連
+  isAuthFailed = false;
 }
 

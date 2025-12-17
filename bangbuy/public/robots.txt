@@ -1,0 +1,23 @@
+# BangBuy Robots.txt
+# https://bangbuy.app
+
+User-agent: *
+Allow: /
+
+# 允許法務頁面被索引
+Allow: /privacy
+Allow: /terms
+Allow: /disclaimer
+Allow: /cookies
+Allow: /copyright
+
+# 禁止私人頁面
+Disallow: /dashboard
+Disallow: /chat
+Disallow: /verify
+Disallow: /reset-password
+Disallow: /auth/
+
+# Sitemap
+Sitemap: https://bangbuy.app/sitemap.xml
+

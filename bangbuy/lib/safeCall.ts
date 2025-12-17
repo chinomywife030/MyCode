@@ -8,9 +8,12 @@
  * 2. 遇到 auth 錯誤時嘗試刷新 session
  * 3. 刷新失敗則登出
  * 4. 統一錯誤處理
+ * 5. 🆕 處理 email 未驗證情境
+ * 6. 🆕 遇到 401/403 立刻停止重試（fail fast）
  */
 
 import { supabase } from '@/lib/supabase';
+import { cleanupAllChannels } from '@/lib/realtime/simpleRealtime';
 
 // 開發模式日誌
 const isDev = process.env.NODE_ENV === 'development';
@@ -34,9 +37,17 @@ const AUTH_ERROR_PATTERNS = [
   'Invalid login credentials',
   'session_not_found',
   'refresh_token_not_found',
+  'AuthSessionMissingError',
 ];
 
 const AUTH_ERROR_CODES = [401, 403];
+
+// 🆕 Email 未驗證錯誤模式
+const EMAIL_NOT_VERIFIED_PATTERNS = [
+  'email not confirmed',
+  'email_not_confirmed',
+  'Email not confirmed',
+];
 
 function isAuthError(error: any): boolean {
   if (!error) return false;
@@ -50,6 +61,18 @@ function isAuthError(error: any): boolean {
   // 檢查錯誤訊息
   const message = String(error.message || error.msg || error.error || '');
   return AUTH_ERROR_PATTERNS.some(pattern => 
+    message.toLowerCase().includes(pattern.toLowerCase())
+  );
+}
+
+/**
+ * 🆕 檢查是否為 email 未驗證錯誤
+ */
+function isEmailNotVerifiedError(error: any): boolean {
+  if (!error) return false;
+  
+  const message = String(error.message || error.msg || error.error || '');
+  return EMAIL_NOT_VERIFIED_PATTERNS.some(pattern => 
     message.toLowerCase().includes(pattern.toLowerCase())
   );
 }
@@ -163,6 +186,13 @@ export async function forceRefreshSession(): Promise<boolean> {
 async function handleAuthFailure(): Promise<void> {
   log('Auth failure - signing out');
   
+  // 🆕 清理所有 realtime channels（避免重連刷屏）
+  try {
+    cleanupAllChannels();
+  } catch (err) {
+    console.error('[safeCall] cleanup channels error:', err);
+  }
+  
   try {
     await supabase.auth.signOut();
   } catch (err) {
@@ -172,6 +202,18 @@ async function handleAuthFailure(): Promise<void> {
   // 導回登入頁
   if (typeof window !== 'undefined') {
     window.location.href = '/login';
+  }
+}
+
+/**
+ * 🆕 處理 email 未驗證情境
+ */
+function handleEmailNotVerified(): void {
+  log('Email not verified - redirecting');
+  
+  // 導向驗證頁
+  if (typeof window !== 'undefined') {
+    window.location.href = '/verify-email';
   }
 }
 
@@ -195,6 +237,13 @@ export async function safeRpc<T = any>(
     return { data: firstResult.data, error: null };
   }
 
+  // 🆕 檢查是否為 email 未驗證錯誤
+  if (isEmailNotVerifiedError(firstResult.error)) {
+    log(`RPC ${functionName} email not verified`);
+    handleEmailNotVerified();
+    return { data: null, error: firstResult.error };
+  }
+
   // 檢查是否為 auth 錯誤
   if (isAuthError(firstResult.error)) {
     log(`RPC ${functionName} auth error, attempting refresh...`);
@@ -210,6 +259,12 @@ export async function safeRpc<T = any>(
         return { data: retryResult.data, error: null };
       }
 
+      // 🆕 再次檢查 email 未驗證
+      if (isEmailNotVerifiedError(retryResult.error)) {
+        handleEmailNotVerified();
+        return { data: null, error: retryResult.error };
+      }
+
       // 重試仍失敗
       if (isAuthError(retryResult.error)) {
         await handleAuthFailure();
@@ -218,7 +273,7 @@ export async function safeRpc<T = any>(
 
       return { data: null, error: retryResult.error };
     } else {
-      // 刷新失敗
+      // 刷新失敗 -> 立刻登出（fail fast）
       await handleAuthFailure();
       return { data: null, error: firstResult.error };
     }
@@ -256,6 +311,13 @@ export async function safeQuery<T = any>(
     return { data: firstResult.data, error: null };
   }
 
+  // 🆕 檢查是否為 email 未驗證錯誤
+  if (isEmailNotVerifiedError(firstResult.error)) {
+    log(`Query ${operationName} email not verified`);
+    handleEmailNotVerified();
+    return { data: null, error: firstResult.error };
+  }
+
   // 檢查是否為 auth 錯誤
   if (isAuthError(firstResult.error)) {
     log(`Query ${operationName} auth error, attempting refresh...`);
@@ -271,6 +333,12 @@ export async function safeQuery<T = any>(
         return { data: retryResult.data, error: null };
       }
 
+      // 🆕 再次檢查 email 未驗證
+      if (isEmailNotVerifiedError(retryResult.error)) {
+        handleEmailNotVerified();
+        return { data: null, error: retryResult.error };
+      }
+
       // 重試仍失敗
       if (isAuthError(retryResult.error)) {
         await handleAuthFailure();
@@ -279,7 +347,7 @@ export async function safeQuery<T = any>(
 
       return { data: null, error: retryResult.error };
     } else {
-      // 刷新失敗
+      // 刷新失敗 -> 立刻登出（fail fast）
       await handleAuthFailure();
       return { data: null, error: firstResult.error };
     }

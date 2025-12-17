@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import LegalConsentBlock from '@/components/LegalConsentBlock';
+import TrustFooter from '@/components/TrustFooter';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -40,12 +41,15 @@ export default function LoginPage() {
             data: {
               name: name || email.split('@')[0],
             },
+            // 指定驗證信的 redirect URL
+            emailRedirectTo: `${location.origin}/auth/callback`,
           },
         });
         
         if (error) throw error;
         
         // 🔐 記錄條款同意資訊（寫入 profile）
+        // 注意：開啟 Confirm Email 後，signUp 可能回傳 session=null 但 user 有值
         if (data.user) {
           try {
             await supabase.from('profiles').upsert({
@@ -67,16 +71,26 @@ export default function LoginPage() {
           }
         }
         
-        alert('註冊成功！請登入開始使用');
-        router.push('/');
-        router.refresh();
+        // 🆕 儲存 email 到 localStorage（供 check-email 頁使用）
+        localStorage.setItem('bangbuy_signup_email', email);
+        
+        // ✅ 註冊成功後導向 check-email 頁面（帶上 email 參數）
+        // 無論 session 是否為 null，只要沒 error 就視為註冊成功
+        router.replace(`/auth/check-email?email=${encodeURIComponent(email)}`);
+        return; // 不需要 refresh
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
-        router.push('/');
+        
+        // 🆕 登入後檢查 email 是否已驗證
+        if (data.user && !data.user.email_confirmed_at) {
+          router.push('/verify-email');
+        } else {
+          router.push('/');
+        }
         router.refresh();
       }
     } catch (error: any) {
@@ -223,6 +237,9 @@ export default function LoginPage() {
       <Link href="/" className="mt-8 text-gray-400 hover:text-gray-600 text-sm">
         ← 返回 BangBuy 首頁
       </Link>
+
+      {/* 🔒 Trust Footer */}
+      <TrustFooter className="mt-8" />
     </div>
   );
 }

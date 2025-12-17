@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import TrustFooter from '@/components/TrustFooter';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -125,6 +126,9 @@ export default function ForgotPasswordPage() {
       <Link href="/" className="mt-8 text-gray-400 hover:text-gray-600 text-sm">
         ← 返回 BangBuy 首頁
       </Link>
+
+      {/* 🔒 Trust Footer */}
+      <TrustFooter className="mt-8" />
     </div>
   );
 }

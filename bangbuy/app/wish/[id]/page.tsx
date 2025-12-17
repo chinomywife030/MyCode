@@ -8,6 +8,7 @@ import ReviewModal from '@/components/ReviewModal';
 import UberStyleReviewSection from '@/components/UberStyleReviewSection';
 import ExternalLink, { ExternalLinkWarning } from '@/components/ExternalLink';
 import { navigateWithOneReload } from '@/lib/navigateWithReload';
+import ImageCarousel from '@/components/ImageCarousel';
 
 export default function WishDetailPage() {
   const params = useParams();
@@ -110,24 +111,19 @@ export default function WishDetailPage() {
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <div className="max-w-4xl mx-auto bg-white rounded-2xl shadow-xl overflow-hidden relative">
         
-        {/* 圖片區 */}
-        <div className="w-full h-64 sm:h-96 bg-gray-200 relative group">
-          {wish.images && wish.images.length > 0 ? (
-            <img 
-              src={wish.images[0]} 
-              alt={wish.title} 
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-400 flex-col">
-              <span className="text-6xl mb-2">🎁</span>
-              <span>無圖片</span>
-            </div>
-          )}
+        {/* 圖片區 - 使用 ImageCarousel */}
+        <div className="w-full relative">
+          <ImageCarousel 
+            images={wish.images || []} 
+            alt={wish.title}
+            aspectRatio="16/9"
+            showCounter={true}
+            className="h-64 sm:h-96"
+          />
           
           <Link 
             href="/" 
-            className="absolute top-4 left-4 bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition"
+            className="absolute top-4 left-4 z-20 bg-black/50 hover:bg-black/70 text-white px-4 py-2 rounded-full backdrop-blur-sm transition"
           >
             ← 返回列表
           </Link>

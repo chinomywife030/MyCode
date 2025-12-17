@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase';
 import Logo from '@/components/Logo';
 import { useUserMode } from '@/components/UserModeProvider';
 import { useLanguage } from '@/components/LanguageProvider';
+import ModeToggle from '@/components/ModeToggle';
 import NotificationDrawer from '@/components/NotificationDrawer';
 import { useNotificationBadge } from '@/hooks/useNotifications';
 
@@ -110,24 +111,12 @@ export default function Navbar() {
 
             <Link href="/" className="flex items-center gap-2 group shrink-0">
               <div className="transform transition-transform group-hover:rotate-12"><Logo className="w-8 h-8" /></div>
-              <span className={`hidden sm:block text-xl font-black tracking-tighter transition-colors ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>{t.siteName}</span>
-              <span className={`sm:hidden text-lg font-black tracking-tighter transition-colors ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>BangBuy</span>
+              <span className={`hidden sm:block text-xl font-black tracking-tighter transition-colors duration-200 ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>{t.siteName}</span>
+              <span className={`sm:hidden text-lg font-black tracking-tighter transition-colors duration-200 ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>BangBuy</span>
             </Link>
 
-            <button
-              onClick={toggleMode}
-              className={`flex items-center gap-1 px-2 py-1 sm:px-3 sm:py-1.5 rounded-full text-[10px] sm:text-xs font-bold transition-all shadow-sm active:scale-95 border shrink-0 ${
-                mode === 'requester'
-                  ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'
-                  : 'bg-orange-50 text-orange-600 border-orange-200 hover:bg-orange-100'
-              }`}
-            >
-              <span className="sm:hidden flex items-center gap-1">
-                <span>{mode === 'requester' ? '買家' : '代購'}</span>
-              </span>
-              <span className="hidden sm:inline">{mode === 'requester' ? '切換買家模式' : '切換代購模式'}</span>
-              <span className="opacity-50 text-[10px]">TAB</span>
-            </button>
+            {/* 💊 身分膠囊 */}
+            <ModeToggle className="shrink-0" />
           </div>
 
           <div className="flex items-center gap-2">
@@ -155,7 +144,7 @@ export default function Navbar() {
             {user ? (
               <Link href="/dashboard" title="會員中心">
                 <div
-                  className={`w-9 h-9 rounded-full flex items-center justify-center font-bold cursor-pointer transition-all border-2 shadow-sm hover:shadow-md overflow-hidden ${
+                  className={`w-9 h-9 rounded-full flex items-center justify-center font-bold cursor-pointer transition-all duration-200 border-2 shadow-sm hover:shadow-md overflow-hidden ${
                     mode === 'shopper'
                       ? 'border-orange-100 hover:border-orange-300 bg-orange-50 text-orange-600'
                       : 'border-blue-100 hover:border-blue-300 bg-blue-50 text-blue-600'
@@ -223,17 +212,17 @@ export default function Navbar() {
                   <Link
                     href="/create"
                     onClick={() => setIsMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md shadow-blue-100 hover:bg-blue-700 transition"
+                    className="flex items-center gap-3 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md shadow-blue-100 hover:bg-blue-700 transition-all duration-200"
                   >
-                    <span className="text-xl">＋</span> 我要發布需求
+                    <span className="text-xl">＋</span> 發布需求
                   </Link>
                 ) : (
                   <Link
                     href="/trips/create"
                     onClick={() => setIsMenuOpen(false)}
-                    className="flex items-center gap-3 px-4 py-3 bg-orange-500 text-white rounded-xl font-bold shadow-md shadow-orange-100 hover:bg-orange-600 transition"
+                    className="flex items-center gap-3 px-4 py-3 bg-orange-500 text-white rounded-xl font-bold shadow-md shadow-orange-100 hover:bg-orange-600 transition-all duration-200"
                   >
-                    <span className="text-xl">＋</span> 我要發布行程
+                    <span className="text-xl">＋</span> 發布行程
                   </Link>
                 )}
               </>

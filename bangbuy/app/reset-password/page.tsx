@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import TrustFooter from '@/components/TrustFooter';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -183,6 +184,9 @@ export default function ResetPasswordPage() {
       <Link href="/" className="mt-8 text-gray-400 hover:text-gray-600 text-sm">
         ← 返回 BangBuy 首頁
       </Link>
+
+      {/* 🔒 Trust Footer */}
+      <TrustFooter className="mt-8" />
     </div>
   );
 }

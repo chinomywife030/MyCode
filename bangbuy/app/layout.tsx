@@ -6,7 +6,27 @@ import CookieBanner from '@/components/CookieBanner';
 
 export const metadata = {
   title: 'BangBuy 幫買',
-  description: '留學生跨境代購平台',
+  description: '留學生跨境代購平台 - 全球代購媒合服務',
+  metadataBase: new URL('https://bangbuy.app'),
+  applicationName: 'BangBuy',
+  authors: [{ name: 'BangBuy Team' }],
+  keywords: ['代購', '留學生', '跨境購物', 'BangBuy', '幫買'],
+  openGraph: {
+    title: 'BangBuy 幫買',
+    description: '留學生跨境代購平台 - 全球代購媒合服務',
+    url: 'https://bangbuy.app',
+    siteName: 'BangBuy',
+    type: 'website',
+    locale: 'zh_TW',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'BangBuy 幫買',
+    description: '留學生跨境代購平台 - 全球代購媒合服務',
+  },
+  other: {
+    'contact': 'support@bangbuy.app',
+  },
 };
 
 export default function RootLayout({

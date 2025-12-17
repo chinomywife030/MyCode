@@ -23,3 +23,8 @@ CREATE INDEX IF NOT EXISTS idx_profiles_terms_accepted ON profiles(terms_accepte
 SELECT 'Migration completed: terms_accepted_at and terms_version added to profiles table' AS status;
 
 
+
+
+
+
+

@@ -3,7 +3,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-// 定義兩種身分：requester (買家/許願者), shopper (代購/接單者)
+// 定義兩種身分：requester (買家), shopper (代購)
 type UserMode = 'requester' | 'shopper';
 
 interface UserModeContextType {

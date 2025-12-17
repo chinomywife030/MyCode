@@ -1,3 +1,5 @@
+import TrustFooter from '@/components/TrustFooter';
+
 export const metadata = {
   title: '使用條款 - BangBuy',
   description: 'BangBuy 平台使用條款與服務協議',
@@ -111,5 +113,10 @@ export default function TermsPage() {
     </div>
   );
 }
+
+
+
+
+
 
 
