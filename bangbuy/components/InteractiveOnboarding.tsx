@@ -1,8 +1,16 @@
 /**
- * 🎯 箭頭式操作引導（Guided Spotlight）
+ * 🎯 Coach Mark 新手引導（3 步驟）
  * 
- * 使用 4 個 div 遮罩實現真正的挖洞
- * 目標區域完全沒有覆蓋，可直接點擊
+ * 平台設計原則：
+ * - 一步只教一件事
+ * - 箭頭必須準確指向可點擊元素
+ * - 桌機與手機分開判斷位置
+ * - 可點擊、可跳過，不鎖死畫面
+ * 
+ * 步驟：
+ * Step 1：這裡切換你的身分（買家 / 代購者）
+ * Step 2：點這裡發佈需求（或行程）
+ * Step 3：有人回應後，點這裡開始對話
  */
 
 'use client';
@@ -10,8 +18,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useUserMode } from '@/components/UserModeProvider';
 
-const ONBOARDING_KEY = 'bangbuy_spotlight_completed';
-const DEBUG = true; // 開啟 debug 模式（測試完請關閉）
+const ONBOARDING_KEY = 'bangbuy_coach_mark_v2';
+const DEBUG = false; // 關閉 debug 模式
 
 interface TargetRect {
   top: number;
@@ -24,25 +32,59 @@ interface TargetRect {
   centerY: number;
 }
 
+// 🎯 三步驟引導設定
+interface CoachStep {
+  id: number;
+  selector: string;
+  title: string;
+  description: string;
+  ariaLabel?: string;
+}
+
+const COACH_STEPS: CoachStep[] = [
+  {
+    id: 1,
+    selector: '[aria-label*="當前身份"]',
+    title: '切換身分',
+    description: '點這裡切換你的身分：買家或代購者',
+    ariaLabel: '當前身份',
+  },
+  {
+    id: 2,
+    selector: 'a[href="/create"], a[href="/trips/create"]',
+    title: '發佈內容',
+    description: '點這裡發佈你的需求或行程',
+  },
+  {
+    id: 3,
+    selector: 'button[title="通知"], a[href="/chat"]',
+    title: '開始對話',
+    description: '有人回應後，點這裡開始對話',
+  },
+];
+
 export default function InteractiveOnboarding() {
   const { mode } = useUserMode();
   const [show, setShow] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<TargetRect | null>(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
 
-  // 計算目標按鈕的位置
-  const calculateTargetRect = useCallback(() => {
-    const targetEl = document.querySelector('[aria-label*="當前身份"]') as HTMLElement;
+  // 取得當前步驟
+  const step = COACH_STEPS[currentStep];
+
+  // 計算目標元素的位置
+  const calculateTargetRect = useCallback((selector: string) => {
+    const targetEl = document.querySelector(selector) as HTMLElement;
     if (!targetEl) {
-      if (DEBUG) console.log('❌ Target button not found');
+      if (DEBUG) console.log('❌ Target not found:', selector);
       return null;
     }
 
     const rect = targetEl.getBoundingClientRect();
-    const padding = 6; // 挖洞區域比按鈕大一點
+    const padding = 6;
     
-    const computed: TargetRect = {
+    return {
       top: rect.top - padding,
       left: rect.left - padding,
       width: rect.width + padding * 2,
@@ -52,28 +94,35 @@ export default function InteractiveOnboarding() {
       centerX: rect.left + rect.width / 2,
       centerY: rect.top + rect.height / 2,
     };
-
-    if (DEBUG) {
-      console.log('🎯 Target rect:', computed);
-      console.log('🎯 Window size:', window.innerWidth, window.innerHeight);
-    }
-
-    return computed;
   }, []);
 
   // 更新目標位置
   const updateTargetRect = useCallback(() => {
-    const rect = calculateTargetRect();
+    if (!step) return;
+    const rect = calculateTargetRect(step.selector);
     if (rect) {
       setTargetRect(rect);
       setIsMobile(window.innerWidth <= 768);
-      setWindowSize({ width: window.innerWidth, height: window.innerHeight });
     }
-  }, [calculateTargetRect]);
+  }, [step, calculateTargetRect]);
 
-  // 完成教學
-  const completeTour = useCallback(() => {
-    if (DEBUG) console.log('✅ Tour completed');
+  // 下一步
+  const nextStep = useCallback(() => {
+    if (currentStep < COACH_STEPS.length - 1) {
+      setCurrentStep(prev => prev + 1);
+    } else {
+      // 完成教學
+      setShow(false);
+      try {
+        localStorage.setItem(ONBOARDING_KEY, 'true');
+      } catch {
+        // localStorage 不可用時忽略
+      }
+    }
+  }, [currentStep]);
+
+  // 跳過教學
+  const skipTour = useCallback(() => {
     setShow(false);
     try {
       localStorage.setItem(ONBOARDING_KEY, 'true');
@@ -89,32 +138,32 @@ export default function InteractiveOnboarding() {
     try {
       const completed = localStorage.getItem(ONBOARDING_KEY);
       if (!completed) {
-        // 延遲顯示，確保 DOM 已渲染
         const timer = setTimeout(() => {
-          updateTargetRect();
-          // 使用 requestAnimationFrame double-tick 確保字體載入
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              updateTargetRect();
               setShow(true);
             });
           });
-        }, 1000);
+        }, 1200);
         return () => clearTimeout(timer);
       }
     } catch {
       // localStorage 不可用時不顯示
     }
-  }, [updateTargetRect]);
+  }, []);
+
+  // 當步驟改變時更新目標位置
+  useEffect(() => {
+    if (show) {
+      updateTargetRect();
+    }
+  }, [show, currentStep, updateTargetRect]);
 
   // 監聽 resize / scroll
   useEffect(() => {
     if (!show) return;
 
-    const handleUpdate = () => {
-      updateTargetRect();
-    };
-
+    const handleUpdate = () => updateTargetRect();
     window.addEventListener('resize', handleUpdate);
     window.addEventListener('scroll', handleUpdate, true);
 
@@ -124,65 +173,36 @@ export default function InteractiveOnboarding() {
     };
   }, [show, updateTargetRect]);
 
-  // 提升目標按鈕 z-index + 監聽點擊
+  // 提升目標元素 z-index
   useEffect(() => {
-    if (!show) return;
+    if (!show || !step) return;
 
-    const targetEl = document.querySelector('[aria-label*="當前身份"]') as HTMLElement;
-    if (!targetEl) {
-      if (DEBUG) console.log('❌ Target element not found');
-      return;
-    }
+    const targetEl = document.querySelector(step.selector) as HTMLElement;
+    if (!targetEl) return;
 
-    // 保存原始樣式
     const originalPosition = targetEl.style.position;
     const originalZIndex = targetEl.style.zIndex;
 
-    // 提升 z-index 讓按鈕在遮罩之上
     targetEl.style.position = 'relative';
-    targetEl.style.zIndex = '10002'; // 高於遮罩 (10000) 和發光邊框 (10001)
-
-    if (DEBUG) {
-      console.log('🎯 Target z-index set to 10002');
-      console.log('🎯 Target element:', targetEl);
-    }
-
-    const handleClick = () => {
-      if (DEBUG) console.log('🎯 Target clicked!');
-      completeTour();
-    };
-
-    targetEl.addEventListener('click', handleClick);
+    targetEl.style.zIndex = '10002';
 
     return () => {
-      // 恢復原始樣式
       targetEl.style.position = originalPosition;
       targetEl.style.zIndex = originalZIndex;
-      targetEl.removeEventListener('click', handleClick);
     };
-  }, [show, completeTour]);
+  }, [show, step]);
 
-  if (!show || !targetRect) return null;
+  if (!show || !targetRect || !step) return null;
 
-  // 文案依模式切換
-  const tooltipText = mode === 'requester' 
-    ? '點這裡切換成接單模式' 
-    : '點這裡切換成買家模式';
-
-  // 計算箭頭終點位置（指向按鈕頂部中心）
-  const arrowEndY = targetRect.top;
+  // 計算箭頭位置
   const arrowEndX = targetRect.centerX;
-  
-  // 箭頭起點（文案位置）
   const arrowStartY = isMobile 
-    ? targetRect.bottom + 50  // 手機：箭頭從下方開始
-    : targetRect.top - 50;    // 桌機：箭頭從上方開始
+    ? targetRect.bottom + 60
+    : targetRect.top - 60;
 
   return (
     <>
-      {/* ===== 4 個遮罩 div 實現真正的挖洞 ===== */}
-      
-      {/* 上方遮罩 */}
+      {/* ===== 半透明遮罩（挖洞）===== */}
       <div
         style={{
           position: 'fixed',
@@ -192,11 +212,9 @@ export default function InteractiveOnboarding() {
           height: targetRect.top,
           backgroundColor: 'rgba(0, 0, 0, 0.6)',
           zIndex: 10000,
-          pointerEvents: 'auto',
         }}
+        onClick={skipTour}
       />
-      
-      {/* 左側遮罩 */}
       <div
         style={{
           position: 'fixed',
@@ -206,11 +224,9 @@ export default function InteractiveOnboarding() {
           height: targetRect.height,
           backgroundColor: 'rgba(0, 0, 0, 0.6)',
           zIndex: 10000,
-          pointerEvents: 'auto',
         }}
+        onClick={skipTour}
       />
-      
-      {/* 右側遮罩 */}
       <div
         style={{
           position: 'fixed',
@@ -220,11 +236,9 @@ export default function InteractiveOnboarding() {
           height: targetRect.height,
           backgroundColor: 'rgba(0, 0, 0, 0.6)',
           zIndex: 10000,
-          pointerEvents: 'auto',
         }}
+        onClick={skipTour}
       />
-      
-      {/* 下方遮罩 */}
       <div
         style={{
           position: 'fixed',
@@ -234,11 +248,11 @@ export default function InteractiveOnboarding() {
           bottom: 0,
           backgroundColor: 'rgba(0, 0, 0, 0.6)',
           zIndex: 10000,
-          pointerEvents: 'auto',
         }}
+        onClick={skipTour}
       />
 
-      {/* ===== 發光邊框（不阻擋點擊）===== */}
+      {/* ===== 目標區域發光邊框 ===== */}
       <div
         style={{
           position: 'fixed',
@@ -246,16 +260,16 @@ export default function InteractiveOnboarding() {
           left: targetRect.left,
           width: targetRect.width,
           height: targetRect.height,
-          borderRadius: '20px',
-          border: '2px solid rgba(255, 255, 255, 0.5)',
-          boxShadow: '0 0 20px 4px rgba(255, 255, 255, 0.3)',
+          borderRadius: '12px',
+          border: '2px solid rgba(255, 255, 255, 0.7)',
+          boxShadow: '0 0 20px 4px rgba(96, 165, 250, 0.4)',
           zIndex: 10001,
-          pointerEvents: 'none', // 不阻擋點擊
-          animation: 'glow 2s ease-in-out infinite',
+          pointerEvents: 'none',
+          animation: 'coachGlow 2s ease-in-out infinite',
         }}
       />
 
-      {/* ===== 箭頭 + 文案（不阻擋點擊）===== */}
+      {/* ===== 箭頭 + 說明卡片 ===== */}
       <div
         style={{
           position: 'fixed',
@@ -264,121 +278,88 @@ export default function InteractiveOnboarding() {
           width: '100%',
           height: '100%',
           zIndex: 10001,
-          pointerEvents: 'none', // 不阻擋點擊
+          pointerEvents: 'none',
         }}
       >
         {/* SVG 箭頭 */}
-        <svg
-          width="100%"
-          height="100%"
-          style={{ position: 'absolute', top: 0, left: 0 }}
-        >
+        <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0 }}>
           <defs>
-            <marker
-              id="arrowhead"
-              markerWidth="10"
-              markerHeight="10"
-              refX="5"
-              refY="5"
-              orient="auto"
-            >
+            <marker id="coach-arrow" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto">
               <polygon points="0 0, 10 5, 0 10" fill="#60a5fa" />
             </marker>
           </defs>
-          
-          {isMobile ? (
-            // 手機：箭頭從下方指向上方
-            <line
-              x1={arrowEndX}
-              y1={arrowStartY}
-              x2={arrowEndX}
-              y2={targetRect.bottom + 8}
-              stroke="#60a5fa"
-              strokeWidth="3"
-              strokeLinecap="round"
-              markerEnd="url(#arrowhead)"
-              style={{ filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3))' }}
-            />
-          ) : (
-            // 桌機：箭頭從上方指向下方
-            <line
-              x1={arrowEndX}
-              y1={arrowStartY}
-              x2={arrowEndX}
-              y2={targetRect.top - 8}
-              stroke="#60a5fa"
-              strokeWidth="3"
-              strokeLinecap="round"
-              markerEnd="url(#arrowhead)"
-              style={{ filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3))' }}
-            />
-          )}
+          <line
+            x1={arrowEndX}
+            y1={arrowStartY}
+            x2={arrowEndX}
+            y2={isMobile ? targetRect.bottom + 8 : targetRect.top - 8}
+            stroke="#60a5fa"
+            strokeWidth="3"
+            strokeLinecap="round"
+            markerEnd="url(#coach-arrow)"
+            style={{ filter: 'drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3))' }}
+          />
         </svg>
 
-        {/* 文案 */}
+        {/* 說明卡片 */}
         <div
           style={{
             position: 'absolute',
-            top: isMobile ? `${arrowStartY + 10}px` : `${arrowStartY - 30}px`,
-            left: `${arrowEndX}px`,
-            transform: 'translateX(-50%)',
+            top: isMobile ? `${arrowStartY + 15}px` : `${arrowStartY - 100}px`,
+            left: `${Math.max(20, Math.min(arrowEndX - 140, window.innerWidth - 300))}px`,
+            pointerEvents: 'auto',
           }}
         >
-          <p
-            style={{
-              color: 'white',
-              fontWeight: 600,
-              fontSize: isMobile ? '15px' : '14px',
-              textShadow: '0 2px 8px rgba(0, 0, 0, 0.8)',
-              letterSpacing: '0.5px',
-              whiteSpace: 'nowrap',
-              textAlign: 'center',
-            }}
-          >
-            {tooltipText}
-          </p>
+          <div className="bg-white rounded-xl shadow-2xl p-4 w-[280px] border border-gray-100">
+            {/* 步驟指示器 */}
+            <div className="flex items-center gap-2 mb-3">
+              {COACH_STEPS.map((_, idx) => (
+                <div
+                  key={idx}
+                  className={`h-1.5 flex-1 rounded-full transition-colors ${
+                    idx <= currentStep ? 'bg-blue-500' : 'bg-gray-200'
+                  }`}
+                />
+              ))}
+            </div>
+
+            {/* 標題 */}
+            <h4 className="text-sm font-bold text-gray-900 mb-1">
+              {step.title}
+            </h4>
+
+            {/* 說明 */}
+            <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+              {step.description}
+            </p>
+
+            {/* 按鈕 */}
+            <div className="flex items-center justify-between">
+              <button
+                onClick={skipTour}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                跳過
+              </button>
+              <button
+                onClick={nextStep}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-xs font-bold rounded-lg transition-colors"
+              >
+                {currentStep < COACH_STEPS.length - 1 ? '下一步' : '完成'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Debug 模式 */}
-      {DEBUG && (
-        <>
-          <div
-            style={{
-              position: 'fixed',
-              top: targetRect.top,
-              left: targetRect.left,
-              width: targetRect.width,
-              height: targetRect.height,
-              border: '2px dashed red',
-              zIndex: 10002,
-              pointerEvents: 'none',
-            }}
-          />
-          <div
-            style={{
-              position: 'fixed',
-              top: targetRect.centerY - 4,
-              left: targetRect.centerX - 4,
-              width: '8px',
-              height: '8px',
-              borderRadius: '50%',
-              backgroundColor: 'red',
-              zIndex: 10002,
-              pointerEvents: 'none',
-            }}
-          />
-        </>
-      )}
-
       {/* 動畫 */}
       <style jsx global>{`
-        @keyframes glow {
+        @keyframes coachGlow {
           0%, 100% {
-            box-shadow: 0 0 20px 4px rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 20px 4px rgba(96, 165, 250, 0.4);
           }
           50% {
-            box-shadow: 0 0 30px 8px rgba(255, 255, 255, 0.5);
+            box-shadow: 0 0 30px 8px rgba(96, 165, 250, 0.6);
           }
         }
       `}</style>

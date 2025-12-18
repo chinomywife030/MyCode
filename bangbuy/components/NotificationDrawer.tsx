@@ -175,8 +175,8 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
-        {/* Header */}
-        <div className="p-4 border-b border-gray-100 bg-gradient-to-r from-orange-50 to-blue-50">
+        {/* Header - 使用中性色，不帶角色顏色 */}
+        <div className="p-4 border-b border-gray-100 bg-gray-50">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <h2 className="text-xl font-bold text-gray-900">通知</h2>
@@ -293,11 +293,11 @@ export default function NotificationDrawer({ isOpen, onClose }: NotificationDraw
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer - 使用中性灰色，不帶角色顏色 */}
         <div className="p-4 border-t border-gray-100 bg-gray-50">
           <button
             onClick={handleViewAll}
-            className="w-full py-2.5 text-sm font-semibold text-white bg-orange-500 hover:bg-orange-600 rounded-lg transition shadow-sm"
+            className="w-full py-2.5 text-sm font-semibold text-white bg-gray-700 hover:bg-gray-800 rounded-lg transition shadow-sm"
           >
             查看所有通知
             {notifications.length > 10 && (

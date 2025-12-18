@@ -8,10 +8,12 @@ import Navbar from '@/components/Navbar';
 import { useUserMode } from '@/components/UserModeProvider';
 import RoleSelectorModal from '@/components/RoleSelectorModal';
 import EmptyState from '@/components/EmptyState';
-import { navigateWithOneReload } from '@/lib/navigateWithReload';
 import InteractiveOnboarding from '@/components/InteractiveOnboarding';
 import { SearchBar, SearchEmptyState, FilterButton, FilterSheet } from '@/components/search';
 import ImageCarousel from '@/components/ImageCarousel';
+import { useEarlyAccess } from '@/hooks/useEarlyAccess';
+import { EarlyAccessNotice } from '@/components/EarlyAccessNotice';
+import { startChat } from '@/lib/chatNavigation';
 
 // ========== 國家列表（與發布許願單一致）==========
 const ALL_COUNTRIES = [
@@ -93,6 +95,9 @@ function HomeContent() {
   const [search, setSearch] = useState('');
   const [country, setCountry] = useState<'ALL' | string>('ALL');
   const [sort, setSort] = useState<'newest' | 'price_low' | 'price_high'>('newest');
+  // 🆕 日期篩選（主要用於行程）
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Debounce 搜尋詞（300ms）
   const debouncedSearch = useDebounce(search.trim(), 300);
@@ -101,20 +106,35 @@ function HomeContent() {
   const [showFilter, setShowFilter] = useState(false);
   const filterButtonRef = useRef<HTMLButtonElement>(null);
 
+  // 🌱 早期體驗使用狀況管理
+  const { state: earlyAccessState, checkContactStatus, recordContact, getNoticeMessage } = useEarlyAccess();
+  const [showEarlyAccessNotice, setShowEarlyAccessNotice] = useState(false);
+  const [earlyAccessNoticeType, setEarlyAccessNoticeType] = useState<'first_contact' | 'active_usage' | 'standard'>('standard');
+
+  // 🔐 聊天按鈕 loading 狀態（防止連點）
+  const [chatLoadingId, setChatLoadingId] = useState<string | null>(null);
+  const [chatError, setChatError] = useState<string | null>(null);
+
   // 計算 active filter 數量
-  const activeFilterCount = (country !== 'ALL' ? 1 : 0);
-  const hasFilters = !!(debouncedSearch || country !== 'ALL');
+  const activeFilterCount = (country !== 'ALL' ? 1 : 0) + (dateFrom || dateTo ? 1 : 0);
+  const hasFilters = !!(debouncedSearch || country !== 'ALL' || dateFrom || dateTo);
 
 
   // ========== fetchTrips：Server-side filtering ==========
-  const fetchTrips = useCallback(async (params: { search: string; country: string; sort: string }) => {
+  const fetchTrips = useCallback(async (params: { 
+    search: string; 
+    country: string; 
+    sort: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }) => {
     console.log('[fetchTrips]', params);
     
     try {
-      // 使用 JOIN 獲取代購者 profile 資料
+      // 🔧 修復：不使用顯式外鍵名稱，改用簡單查詢
       let q = supabase
         .from('trips')
-        .select('*, shopper:profiles!trips_shopper_id_fkey(name, avatar_url)');
+        .select('*');
 
       // Country Filter：trips 表用 destination 欄位 (文字)，需要用 ilike
       if (params.country !== 'ALL') {
@@ -127,7 +147,15 @@ function HomeContent() {
         q = q.or(`destination.ilike.%${params.search}%,description.ilike.%${params.search}%`);
       }
 
-      // Sort - trips 表沒有 service_fee，用 created_at
+      // 🆕 日期篩選（真實後端篩選）
+      if (params.dateFrom) {
+        q = q.gte('date', params.dateFrom);
+      }
+      if (params.dateTo) {
+        q = q.lte('date', params.dateTo);
+      }
+
+      // 🔧 修復：只用 created_at 排序（priority 可能不存在）
       q = q.order('created_at', { ascending: false });
 
       q = q.limit(50);
@@ -136,23 +164,7 @@ function HomeContent() {
 
       if (error) {
         console.error('[fetchTrips] Error:', error);
-        // 如果 JOIN 失敗，嘗試不用 JOIN
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('trips')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(50);
-        
-        if (fallbackError) {
-          setTrips([]);
-          return;
-        }
-        
-        const processedTrips = (fallbackData || []).map((trip: any) => ({
-          ...trip,
-          shopper: { name: trip.shopper_name || '匿名', avatar_url: '' }
-        }));
-        setTrips(processedTrips);
+        setTrips([]);
         return;
       }
 
@@ -171,14 +183,20 @@ function HomeContent() {
   }, []);
 
   // ========== fetchWishes：Server-side filtering ==========
-  const fetchWishes = useCallback(async (params: { search: string; country: string; sort: string }) => {
+  const fetchWishes = useCallback(async (params: { 
+    search: string; 
+    country: string; 
+    sort: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }) => {
     console.log('[fetchWishes]', params);
     
     try {
-      // 使用 JOIN 獲取發布者 profile 資料
+      // 🔧 修復：不使用顯式外鍵名稱，改用簡單查詢
       let q = supabase
         .from('wish_requests')
-        .select('*, buyer:profiles!wish_requests_buyer_id_fkey(name, avatar_url)')
+        .select('*')
         .eq('status', 'open');
 
       // Country Filter (server-side)
@@ -191,7 +209,15 @@ function HomeContent() {
         q = q.or(`title.ilike.%${params.search}%,description.ilike.%${params.search}%`);
       }
 
-      // Sort
+      // 🆕 日期篩選（按截止日期）
+      if (params.dateFrom) {
+        q = q.gte('deadline', params.dateFrom);
+      }
+      if (params.dateTo) {
+        q = q.lte('deadline', params.dateTo);
+      }
+
+      // 🔧 修復：只用基本排序（priority 可能不存在）
       switch (params.sort) {
         case 'price_low':
           q = q.order('budget', { ascending: true });
@@ -209,24 +235,7 @@ function HomeContent() {
 
       if (error) {
         console.error('[fetchWishes] Error:', error);
-        // 如果 JOIN 失敗（可能是沒有外鍵），嘗試不用 JOIN
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from('wish_requests')
-          .select('*')
-          .eq('status', 'open')
-          .order('created_at', { ascending: false })
-          .limit(50);
-        
-        if (fallbackError) {
-          setWishes([]);
-          return;
-        }
-        
-        const processedWishes = (fallbackData || []).map((wish: any) => ({
-          ...wish,
-          buyer: { name: '匿名', avatar_url: '' }
-        }));
-        setWishes(processedWishes);
+        setWishes([]);
         return;
       }
 
@@ -279,7 +288,7 @@ function HomeContent() {
     return () => { isMounted = false; };
   }, []);
 
-  // ========== 資料載入：依賴 debouncedSearch, country, sort ==========
+  // ========== 資料載入：依賴 debouncedSearch, country, sort, dateFrom, dateTo ==========
   useEffect(() => {
     let isMounted = true;
 
@@ -289,8 +298,8 @@ function HomeContent() {
 
       try {
         await Promise.all([
-          fetchTrips({ search: debouncedSearch, country, sort }),
-          fetchWishes({ search: debouncedSearch, country, sort }),
+          fetchTrips({ search: debouncedSearch, country, sort, dateFrom, dateTo }),
+          fetchWishes({ search: debouncedSearch, country, sort, dateFrom, dateTo }),
         ]);
       } catch (err: any) {
         if (isMounted) {
@@ -306,7 +315,7 @@ function HomeContent() {
     loadData();
 
     return () => { isMounted = false; };
-  }, [debouncedSearch, country, sort, fetchTrips, fetchWishes]);
+  }, [debouncedSearch, country, sort, dateFrom, dateTo, fetchTrips, fetchWishes]);
 
   // ========== 收藏功能（完全不變）==========
   const toggleFavorite = useCallback(async (e: React.MouseEvent, wishId: string) => {
@@ -378,6 +387,31 @@ function HomeContent() {
       
       <RoleSelectorModal />
       <Navbar />
+
+      {/* 🌱 早期體驗溫和提示（非阻斷式 Info Banner）*/}
+      <EarlyAccessNotice
+        type={earlyAccessNoticeType}
+        show={showEarlyAccessNotice}
+        onClose={() => setShowEarlyAccessNotice(false)}
+        autoHideDuration={8000}
+      />
+
+      {/* 🔐 聊天錯誤提示 Toast */}
+      {chatError && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
+          <div className="bg-red-500 text-white text-sm px-4 py-2 rounded-lg shadow-lg flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            {chatError}
+            <button onClick={() => setChatError(null)} className="ml-2 hover:text-red-200">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Hero Banner - 明確 32px padding */}
       <div 
@@ -586,14 +620,63 @@ function HomeContent() {
                     <option value="price_high">💰 價格：高到低</option>
                   </select>
                 </div>
+
+                {/* 🆕 日期篩選 */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                    {mode === 'requester' ? '行程日期（從）' : '截止日期（從）'}
+                  </label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    className={`
+                      w-full h-10 px-3
+                      bg-white border border-gray-200 rounded-lg
+                      text-sm font-medium text-gray-700
+                      outline-none cursor-pointer
+                      transition-all duration-200
+                      hover:border-gray-300
+                      focus:ring-2 focus:border-transparent
+                      ${mode === 'requester' 
+                        ? 'focus:ring-blue-500/30 focus:border-blue-500' 
+                        : 'focus:ring-orange-500/30 focus:border-orange-500'
+                      }
+                    `}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">
+                    {mode === 'requester' ? '行程日期（到）' : '截止日期（到）'}
+                  </label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    className={`
+                      w-full h-10 px-3
+                      bg-white border border-gray-200 rounded-lg
+                      text-sm font-medium text-gray-700
+                      outline-none cursor-pointer
+                      transition-all duration-200
+                      hover:border-gray-300
+                      focus:ring-2 focus:border-transparent
+                      ${mode === 'requester' 
+                        ? 'focus:ring-blue-500/30 focus:border-blue-500' 
+                        : 'focus:ring-orange-500/30 focus:border-orange-500'
+                      }
+                    `}
+                  />
+                </div>
               </div>
 
               {/* 快速清除按鈕 */}
-              {(country !== 'ALL' || sort !== 'newest') && (
+              {(country !== 'ALL' || sort !== 'newest' || dateFrom || dateTo) && (
                 <div className="mt-3 pt-3 border-t border-gray-200 flex justify-end">
                   <button
                     type="button"
-                    onClick={() => { setCountry('ALL'); setSort('newest'); }}
+                    onClick={() => { setCountry('ALL'); setSort('newest'); setDateFrom(''); setDateTo(''); }}
                     className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
                   >
                     ✕ 重置篩選
@@ -604,8 +687,8 @@ function HomeContent() {
           )}
 
           {/* Active Filter 提示（篩選面板收起時顯示）*/}
-          {!showFilter && (debouncedSearch || country !== 'ALL') && (
-            <div className="mt-2 flex items-center gap-2 text-xs">
+          {!showFilter && hasFilters && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
               {debouncedSearch && (
                 <span className={`
                   px-2 py-1 rounded-full flex items-center gap-1
@@ -624,8 +707,17 @@ function HomeContent() {
                   <button onClick={() => setCountry('ALL')} className="hover:opacity-70">×</button>
                 </span>
               )}
+              {(dateFrom || dateTo) && (
+                <span className={`
+                  px-2 py-1 rounded-full flex items-center gap-1
+                  ${mode === 'requester' ? 'bg-blue-50 text-blue-700' : 'bg-orange-50 text-orange-700'}
+                `}>
+                  📅 {dateFrom || '...'} ~ {dateTo || '...'}
+                  <button onClick={() => { setDateFrom(''); setDateTo(''); }} className="hover:opacity-70">×</button>
+                </span>
+              )}
               <button
-                onClick={() => { setSearch(''); setCountry('ALL'); setSort('newest'); }}
+                onClick={() => { setSearch(''); setCountry('ALL'); setSort('newest'); setDateFrom(''); setDateTo(''); }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 清除全部
@@ -761,20 +853,87 @@ function HomeContent() {
                           </svg>
                           聯繫代購
                         </div>
-                        <Link 
-                          href={`/chat?target=${trip.shopper_id}&source_type=trip&source_id=${trip.id}&source_title=${encodeURIComponent(trip.destination || '')}`}
-                          className="bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition-all duration-200 shadow-sm hover:shadow-md"
+                        <button 
+                          disabled={chatLoadingId === `trip:${trip.id}`}
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            
+                            const targetUserId = trip.shopper_id;
+                            const buttonId = `trip:${trip.id}`;
+                            
+                            if (!targetUserId) {
+                              setChatError('無法開啟聊天：代購者 ID 無效');
+                              return;
+                            }
+
+                            // 防止連點
+                            if (chatLoadingId) return;
+                            setChatLoadingId(buttonId);
+                            setChatError(null);
+
+                            try {
+                              // 🌱 早期體驗：檢查聯繫狀態（不阻斷）
+                              const contactCheck = await checkContactStatus(targetUserId);
+                              if (contactCheck.showNotice) {
+                                setEarlyAccessNoticeType(contactCheck.showNotice);
+                                setShowEarlyAccessNotice(true);
+                              }
+
+                              // 🔐 使用 get-or-create 獲取對話 ID（冪等性）
+                              const result = await startChat({
+                                targetUserId,
+                                sourceType: 'trip',
+                                sourceId: trip.id,
+                                sourceTitle: trip.destination || '',
+                              });
+
+                              if (!result.success || !result.url) {
+                                setChatError(result.error || '無法建立對話，請稍後再試');
+                                setChatLoadingId(null);
+                                return;
+                              }
+
+                              // 記錄已發起聯繫
+                              await recordContact(targetUserId);
+
+                              // 導向聊天室（使用 conversation ID）
+                              router.push(result.url);
+                            } catch (err: any) {
+                              console.error('[私訊按鈕] Error:', err);
+                              setChatError('發生錯誤，請稍後再試');
+                              setChatLoadingId(null);
+                            }
+                          }}
+                          className={`
+                            rounded-lg font-semibold transition-all duration-200 shadow-sm hover:shadow-md
+                            ${chatLoadingId === `trip:${trip.id}` 
+                              ? 'bg-blue-300 cursor-not-allowed' 
+                              : 'bg-blue-500 hover:bg-blue-600 text-white'
+                            }
+                          `}
                           style={{ 
                             height: '44px',
                             paddingLeft: '20px',
                             paddingRight: '20px',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            fontSize: '14px'
+                            fontSize: '14px',
+                            gap: '8px'
                           }}
                         >
-                          私訊
-                        </Link>
+                          {chatLoadingId === `trip:${trip.id}` ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span className="text-white">處理中...</span>
+                            </>
+                          ) : (
+                            '私訊'
+                          )}
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -897,39 +1056,87 @@ function HomeContent() {
                       {/* 🎯 私訊接單按鈕 - 放在 Link 外面 */}
                       <div className="px-5 pb-5">
                         <button
-                          onClick={(e) => {
+                          disabled={chatLoadingId === `wish:${wish.id}`}
+                          onClick={async (e) => {
                             e.preventDefault();
                             e.stopPropagation();
                             
-                            // 🔍 Debug：輸出完整願望物件
-                            console.log('🎁 [DEBUG] Wish 完整資料:', wish);
-                            console.log('🎁 [DEBUG] wish.buyer_id:', wish.buyer_id);
-                            console.log('🎁 [DEBUG] wish.id:', wish.id);
-                            
                             // 檢查 buyer_id 是否有效
                             const targetUserId = wish.buyer_id;
+                            const buttonId = `wish:${wish.id}`;
                             const isValidUUID = targetUserId && 
                                              targetUserId !== '00000000-0000-0000-0000-000000000000' &&
                                              targetUserId.length > 10;
                             
                             if (!isValidUUID) {
                               console.error('❌ buyer_id 無效或為全 0 UUID:', targetUserId);
-                              alert('無法開啟聊天：發布者 ID 無效');
+                              setChatError('無法開啟聊天：發布者 ID 無效');
                               return;
                             }
-                            
-                            console.log('✅ 跳轉到聊天頁面，目標用戶:', targetUserId);
-                            // 🔐 P0-2：傳入來源上下文
-                            const chatUrl = `/chat?target=${targetUserId}&source_type=wish_request&source_id=${wish.id}&source_title=${encodeURIComponent(wish.title || '')}`;
-                            // ✅ 使用 navigateWithOneReload 確保跳轉後資料正確
-                            navigateWithOneReload(router, chatUrl, `chat:wish:${wish.id}`);
+
+                            // 防止連點
+                            if (chatLoadingId) return;
+                            setChatLoadingId(buttonId);
+                            setChatError(null);
+
+                            try {
+                              // 🌱 早期體驗：檢查聯繫狀態（不阻斷）
+                              const contactCheck = await checkContactStatus(targetUserId);
+                              if (contactCheck.showNotice) {
+                                setEarlyAccessNoticeType(contactCheck.showNotice);
+                                setShowEarlyAccessNotice(true);
+                              }
+
+                              // 🔐 使用 get-or-create 獲取對話 ID（冪等性）
+                              const result = await startChat({
+                                targetUserId,
+                                sourceType: 'wish_request',
+                                sourceId: wish.id,
+                                sourceTitle: wish.title || '',
+                              });
+
+                              if (!result.success || !result.url) {
+                                setChatError(result.error || '無法建立對話，請稍後再試');
+                                setChatLoadingId(null);
+                                return;
+                              }
+
+                              // 記錄已發起聯繫
+                              await recordContact(targetUserId);
+
+                              // 導向聊天室（使用 conversation ID）
+                              router.push(result.url);
+                            } catch (err: any) {
+                              console.error('[私訊接單按鈕] Error:', err);
+                              setChatError('發生錯誤，請稍後再試');
+                              setChatLoadingId(null);
+                            }
                           }}
-                          className="w-full flex items-center justify-center gap-2 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg text-sm active:scale-95"
+                          className={`
+                            w-full flex items-center justify-center gap-2 py-3 font-bold rounded-xl 
+                            transition-all duration-200 shadow-md hover:shadow-lg text-sm
+                            ${chatLoadingId === `wish:${wish.id}`
+                              ? 'bg-orange-300 cursor-not-allowed'
+                              : 'bg-orange-500 hover:bg-orange-600 text-white active:scale-95'
+                            }
+                          `}
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                          </svg>
-                          <span>私訊接單</span>
+                          {chatLoadingId === `wish:${wish.id}` ? (
+                            <>
+                              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                              </svg>
+                              <span className="text-white">處理中...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                              </svg>
+                              <span>私訊接單</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>

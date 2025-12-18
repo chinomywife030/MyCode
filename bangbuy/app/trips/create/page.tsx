@@ -87,9 +87,15 @@ export default function CreateTripPage() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-6 text-center">
-          ✈️ 發布我的行程
-        </h2>
+        {/* 🎨 Header 使用橙色（代購者身份）*/}
+        <div className="bg-gradient-to-r from-orange-500 to-amber-500 -mx-8 -mt-8 mb-6 px-8 py-6 rounded-t-xl">
+          <h2 className="text-2xl font-bold text-white text-center">
+            ✈️ 發布我的行程
+          </h2>
+          <p className="text-white/80 text-sm text-center mt-1">
+            分享你的行程，接受代購委託
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
           
@@ -99,7 +105,7 @@ export default function CreateTripPage() {
               name="destination"
               required
               placeholder="例如：日本東京、韓國首爾..."
-              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:ring-orange-500 focus:border-orange-500"
               onChange={handleChange}
             />
           </div>
@@ -110,7 +116,7 @@ export default function CreateTripPage() {
               name="date"
               type="date"
               required
-              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:ring-orange-500 focus:border-orange-500"
               onChange={handleChange}
             />
           </div>
@@ -122,7 +128,7 @@ export default function CreateTripPage() {
               required
               rows={4}
               placeholder="例如：主要去迪士尼樂園，只接輕便物品，不接電器..."
-              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm"
+              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:ring-orange-500 focus:border-orange-500"
               onChange={handleChange}
             />
           </div>
@@ -134,14 +140,14 @@ export default function CreateTripPage() {
               <div className="flex-1 space-y-2">
                 <p className="text-xs text-amber-900 font-semibold leading-relaxed">
                   發布內容即表示您同意
-                  <Link href="/terms" target="_blank" className="text-blue-600 hover:underline font-bold mx-1">
+                  <Link href="/terms" target="_blank" className="text-orange-600 hover:underline font-bold mx-1">
                     《使用條款》
                   </Link>
                   ，並保證內容合法、不侵權。
                 </p>
                 <p className="text-xs text-amber-800 leading-relaxed">
                   本平台可在不另行通知下移除內容、限制功能或停權（詳見
-                  <Link href="/terms" target="_blank" className="text-blue-600 hover:underline font-semibold mx-1">
+                  <Link href="/terms" target="_blank" className="text-orange-600 hover:underline font-semibold mx-1">
                     《使用條款》
                   </Link>
                   ）。
@@ -157,11 +163,12 @@ export default function CreateTripPage() {
             >
               取消
             </Link>
+            {/* 🎨 按鈕使用橙色（代購者身份）*/}
             <button
               type="submit"
               disabled={loading}
               className={`w-2/3 flex justify-center py-3 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white 
-                ${loading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}`}
+                ${loading ? 'bg-gray-400' : 'bg-orange-500 hover:bg-orange-600'}`}
             >
               {loading ? '發布中...' : '確認發布'}
             </button>

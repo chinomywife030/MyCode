@@ -221,7 +221,7 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
 
     try {
       const { data, error: rpcError } = await safeRpc('mark_notification_read', {
-        p_notification_id: id,
+        p_id: id,
       });
 
       if (rpcError) {

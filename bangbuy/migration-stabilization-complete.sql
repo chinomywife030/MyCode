@@ -521,3 +521,4 @@ SELECT '✅ Triggers configured' AS status;
 SELECT '🎉 Migration complete - system stabilized!' AS status;
 
 
+

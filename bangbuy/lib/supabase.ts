@@ -29,6 +29,9 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     persistSession: isLocalStorageAvailable(),
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // 🆕 設定較短的 token 刷新間隔（預設是過期前 60 秒，改為 5 分鐘前）
+    // 這樣切換頁面時更不容易遇到過期問題
+    flowType: 'pkce',
     storage: isLocalStorageAvailable() ? undefined : {
       // 如果 localStorage 不可用，使用內存存儲（Edge 私密模式的後備方案）
       getItem: (key: string) => {
@@ -54,3 +57,34 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     }
   }
 });
+
+// 🆕 設定 visibility change 監聽器，頁面重新激活時嘗試刷新 session
+if (typeof window !== 'undefined') {
+  let lastVisibilityCheck = 0;
+  const VISIBILITY_COOLDOWN = 30000; // 30 秒內不重複檢查
+
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible') {
+      const now = Date.now();
+      if (now - lastVisibilityCheck < VISIBILITY_COOLDOWN) return;
+      lastVisibilityCheck = now;
+
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          // 檢查 token 是否快過期（5 分鐘內）
+          const expiresAt = session.expires_at;
+          if (expiresAt) {
+            const expiresIn = expiresAt * 1000 - now;
+            if (expiresIn < 5 * 60 * 1000 && expiresIn > 0) {
+              console.log('[supabase] Token expiring soon, refreshing...');
+              await supabase.auth.refreshSession();
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[supabase] Session check error:', err);
+      }
+    }
+  });
+}
