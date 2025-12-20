@@ -24,7 +24,10 @@ export default function BottomNav() {
   return (
     <>
       {/* 手機版底部導航 - active 色彩跟隨身份模式 */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 shadow-lg">
+      <nav 
+        className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40 shadow-lg"
+        data-tour="bottom-nav"
+      >
         <div className="flex items-center justify-around h-16 px-2">
           
           {/* Home */}

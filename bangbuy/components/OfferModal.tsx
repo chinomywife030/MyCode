@@ -6,6 +6,7 @@
  */
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { createOffer } from '@/lib/offers';
 
 interface OfferModalProps {
@@ -145,9 +146,17 @@ export default function OfferModal({
               maxLength={500}
               disabled={isSubmitting}
             />
-            <p className="text-xs text-gray-400 text-right mt-1">
-              {message.length}/500
-            </p>
+            <div className="flex items-center justify-between mt-1">
+              <p className="text-xs text-gray-500">
+                建議寫清楚運送方式與時效
+                <Link href="/shipping-to-taiwan" target="_blank" className="text-blue-500 hover:text-blue-600 underline underline-offset-2 ml-1">
+                  查看運回台灣方式
+                </Link>
+              </p>
+              <p className="text-xs text-gray-400">
+                {message.length}/500
+              </p>
+            </div>
           </div>
 
           {/* Error */}

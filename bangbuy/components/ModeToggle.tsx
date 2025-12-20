@@ -18,7 +18,7 @@ interface ModeToggleProps {
   className?: string;
 }
 
-export default function ModeToggle({ className = '' }: ModeToggleProps) {
+export default function ModeToggle({ className = '', ...props }: ModeToggleProps & { 'data-tour'?: string }) {
   const { mode, setMode, toggleMode } = useUserMode();
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -45,6 +45,7 @@ export default function ModeToggle({ className = '' }: ModeToggleProps) {
       {/* 身分膠囊 */}
       <button
         onClick={handleToggle}
+        data-tour="mode-toggle"
         className={`
           inline-flex items-center gap-1.5 rounded-full font-semibold
           transition-all duration-200 ease-out

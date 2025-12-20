@@ -30,6 +30,43 @@ function getSupabaseAdmin() {
   return createClient(supabaseUrl, supabaseServiceKey);
 }
 
+// 從 profiles 或 auth.users 獲取用戶 email
+async function getUserEmail(supabase: any, userId: string): Promise<string | null> {
+  // 1. 先嘗試從 profiles 獲取
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('id', userId)
+    .maybeSingle();
+  
+  if (profile?.email) {
+    return profile.email;
+  }
+  
+  // 2. 如果 profiles 沒有 email，從 auth.users 獲取（需要 service role）
+  try {
+    const { data: authUser, error } = await supabase.auth.admin.getUserById(userId);
+    if (authUser?.user?.email) {
+      console.log(`[Email API] Got email from auth.users for user ${userId}`);
+      
+      // 同步到 profiles 表
+      await supabase
+        .from('profiles')
+        .update({ email: authUser.user.email })
+        .eq('id', userId);
+      
+      return authUser.user.email;
+    }
+    if (error) {
+      console.warn(`[Email API] Failed to get email from auth.users: ${error.message}`);
+    }
+  } catch (err: any) {
+    console.warn(`[Email API] Error getting email from auth.users: ${err.message}`);
+  }
+  
+  return null;
+}
+
 // 診斷輸出 helper
 function logDiagnostics(type: string, offerId: string) {
   console.log('═'.repeat(60));
@@ -60,7 +97,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin();
 
-    // 獲取報價詳細資料
+    // 獲取報價詳細資料（使用 maybeSingle 避免 406 錯誤）
     const { data: offer, error: offerError } = await supabase
       .from('offers')
       .select(`
@@ -74,36 +111,68 @@ export async function POST(request: NextRequest) {
         status
       `)
       .eq('id', offerId)
-      .single();
+      .maybeSingle();
 
-    if (offerError || !offer) {
-      console.error('[Email API] Offer not found:', offerError);
+    if (offerError) {
+      console.error('[Email API] Error fetching offer:', offerError);
       return NextResponse.json(
-        { success: false, error: 'Offer not found' },
+        { success: false, error: `Database error: ${offerError.message}`, emailSent: false },
+        { status: 500 }
+      );
+    }
+    
+    if (!offer) {
+      console.error('[Email API] Offer not found:', offerId);
+      return NextResponse.json(
+        { success: false, error: 'Offer not found', emailSent: false },
         { status: 404 }
       );
     }
 
-    // 獲取買家資料
-    const { data: buyerProfile } = await supabase
+    // 獲取買家資料（使用 maybeSingle）
+    const { data: buyerProfile, error: buyerError } = await supabase
       .from('profiles')
-      .select('id, name, email')
+      .select('id, name')
       .eq('id', offer.buyer_id)
-      .single();
+      .maybeSingle();
+    
+    if (buyerError) {
+      console.warn('[Email API] Error fetching buyer profile:', buyerError);
+    }
+    
+    // 獲取買家 email（從 profiles 或 auth.users）
+    const buyerEmail = await getUserEmail(supabase, offer.buyer_id);
 
-    // 獲取代購資料
-    const { data: shopperProfile } = await supabase
+    // 獲取代購資料（使用 maybeSingle）
+    const { data: shopperProfile, error: shopperError } = await supabase
       .from('profiles')
-      .select('id, name, email')
+      .select('id, name')
       .eq('id', offer.shopper_id)
-      .single();
+      .maybeSingle();
+    
+    if (shopperError) {
+      console.warn('[Email API] Error fetching shopper profile:', shopperError);
+    }
+    
+    // 獲取代購 email（從 profiles 或 auth.users）
+    const shopperEmail = await getUserEmail(supabase, offer.shopper_id);
 
-    // 獲取需求資料
-    const { data: wish } = await supabase
+    // 獲取需求資料（使用 maybeSingle）
+    const { data: wish, error: wishError } = await supabase
       .from('wish_requests')
       .select('id, title')
       .eq('id', offer.wish_id)
-      .single();
+      .maybeSingle();
+    
+    if (wishError) {
+      console.warn('[Email API] Error fetching wish:', wishError);
+    }
+    
+    // Log 資料取得結果
+    console.log(`  買家: ${buyerProfile?.name || '(unknown)'} <${buyerEmail || 'no email'}>`);
+    console.log(`  代購: ${shopperProfile?.name || '(unknown)'} <${shopperEmail || 'no email'}>`);
+    console.log(`  需求: ${wish?.title || '(unknown)'}`);
+    console.log(`  金額: ${offer.amount} ${offer.currency || 'TWD'}`);
 
     // 檢查用戶 Email 設定
     async function checkEmailPreference(userId: string, category: string): Promise<boolean> {
@@ -121,15 +190,18 @@ export async function POST(request: NextRequest) {
         // 檢查買家是否允許報價通知
         const canSend = await checkEmailPreference(offer.buyer_id, 'offer_created');
         if (!canSend) {
-          return NextResponse.json({ success: true, skipped: true, reason: 'User disabled offer notifications' });
+          console.log('[Email API] Skipped: User disabled offer notifications');
+          return NextResponse.json({ success: true, skipped: true, reason: 'User disabled offer notifications', emailSent: false });
         }
 
-        if (!buyerProfile?.email) {
-          return NextResponse.json({ success: true, skipped: true, reason: 'Buyer has no email' });
+        if (!buyerEmail) {
+          console.log('[Email API] Skipped: Buyer has no email');
+          return NextResponse.json({ success: true, skipped: true, reason: 'Buyer has no email', emailSent: false });
         }
 
+        console.log(`[Email API] Sending offer_created email to: ${buyerEmail}`);
         result = await sendOfferCreatedEmail({
-          buyerEmail: buyerProfile.email,
+          buyerEmail: buyerEmail,
           buyerId: offer.buyer_id,
           offerId: offer.id,
           buyerName: buyerProfile?.name || '',
@@ -147,15 +219,18 @@ export async function POST(request: NextRequest) {
         // 檢查代購是否允許接受/拒絕通知
         const canSend = await checkEmailPreference(offer.shopper_id, 'offer_accepted');
         if (!canSend) {
-          return NextResponse.json({ success: true, skipped: true, reason: 'User disabled accept/reject notifications' });
+          console.log('[Email API] Skipped: User disabled accept/reject notifications');
+          return NextResponse.json({ success: true, skipped: true, reason: 'User disabled accept/reject notifications', emailSent: false });
         }
 
-        if (!shopperProfile?.email) {
-          return NextResponse.json({ success: true, skipped: true, reason: 'Shopper has no email' });
+        if (!shopperEmail) {
+          console.log('[Email API] Skipped: Shopper has no email');
+          return NextResponse.json({ success: true, skipped: true, reason: 'Shopper has no email', emailSent: false });
         }
 
+        console.log(`[Email API] Sending offer_accepted email to: ${shopperEmail}`);
         result = await sendOfferAcceptedEmail({
-          shopperEmail: shopperProfile.email,
+          shopperEmail: shopperEmail,
           shopperId: offer.shopper_id,
           offerId: offer.id,
           shopperName: shopperProfile?.name || '',
@@ -173,15 +248,18 @@ export async function POST(request: NextRequest) {
         // 檢查代購是否允許接受/拒絕通知
         const canSend = await checkEmailPreference(offer.shopper_id, 'offer_rejected');
         if (!canSend) {
-          return NextResponse.json({ success: true, skipped: true, reason: 'User disabled accept/reject notifications' });
+          console.log('[Email API] Skipped: User disabled accept/reject notifications');
+          return NextResponse.json({ success: true, skipped: true, reason: 'User disabled accept/reject notifications', emailSent: false });
         }
 
-        if (!shopperProfile?.email) {
-          return NextResponse.json({ success: true, skipped: true, reason: 'Shopper has no email' });
+        if (!shopperEmail) {
+          console.log('[Email API] Skipped: Shopper has no email');
+          return NextResponse.json({ success: true, skipped: true, reason: 'Shopper has no email', emailSent: false });
         }
 
+        console.log(`[Email API] Sending offer_rejected email to: ${shopperEmail}`);
         result = await sendOfferRejectedEmail({
-          shopperEmail: shopperProfile.email,
+          shopperEmail: shopperEmail,
           shopperId: offer.shopper_id,
           offerId: offer.id,
           shopperName: shopperProfile?.name || '',

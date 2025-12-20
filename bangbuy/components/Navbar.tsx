@@ -120,6 +120,17 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* 桌機版：運回台灣方式連結 */}
+            <Link 
+              href="/shipping-to-taiwan" 
+              className="hidden md:flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-blue-600 px-3 py-2 rounded-lg hover:bg-gray-50 transition"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+              <span>運回台灣方式</span>
+            </Link>
+            
             {user && (
               <>
                 {/* 🔔 通知按鈕 */}
@@ -193,6 +204,11 @@ export default function Navbar() {
           <div className="space-y-1">
             <Link href="/" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
               <span className="text-xl">🏠</span> 首頁
+            </Link>
+
+            {/* 📦 運回台灣方式（靠上位置，確保曝光）*/}
+            <Link href="/shipping-to-taiwan" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
+              <span className="text-xl">📦</span> 運回台灣方式
             </Link>
 
             <Link href="/calculator" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">

@@ -12,3 +12,4 @@ UPDATE wish_requests SET updated_at = created_at WHERE updated_at IS NULL;
 SELECT 'updated_at 欄位已添加' AS status, count(*) AS wish_count FROM wish_requests;
 
 
+

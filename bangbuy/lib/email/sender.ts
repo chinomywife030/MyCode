@@ -1,7 +1,14 @@
 /**
- * 📧 Email 發送模組 - 單一入口
- * 支援 Resend API（優先）或 SMTP fallback
- * 包含去重複（dedupe）與節流（throttle）機制
+ * 📧 Email 發送模組 - Server-Only 單一入口
+ * 
+ * ⚠️ 此模組只能在 Server 端使用（API Routes, Server Actions）
+ * 絕對不可在 Client Component 直接呼叫
+ * 
+ * 功能：
+ * - Resend API 發送
+ * - 完整 env 檢查與錯誤日誌
+ * - 去重複與節流機制
+ * - 開發模式模擬發送
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -13,6 +20,7 @@ export type EmailCategory =
   | 'offer_accepted' 
   | 'offer_rejected' 
   | 'message_digest'
+  | 'test'
   | 'system';
 
 export interface SendEmailParams {
@@ -21,8 +29,8 @@ export interface SendEmailParams {
   html: string;
   text?: string;
   category: EmailCategory;
-  dedupeKey: string;
-  userId: string;
+  dedupeKey?: string;
+  userId?: string;
 }
 
 export interface SendEmailResult {
@@ -31,95 +39,267 @@ export interface SendEmailResult {
   error?: string;
   skipped?: boolean;
   reason?: string;
+  envStatus?: Record<string, boolean>;
 }
 
-// ========== Configuration ==========
+// ========== Environment Variables ==========
 
-const DEDUPE_WINDOW_MINUTES = 10;
-const THROTTLE_WINDOW_MINUTES = 10;
-const THROTTLE_MAX_EMAILS = 3;
+function getEnvConfig() {
+  const config = {
+    RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+    EMAIL_FROM: process.env.EMAIL_FROM || '',
+    APP_URL: process.env.APP_URL || 'http://localhost:3000',
+    EMAIL_SEND_IN_DEV: process.env.EMAIL_SEND_IN_DEV === 'true',
+    NODE_ENV: process.env.NODE_ENV || 'development',
+    SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+    SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  };
+  
+  return config;
+}
 
-// 環境變數
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = process.env.SMTP_PORT;
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const EMAIL_FROM = process.env.EMAIL_FROM || 'BangBuy <support@bangbuy.app>';
-const APP_URL = process.env.APP_URL || 'http://localhost:3000';
+function validateEnv(): { valid: boolean; missing: string[]; envStatus: Record<string, boolean> } {
+  const config = getEnvConfig();
+  const missing: string[] = [];
+  
+  const envStatus: Record<string, boolean> = {
+    RESEND_API_KEY: !!config.RESEND_API_KEY,
+    EMAIL_FROM: !!config.EMAIL_FROM,
+    APP_URL: !!config.APP_URL,
+    SUPABASE_URL: !!config.SUPABASE_URL,
+  };
+  
+  if (!config.RESEND_API_KEY) missing.push('RESEND_API_KEY');
+  if (!config.EMAIL_FROM) missing.push('EMAIL_FROM');
+  
+  return {
+    valid: missing.length === 0,
+    missing,
+    envStatus,
+  };
+}
 
-// Supabase Admin Client (for server-side operations)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// ========== Logging ==========
+
+function logEmailAttempt(params: SendEmailParams, extra?: Record<string, any>) {
+  const config = getEnvConfig();
+  const timestamp = new Date().toISOString();
+  
+  console.log('═'.repeat(70));
+  console.log(`[Email] ${timestamp}`);
+  console.log(`  NODE_ENV: ${config.NODE_ENV}`);
+  console.log(`  EMAIL_FROM: ${config.EMAIL_FROM || '(not set)'}`);
+  console.log(`  EMAIL_SEND_IN_DEV: ${config.EMAIL_SEND_IN_DEV}`);
+  console.log(`  To: ${params.to}`);
+  console.log(`  Subject: ${params.subject}`);
+  console.log(`  Category: ${params.category}`);
+  if (params.dedupeKey) console.log(`  DedupeKey: ${params.dedupeKey}`);
+  if (extra) {
+    Object.entries(extra).forEach(([key, value]) => {
+      console.log(`  ${key}: ${value}`);
+    });
+  }
+  console.log('═'.repeat(70));
+}
+
+function logError(message: string, error?: any) {
+  console.error(`[Email] ❌ ${message}`);
+  if (error) {
+    if (typeof error === 'object') {
+      console.error(`[Email] Error details:`, JSON.stringify(error, null, 2));
+    } else {
+      console.error(`[Email] Error:`, error);
+    }
+  }
+}
+
+function logSuccess(messageId: string) {
+  console.log(`[Email] ✅ Sent successfully`);
+  console.log(`[Email] Provider ID: ${messageId}`);
+}
+
+// ========== Supabase Admin Client ==========
 
 function getSupabaseAdmin() {
-  if (!supabaseServiceKey) {
-    console.warn('[Email] No SUPABASE_SERVICE_ROLE_KEY, using anon key for email operations');
-    return createClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!);
+  const config = getEnvConfig();
+  
+  if (!config.SUPABASE_URL) {
+    console.warn('[Email] NEXT_PUBLIC_SUPABASE_URL not set');
+    return null;
   }
-  return createClient(supabaseUrl, supabaseServiceKey);
+  
+  if (config.SUPABASE_SERVICE_KEY) {
+    return createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_KEY);
+  }
+  
+  // Fallback to anon key (limited permissions)
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (anonKey) {
+    console.warn('[Email] Using anon key for email operations (limited permissions)');
+    return createClient(config.SUPABASE_URL, anonKey);
+  }
+  
+  return null;
 }
 
 // ========== Dedupe & Throttle ==========
 
+const DEDUPE_WINDOW_MINUTES = 10;
+const THROTTLE_WINDOW_MINUTES = 10;
+const THROTTLE_MAX_EMAILS = 5;
+
 async function checkDedupeAndThrottle(
-  userId: string,
-  dedupeKey: string
+  userId: string | undefined,
+  dedupeKey: string | undefined
 ): Promise<{ canSend: boolean; reason?: string }> {
+  if (!dedupeKey && !userId) {
+    return { canSend: true };
+  }
+  
   try {
     const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      console.warn('[Email] No Supabase client for dedupe check, allowing send');
+      return { canSend: true };
+    }
+    
     const windowStart = new Date(Date.now() - DEDUPE_WINDOW_MINUTES * 60 * 1000).toISOString();
 
-    // 1. 檢查去重複：同一 dedupeKey 在時間窗口內是否已存在
-    const { data: existingDedupe } = await supabase
-      .from('email_outbox')
-      .select('id')
-      .eq('dedupe_key', dedupeKey)
-      .gte('created_at', windowStart)
-      .in('status', ['sent', 'queued'])
-      .limit(1);
+    // 1. 檢查去重複
+    if (dedupeKey) {
+      const { data: existingDedupe } = await supabase
+        .from('email_outbox')
+        .select('id')
+        .eq('dedupe_key', dedupeKey)
+        .gte('created_at', windowStart)
+        .in('status', ['sent', 'queued'])
+        .limit(1);
 
-    if (existingDedupe && existingDedupe.length > 0) {
-      return { canSend: false, reason: `Dedupe: ${dedupeKey} already sent within ${DEDUPE_WINDOW_MINUTES} minutes` };
+      if (existingDedupe && existingDedupe.length > 0) {
+        return { canSend: false, reason: `Dedupe: ${dedupeKey} already sent within ${DEDUPE_WINDOW_MINUTES} minutes` };
+      }
     }
 
-    // 2. 檢查節流：同一用戶在時間窗口內的發送數量
-    const throttleStart = new Date(Date.now() - THROTTLE_WINDOW_MINUTES * 60 * 1000).toISOString();
-    const { count } = await supabase
-      .from('email_outbox')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', throttleStart)
-      .in('status', ['sent', 'queued']);
+    // 2. 檢查節流
+    if (userId) {
+      const throttleStart = new Date(Date.now() - THROTTLE_WINDOW_MINUTES * 60 * 1000).toISOString();
+      const { count } = await supabase
+        .from('email_outbox')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', userId)
+        .gte('created_at', throttleStart)
+        .in('status', ['sent', 'queued']);
 
-    if (count !== null && count >= THROTTLE_MAX_EMAILS) {
-      return { canSend: false, reason: `Throttle: User ${userId} exceeded ${THROTTLE_MAX_EMAILS} emails in ${THROTTLE_WINDOW_MINUTES} minutes` };
+      if (count !== null && count >= THROTTLE_MAX_EMAILS) {
+        return { canSend: false, reason: `Throttle: User ${userId} exceeded ${THROTTLE_MAX_EMAILS} emails in ${THROTTLE_WINDOW_MINUTES} minutes` };
+      }
     }
 
     return { canSend: true };
   } catch (error) {
     console.error('[Email] Dedupe/Throttle check failed:', error);
-    // 如果檢查失敗，允許發送（fail-open）
-    return { canSend: true };
+    return { canSend: true }; // Fail-open
   }
 }
 
-// ========== Email Sending ==========
+// ========== Outbox Recording ==========
+
+async function recordToOutbox(params: {
+  userId?: string;
+  to: string;
+  subject: string;
+  category: EmailCategory;
+  dedupeKey?: string;
+  status: 'queued' | 'sent' | 'failed' | 'skipped';
+  error?: string;
+  messageId?: string;
+}): Promise<string | null> {
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      console.warn('[Email] No Supabase client for outbox recording');
+      return null;
+    }
+    
+    const { data, error } = await supabase
+      .from('email_outbox')
+      .insert({
+        user_id: params.userId || null,
+        to_email: params.to,
+        subject: params.subject,
+        category: params.category,
+        dedupe_key: params.dedupeKey || null,
+        status: params.status,
+        error: params.error,
+        message_id: params.messageId,
+        sent_at: params.status === 'sent' ? new Date().toISOString() : null,
+      })
+      .select('id')
+      .single();
+
+    if (error) {
+      // Table might not exist, that's OK
+      if (error.code !== '42P01') {
+        console.warn('[Email] Failed to record to outbox:', error.message);
+      }
+      return null;
+    }
+
+    return data?.id || null;
+  } catch (error) {
+    console.warn('[Email] Outbox record error:', error);
+    return null;
+  }
+}
+
+async function updateOutboxStatus(
+  outboxId: string | null,
+  result: SendEmailResult
+): Promise<void> {
+  if (!outboxId) return;
+
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) return;
+    
+    await supabase
+      .from('email_outbox')
+      .update({
+        status: result.success ? 'sent' : 'failed',
+        error: result.error,
+        message_id: result.messageId,
+        sent_at: result.success ? new Date().toISOString() : null,
+      })
+      .eq('id', outboxId);
+  } catch (error) {
+    console.warn('[Email] Failed to update outbox status:', error);
+  }
+}
+
+// ========== Resend API ==========
 
 async function sendViaResend(params: SendEmailParams): Promise<SendEmailResult> {
-  if (!RESEND_API_KEY) {
-    return { success: false, error: 'RESEND_API_KEY not configured' };
+  const config = getEnvConfig();
+  
+  if (!config.RESEND_API_KEY) {
+    logError('RESEND_API_KEY not configured');
+    return { success: false, error: 'Missing env: RESEND_API_KEY' };
+  }
+  
+  if (!config.EMAIL_FROM) {
+    logError('EMAIL_FROM not configured');
+    return { success: false, error: 'Missing env: EMAIL_FROM' };
   }
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
+        'Authorization': `Bearer ${config.RESEND_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: EMAIL_FROM,
+        from: config.EMAIL_FROM,
         to: params.to,
         subject: params.subject,
         html: params.html,
@@ -133,72 +313,91 @@ async function sendViaResend(params: SendEmailParams): Promise<SendEmailResult> 
     const data = await response.json();
 
     if (!response.ok) {
-      return { success: false, error: data.message || 'Resend API error' };
+      // 完整輸出 Resend 錯誤
+      logError('Resend API error', {
+        status: response.status,
+        statusText: response.statusText,
+        body: data,
+      });
+      
+      // 檢查常見錯誤
+      const errorMessage = data.message || data.error || 'Unknown Resend error';
+      
+      if (errorMessage.includes('domain') || errorMessage.includes('verified')) {
+        logError('Domain verification issue - EMAIL_FROM domain may not be verified in Resend');
+      }
+      if (errorMessage.includes('api_key') || errorMessage.includes('unauthorized')) {
+        logError('API key issue - RESEND_API_KEY may be invalid or have insufficient permissions');
+      }
+      
+      return { success: false, error: `Resend: ${errorMessage}` };
     }
 
     return { success: true, messageId: data.id };
   } catch (error: any) {
-    return { success: false, error: error.message || 'Resend request failed' };
-  }
-}
-
-async function sendViaSMTP(params: SendEmailParams): Promise<SendEmailResult> {
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    return { success: false, error: 'SMTP not configured' };
-  }
-
-  try {
-    // 動態 import nodemailer（只在需要時載入）
-    const nodemailer = await import('nodemailer');
-    
-    const transporter = nodemailer.createTransport({
-      host: SMTP_HOST,
-      port: parseInt(SMTP_PORT || '587'),
-      secure: SMTP_PORT === '465',
-      auth: {
-        user: SMTP_USER,
-        pass: SMTP_PASS,
-      },
-    });
-
-    const info = await transporter.sendMail({
-      from: EMAIL_FROM,
-      to: params.to,
-      subject: params.subject,
-      html: params.html,
-      text: params.text,
-    });
-
-    return { success: true, messageId: info.messageId };
-  } catch (error: any) {
-    return { success: false, error: error.message || 'SMTP send failed' };
+    logError('Resend request failed', error);
+    return { success: false, error: `Network error: ${error.message || 'Unknown'}` };
   }
 }
 
 // ========== Main Export ==========
 
 /**
- * 發送 Email（單一入口）
- * - 自動選擇 Resend 或 SMTP
- * - 支援去重複與節流
- * - 失敗不會阻斷主流程
+ * 發送 Email（Server-Only 單一入口）
+ * 
+ * @param params - 發送參數
+ * @returns SendEmailResult - 發送結果
+ * 
+ * ⚠️ 只能在 Server 端呼叫
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
+  const config = getEnvConfig();
   const { to, subject, category, dedupeKey, userId } = params;
-
-  // 開發模式：只 log 不發送
-  const isDev = process.env.NODE_ENV === 'development' && !process.env.EMAIL_SEND_IN_DEV;
+  
+  // 1. 驗證環境變數
+  const envValidation = validateEnv();
+  
+  // 2. Log 發送嘗試
+  logEmailAttempt(params, {
+    'Env Valid': envValidation.valid,
+    'Missing Env': envValidation.missing.join(', ') || 'none',
+  });
+  
+  // 3. 如果缺少必要 env，直接返回錯誤
+  if (!envValidation.valid) {
+    const errorMsg = `Missing required environment variables: ${envValidation.missing.join(', ')}`;
+    logError(errorMsg);
+    
+    await recordToOutbox({
+      userId,
+      to,
+      subject,
+      category,
+      dedupeKey,
+      status: 'failed',
+      error: errorMsg,
+    });
+    
+    return { 
+      success: false, 
+      error: errorMsg,
+      envStatus: envValidation.envStatus,
+    };
+  }
   
   try {
-    // 1. 檢查去重複與節流
+    // 4. 檢查去重複與節流
     const { canSend, reason } = await checkDedupeAndThrottle(userId, dedupeKey);
     
     if (!canSend) {
       console.log(`[Email] Skipped: ${reason}`);
       
-      // 記錄到 outbox（status = skipped）
       await recordToOutbox({
-        ...params,
+        userId,
+        to,
+        subject,
+        category,
+        dedupeKey,
         status: 'skipped',
         error: reason,
       });
@@ -206,58 +405,63 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       return { success: true, skipped: true, reason };
     }
 
-    // 2. 開發模式處理
-    if (isDev) {
-      console.log('═'.repeat(60));
-      console.log('[Email] DEV MODE - Would send email:');
-      console.log(`  To: ${to}`);
-      console.log(`  Subject: ${subject}`);
-      console.log(`  Category: ${category}`);
-      console.log(`  DedupeKey: ${dedupeKey}`);
-      console.log('═'.repeat(60));
+    // 5. 開發模式處理
+    const isDev = config.NODE_ENV === 'development';
+    
+    if (isDev && !config.EMAIL_SEND_IN_DEV) {
+      console.log('[Email] 📧 DEV MODE - Email simulated (not actually sent)');
+      console.log('[Email] Set EMAIL_SEND_IN_DEV=true to send real emails in development');
+      
+      const devMessageId = `dev-${Date.now()}`;
       
       await recordToOutbox({
-        ...params,
+        userId,
+        to,
+        subject,
+        category,
+        dedupeKey,
         status: 'sent',
-        messageId: `dev-${Date.now()}`,
+        messageId: devMessageId,
       });
       
-      return { success: true, messageId: `dev-${Date.now()}` };
+      return { 
+        success: true, 
+        messageId: devMessageId, 
+        skipped: true,
+        reason: 'Development mode - email simulated',
+      };
     }
 
-    // 3. 先記錄到 outbox（queued）
+    // 6. 記錄到 outbox（queued）
     const outboxId = await recordToOutbox({
-      ...params,
+      userId,
+      to,
+      subject,
+      category,
+      dedupeKey,
       status: 'queued',
     });
 
-    // 4. 嘗試發送
-    let result: SendEmailResult;
-    
-    if (RESEND_API_KEY) {
-      result = await sendViaResend(params);
-    } else if (SMTP_HOST) {
-      result = await sendViaSMTP(params);
-    } else {
-      result = { success: false, error: 'No email provider configured (RESEND_API_KEY or SMTP)' };
-    }
+    // 7. 發送
+    const result = await sendViaResend(params);
 
-    // 5. 更新 outbox 狀態
+    // 8. 更新 outbox 狀態
     await updateOutboxStatus(outboxId, result);
 
-    if (!result.success) {
-      console.error(`[Email] Send failed: ${result.error}`);
-    } else {
-      console.log(`[Email] Sent successfully: ${result.messageId}`);
+    if (result.success && result.messageId) {
+      logSuccess(result.messageId);
     }
 
     return result;
   } catch (error: any) {
-    console.error('[Email] Unexpected error:', error);
+    logError('Unexpected error in sendEmail', error);
     
-    // 記錄失敗但不阻斷主流程
     await recordToOutbox({
-      ...params,
+      userId,
+      to,
+      subject,
+      category,
+      dedupeKey,
       status: 'failed',
       error: error.message,
     });
@@ -266,71 +470,20 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   }
 }
 
-// ========== Outbox Helpers ==========
-
-interface OutboxRecord extends SendEmailParams {
-  status: 'queued' | 'sent' | 'failed' | 'skipped';
-  error?: string;
-  messageId?: string;
-}
-
-async function recordToOutbox(record: OutboxRecord): Promise<string | null> {
-  try {
-    const supabase = getSupabaseAdmin();
-    
-    const { data, error } = await supabase
-      .from('email_outbox')
-      .insert({
-        user_id: record.userId,
-        to_email: record.to,
-        subject: record.subject,
-        category: record.category,
-        dedupe_key: record.dedupeKey,
-        status: record.status,
-        error: record.error,
-        message_id: record.messageId,
-        sent_at: record.status === 'sent' ? new Date().toISOString() : null,
-      })
-      .select('id')
-      .single();
-
-    if (error) {
-      console.error('[Email] Failed to record to outbox:', error);
-      return null;
-    }
-
-    return data?.id || null;
-  } catch (error) {
-    console.error('[Email] Outbox record error:', error);
-    return null;
-  }
-}
-
-async function updateOutboxStatus(
-  outboxId: string | null,
-  result: SendEmailResult
-): Promise<void> {
-  if (!outboxId) return;
-
-  try {
-    const supabase = getSupabaseAdmin();
-    
-    await supabase
-      .from('email_outbox')
-      .update({
-        status: result.success ? 'sent' : 'failed',
-        error: result.error,
-        message_id: result.messageId,
-        sent_at: result.success ? new Date().toISOString() : null,
-      })
-      .eq('id', outboxId);
-  } catch (error) {
-    console.error('[Email] Failed to update outbox status:', error);
-  }
-}
-
 // ========== Utility Exports ==========
 
-export { APP_URL, EMAIL_FROM };
+export { getEnvConfig, validateEnv };
 
+/**
+ * 取得 APP_URL（用於建構連結）
+ */
+export function getAppUrl(): string {
+  return getEnvConfig().APP_URL;
+}
 
+/**
+ * 取得 EMAIL_FROM（用於顯示）
+ */
+export function getEmailFrom(): string {
+  return getEnvConfig().EMAIL_FROM;
+}

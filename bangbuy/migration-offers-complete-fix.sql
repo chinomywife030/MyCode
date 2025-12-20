@@ -549,3 +549,4 @@ SELECT '✅ wish_requests, trips, offers, profiles 表都已添加 updated_at tr
 SELECT '✅ respond_to_offer RPC 已修復' AS status;
 
 
+

@@ -537,6 +537,12 @@ export default function CreatePage() {
                 placeholder="其他補充說明，例如：限定版、特定店鋪購買等"
                 className="w-full p-3 border border-gray-200 rounded-xl focus:border-blue-500 transition-colors resize-none"
               />
+              <p className="text-xs text-gray-500 mt-1.5">
+                💡 可寫明希望的運送方式（快遞/郵政/轉運/代帶）
+                <Link href="/shipping-to-taiwan" target="_blank" className="text-blue-500 hover:text-blue-600 underline underline-offset-2 ml-1">
+                  查看運回台灣方式
+                </Link>
+              </p>
             </div>
 
             {/* 標籤 */}

@@ -12,15 +12,53 @@ export default function TripsPage() {
   useEffect(() => {
     async function fetchTrips() {
       setLoading(true);
-      // 抓取行程資料，並關聯取出發布者的資訊 (profiles)
-      const { data, error } = await supabase
+      
+      // 🔧 修復 PGRST200：不使用 FK join，改為兩段查詢
+      // Step 1: 取得 trips 資料
+      const { data: tripsData, error: tripsError } = await supabase
         .from('trips')
-        .select('*, profiles:shopper_id(name, avatar_url)')
+        .select('*')
         .gte('date', new Date().toISOString().split('T')[0]) // 只顯示今天以後的行程
         .order('date', { ascending: true }); // 日期近的排前面
 
-      if (error) console.error('Error fetching trips:', error);
-      setTrips(data || []);
+      if (tripsError) {
+        console.error('Error fetching trips:', tripsError);
+        setTrips([]);
+        setLoading(false);
+        return;
+      }
+
+      if (!tripsData || tripsData.length === 0) {
+        setTrips([]);
+        setLoading(false);
+        return;
+      }
+
+      // Step 2: 取得所有相關的 shopper profiles
+      const shopperIds = [...new Set(tripsData.map(t => t.shopper_id).filter(Boolean))];
+      
+      let profilesMap: Record<string, { name: string; avatar_url: string | null }> = {};
+      
+      if (shopperIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, name, avatar_url')
+          .in('id', shopperIds);
+
+        if (!profilesError && profilesData) {
+          profilesMap = Object.fromEntries(
+            profilesData.map(p => [p.id, { name: p.name, avatar_url: p.avatar_url }])
+          );
+        }
+      }
+
+      // Step 3: 合併資料
+      const enrichedTrips = tripsData.map(trip => ({
+        ...trip,
+        profiles: profilesMap[trip.shopper_id] || { name: trip.shopper_name || '代購夥伴', avatar_url: null }
+      }));
+
+      setTrips(enrichedTrips);
       setLoading(false);
     }
     fetchTrips();

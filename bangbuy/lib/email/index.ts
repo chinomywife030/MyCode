@@ -3,7 +3,9 @@
  * 提供各類 Email 發送功能
  */
 
-import { sendEmail, EmailCategory, APP_URL } from './sender';
+import { sendEmail, EmailCategory, getAppUrl } from './sender';
+
+const APP_URL = getAppUrl();
 import {
   offerCreatedEmail,
   offerAcceptedEmail,
@@ -125,5 +127,6 @@ export function getTimeBucket(): string {
 }
 
 export { APP_URL };
+
 
 

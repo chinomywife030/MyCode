@@ -35,6 +35,11 @@ export default function Footer() {
                   匯率計算器
                 </FeatureLink>
               </li>
+              <li>
+                <Link href="/shipping-to-taiwan" className="text-sm text-gray-600 hover:text-blue-600 transition">
+                  運回台灣方式
+                </Link>
+              </li>
             </ul>
           </div>
 

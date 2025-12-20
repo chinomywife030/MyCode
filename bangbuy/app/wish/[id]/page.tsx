@@ -84,12 +84,13 @@ export default function WishDetailPage() {
         setWish(wishData);
         
         // 3. 抓取發布者資料（信任提示用）
+        // 🔧 修復 406：使用 maybeSingle() 因為 profile 可能不存在
         if (wishData?.buyer_id) {
           const { data: profileData } = await supabase
             .from('profiles')
             .select('name, avatar_url, email_verified, created_at')
             .eq('id', wishData.buyer_id)
-            .single();
+            .maybeSingle();
           
           if (profileData) {
             setBuyerProfile({
@@ -101,13 +102,14 @@ export default function WishDetailPage() {
       }
 
       // 4. 檢查是否已收藏
+      // 🔧 修復 406：使用 maybeSingle() 因為可能沒有收藏記錄
       if (user && wishData) {
         const { data: favData } = await supabase
           .from('favorites')
-          .select('*')
+          .select('id')
           .eq('user_id', user.id)
           .eq('wish_id', wishData.id)
-          .single();
+          .maybeSingle();
         
         if (favData) setIsFavorited(true);
       }
@@ -580,6 +582,13 @@ export default function WishDetailPage() {
                       </>
                     )}
                   </button>
+                  {/* 📦 運回台灣方式提示 */}
+                  <p className="text-xs text-gray-400 mt-2">
+                    不確定怎麼寄回台灣？
+                    <Link href="/shipping-to-taiwan" target="_blank" className="text-blue-500 hover:text-blue-600 underline underline-offset-2 ml-1">
+                      看運送方式指南
+                    </Link>
+                  </p>
                 </div>
               )}
 

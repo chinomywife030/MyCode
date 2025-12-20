@@ -14,6 +14,8 @@ import ImageCarousel from '@/components/ImageCarousel';
 import { useEarlyAccess } from '@/hooks/useEarlyAccess';
 import { EarlyAccessNotice } from '@/components/EarlyAccessNotice';
 import { startChat } from '@/lib/chatNavigation';
+import ProductTour from '@/components/onboarding/ProductTour';
+import ShippingGuideBanner from '@/components/ShippingGuideBanner';
 
 // ========== 國家列表（與發布許願單一致）==========
 const ALL_COUNTRIES = [
@@ -115,9 +117,29 @@ function HomeContent() {
   const [chatLoadingId, setChatLoadingId] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
 
+  // 🎯 產品導覽狀態
+  const [showTour, setShowTour] = useState(false);
+
   // 計算 active filter 數量
   const activeFilterCount = (country !== 'ALL' ? 1 : 0) + (dateFrom || dateTo ? 1 : 0);
   const hasFilters = !!(debouncedSearch || country !== 'ALL' || dateFrom || dateTo);
+
+  // 🎯 產品導覽觸發（首次登入後顯示）
+  useEffect(() => {
+    // 只在登入後、資料載入完成後檢查
+    if (!currentUser || loading) return;
+    
+    // 檢查是否已完成導覽
+    const tourDone = localStorage.getItem('bb_tour_v1_done');
+    if (tourDone) return;
+    
+    // 延遲顯示，確保 UI 已渲染
+    const timer = setTimeout(() => {
+      setShowTour(true);
+    }, 1000);
+    
+    return () => clearTimeout(timer);
+  }, [currentUser, loading]);
 
 
   // ========== fetchTrips：Server-side filtering ==========
@@ -382,11 +404,22 @@ function HomeContent() {
   // ========== UI 渲染（統一風格，橘藍配色）==========
   return (
     <div className="min-h-screen bg-gray-50 pb-20 md:pb-6">
-      {/* 🎯 互動式教學：指向身分切換按鈕 */}
+      {/* 🎯 產品導覽（半透明遮罩 + 高亮 + 箭頭）*/}
+      <ProductTour
+        isOpen={showTour}
+        onClose={() => setShowTour(false)}
+        onComplete={() => setShowTour(false)}
+        mode={mode}
+      />
+      
+      {/* 🎯 互動式教學：指向身分切換按鈕（舊版，保留但被新版取代）*/}
       <InteractiveOnboarding />
       
       <RoleSelectorModal />
       <Navbar />
+
+      {/* 📦 運回台灣方式提示 Banner（可關閉）*/}
+      <ShippingGuideBanner />
 
       {/* 🌱 早期體驗溫和提示（非阻斷式 Info Banner）*/}
       <EarlyAccessNotice
@@ -441,6 +474,7 @@ function HomeContent() {
             {/* CTA 按鈕 - 高度 44px */}
             <Link 
               href={mode === 'requester' ? '/create' : '/trips/create'} 
+              data-tour="primary-cta"
               className={`
                 inline-flex items-center gap-2 px-6 rounded-full font-semibold text-sm
                 transition-all duration-200 shadow-md hover:shadow-lg
@@ -465,7 +499,7 @@ function HomeContent() {
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3">
           {/* 搜尋框 + 漏斗按鈕 */}
           <div className="flex items-center gap-2">
-            <div className="flex-1 max-w-lg">
+            <div className="flex-1 max-w-lg" data-tour="search-bar">
               <SearchBar
                 value={search}
                 onChange={setSearch}
@@ -476,6 +510,7 @@ function HomeContent() {
             {/* 漏斗 Filter 按鈕 */}
             <button
               type="button"
+              data-tour="filter-btn"
               onClick={() => setShowFilter(!showFilter)}
               className={`
                 shrink-0 h-10 px-3 rounded-xl
