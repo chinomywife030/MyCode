@@ -80,6 +80,9 @@ function logDiagnostics(type: string, offerId: string) {
 }
 
 export async function POST(request: NextRequest) {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'send-offer-notification/route.ts:POST',message:'API called',data:{},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+  // #endregion
   try {
     const body = await request.json();
     const { type, offerId, wishId, amount, message, conversationId } = body;
@@ -142,6 +145,9 @@ export async function POST(request: NextRequest) {
     
     // 獲取買家 email（從 profiles 或 auth.users）
     const buyerEmail = await getUserEmail(supabase, offer.buyer_id);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'send-offer-notification/route.ts:buyerEmail',message:'Buyer email fetched',data:{buyerId:offer.buyer_id,buyerEmail:buyerEmail||'null',buyerName:buyerProfile?.name||'unknown'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H2'})}).catch(()=>{});
+    // #endregion
 
     // 獲取代購資料（使用 maybeSingle）
     const { data: shopperProfile, error: shopperError } = await supabase
@@ -189,6 +195,9 @@ export async function POST(request: NextRequest) {
       case 'offer_created': {
         // 檢查買家是否允許報價通知
         const canSend = await checkEmailPreference(offer.buyer_id, 'offer_created');
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'send-offer-notification/route.ts:offer_created',message:'Email preference check',data:{buyerId:offer.buyer_id,canSend,buyerEmail:buyerEmail||'null'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1,H3'})}).catch(()=>{});
+        // #endregion
         if (!canSend) {
           console.log('[Email API] Skipped: User disabled offer notifications');
           return NextResponse.json({ success: true, skipped: true, reason: 'User disabled offer notifications', emailSent: false });
@@ -196,6 +205,9 @@ export async function POST(request: NextRequest) {
 
         if (!buyerEmail) {
           console.log('[Email API] Skipped: Buyer has no email');
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'send-offer-notification/route.ts:offer_created',message:'NO BUYER EMAIL - SKIPPING',data:{buyerId:offer.buyer_id},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H1'})}).catch(()=>{});
+          // #endregion
           return NextResponse.json({ success: true, skipped: true, reason: 'Buyer has no email', emailSent: false });
         }
 

@@ -280,6 +280,9 @@ async function updateOutboxStatus(
 
 async function sendViaResend(params: SendEmailParams): Promise<SendEmailResult> {
   const config = getEnvConfig();
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/email/sender.ts:sendViaResend',message:'Resend API called',data:{to:params.to,category:params.category,hasApiKey:!!config.RESEND_API_KEY,emailFrom:config.EMAIL_FROM||'null'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H5'})}).catch(()=>{});
+  // #endregion
   
   if (!config.RESEND_API_KEY) {
     logError('RESEND_API_KEY not configured');

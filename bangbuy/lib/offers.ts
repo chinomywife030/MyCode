@@ -18,6 +18,9 @@ async function sendEmailNotification(
   offerId: string,
   conversationId?: string
 ): Promise<{ emailSent: boolean; emailError?: string }> {
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/offers.ts:sendEmailNotification',message:'Email notification started',data:{type,offerId,conversationId},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+  // #endregion
   try {
     // 使用 fetch 呼叫 API Route（Server-Side 發送）
     const response = await fetch('/api/email/send-offer-notification', {
@@ -31,6 +34,9 @@ async function sendEmailNotification(
     });
 
     const result = await response.json();
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/offers.ts:sendEmailNotification',message:'API response received',data:{type,offerId,result,responseStatus:response.status},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
     
     if (result.success) {
       if (result.skipped) {
@@ -45,6 +51,9 @@ async function sendEmailNotification(
       return { emailSent: false, emailError: result.error };
     }
   } catch (error: any) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'lib/offers.ts:sendEmailNotification',message:'Email notification error',data:{type,offerId,error:error.message},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'H4'})}).catch(()=>{});
+    // #endregion
     // Email 失敗不應阻斷主流程
     console.warn(`[Email] Error sending ${type}:`, error);
     return { emailSent: false, emailError: error.message || 'Unknown error' };
