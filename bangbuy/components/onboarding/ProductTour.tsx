@@ -20,6 +20,10 @@ import { createPortal } from 'react-dom';
 // 全域單例鎖 - 確保任何時刻只有一個 Tour instance
 // ============================================
 let globalTourInstanceId: string | null = null;
+let tourMountCount = 0; // DEBUG: 追蹤 mount 次數
+
+// DEBUG 開關（上線前設為 false）
+const DEBUG_TOUR = process.env.NODE_ENV === 'development';
 
 // ============================================
 // Types
@@ -209,11 +213,30 @@ export default function ProductTour({
   const instanceIdRef = useRef<string>(`tour-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
   const MAX_RETRIES = 10;
   
+  // DEBUG: 追蹤 mount
+  useEffect(() => {
+    tourMountCount++;
+    const myMountId = tourMountCount;
+    if (DEBUG_TOUR) {
+      console.log(`[ProductTour] MOUNT #${myMountId}`, {
+        instanceId: instanceIdRef.current,
+        isOpen,
+        globalTourInstanceId,
+      });
+    }
+    return () => {
+      if (DEBUG_TOUR) {
+        console.log(`[ProductTour] UNMOUNT #${myMountId}`);
+      }
+    };
+  }, []);
+  
   // 🔒 全域單例鎖
   useEffect(() => {
     if (!isOpen) {
       // 釋放鎖
       if (globalTourInstanceId === instanceIdRef.current) {
+        if (DEBUG_TOUR) console.log('[ProductTour] 釋放鎖');
         globalTourInstanceId = null;
       }
       return;
@@ -222,7 +245,7 @@ export default function ProductTour({
     // 嘗試獲取鎖
     if (globalTourInstanceId && globalTourInstanceId !== instanceIdRef.current) {
       // 已有其他 instance，不渲染
-      console.warn('[ProductTour] 已有其他 Tour instance 正在運行，跳過此 instance');
+      if (DEBUG_TOUR) console.warn('[ProductTour] 已有其他 Tour instance 正在運行，跳過此 instance');
       setIsLocked(true);
       return;
     }
@@ -230,6 +253,7 @@ export default function ProductTour({
     // 獲取鎖成功
     globalTourInstanceId = instanceIdRef.current;
     setIsLocked(false);
+    if (DEBUG_TOUR) console.log('[ProductTour] 獲取鎖成功，開始導覽');
     
     return () => {
       // cleanup: 釋放鎖
@@ -294,6 +318,9 @@ export default function ProductTour({
       // 重試機制
       if (retryCountRef.current < MAX_RETRIES) {
         retryCountRef.current++;
+        if (DEBUG_TOUR) {
+          console.log(`[ProductTour] 等待元素: ${currentStep.targetSelector} (重試 ${retryCountRef.current}/${MAX_RETRIES})`);
+        }
         setTimeout(findAndPositionTarget, 200);
       } else {
         // 跳過此步驟
@@ -305,6 +332,14 @@ export default function ProductTour({
         }
       }
       return;
+    }
+    
+    if (DEBUG_TOUR) {
+      console.log(`[ProductTour] 找到元素: ${currentStep.targetSelector}`, {
+        stepIndex,
+        totalSteps,
+        title: currentStep.title,
+      });
     }
     
     retryCountRef.current = 0;

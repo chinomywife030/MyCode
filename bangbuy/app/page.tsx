@@ -127,14 +127,31 @@ function HomeContent() {
   // 🎯 產品導覽觸發（首次登入後顯示）
   useEffect(() => {
     // 只在登入後、資料載入完成後檢查
-    if (!currentUser || loading) return;
+    if (!currentUser || loading) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Tour Trigger] 等待登入...', { hasUser: !!currentUser, loading });
+      }
+      return;
+    }
     
     // 檢查是否已完成導覽
     const tourDone = localStorage.getItem('bb_tour_v1_done');
-    if (tourDone) return;
+    if (tourDone) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Tour Trigger] 已完成導覽，不再顯示');
+      }
+      return;
+    }
+    
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Tour Trigger] 準備顯示導覽（1秒後）');
+    }
     
     // 延遲顯示，確保 UI 已渲染
     const timer = setTimeout(() => {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Tour Trigger] 🚀 setShowTour(true)');
+      }
       setShowTour(true);
     }, 1000);
     
