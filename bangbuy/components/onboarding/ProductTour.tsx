@@ -10,10 +10,16 @@
  * - 桌機/手機不同步驟
  * - 動態計算位置（resize 也正確）
  * - localStorage 記錄已完成
+ * - 全域單例鎖（防止重複 instance）
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+
+// ============================================
+// 全域單例鎖 - 確保任何時刻只有一個 Tour instance
+// ============================================
+let globalTourInstanceId: string | null = null;
 
 // ============================================
 // Types
@@ -196,10 +202,42 @@ export default function ProductTour({
   const [isMobile, setIsMobile] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isLocked, setIsLocked] = useState(false);
   
   const tooltipRef = useRef<HTMLDivElement>(null);
   const retryCountRef = useRef(0);
+  const instanceIdRef = useRef<string>(`tour-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
   const MAX_RETRIES = 10;
+  
+  // 🔒 全域單例鎖
+  useEffect(() => {
+    if (!isOpen) {
+      // 釋放鎖
+      if (globalTourInstanceId === instanceIdRef.current) {
+        globalTourInstanceId = null;
+      }
+      return;
+    }
+    
+    // 嘗試獲取鎖
+    if (globalTourInstanceId && globalTourInstanceId !== instanceIdRef.current) {
+      // 已有其他 instance，不渲染
+      console.warn('[ProductTour] 已有其他 Tour instance 正在運行，跳過此 instance');
+      setIsLocked(true);
+      return;
+    }
+    
+    // 獲取鎖成功
+    globalTourInstanceId = instanceIdRef.current;
+    setIsLocked(false);
+    
+    return () => {
+      // cleanup: 釋放鎖
+      if (globalTourInstanceId === instanceIdRef.current) {
+        globalTourInstanceId = null;
+      }
+    };
+  }, [isOpen]);
   
   // 取得當前步驟列表
   const getFilteredSteps = useCallback(() => {
@@ -234,21 +272,32 @@ export default function ProductTour({
   
   // 尋找並定位目標元素
   const findAndPositionTarget = useCallback(() => {
-    if (!currentStep || !isOpen) {
+    if (!currentStep || !isOpen || isLocked) {
       setIsReady(false);
       return;
     }
     
-    const targetEl = document.querySelector(currentStep.targetSelector);
+    const targetEl = document.querySelector(currentStep.targetSelector) as HTMLElement | null;
     
-    if (!targetEl) {
+    // 檢查元素是否存在且可見
+    const isElementVisible = (el: HTMLElement | null): boolean => {
+      if (!el) return false;
+      // 檢查 offsetParent（display: none 時為 null）
+      if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return false;
+      // 檢查尺寸
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) return false;
+      return true;
+    };
+    
+    if (!targetEl || !isElementVisible(targetEl)) {
       // 重試機制
       if (retryCountRef.current < MAX_RETRIES) {
         retryCountRef.current++;
         setTimeout(findAndPositionTarget, 200);
       } else {
         // 跳過此步驟
-        console.warn(`[ProductTour] 找不到元素: ${currentStep.targetSelector}，跳過此步驟`);
+        console.warn(`[ProductTour] 找不到元素或元素不可見: ${currentStep.targetSelector}，跳過此步驟`);
         if (stepIndex < totalSteps - 1) {
           setStepIndex(prev => prev + 1);
         } else {
@@ -344,7 +393,7 @@ export default function ProductTour({
   };
   
   // 不渲染條件
-  if (!isOpen || !mounted || !currentStep) return null;
+  if (!isOpen || !mounted || !currentStep || isLocked) return null;
   
   // 計算高亮框位置
   const scroll = getScrollOffset();

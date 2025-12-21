@@ -157,12 +157,13 @@ export default function CreateTripPage() {
           </div>
 
           <div className="flex gap-4 pt-2">
-            <Link 
-              href="/trips"
+            <button 
+              type="button"
+              onClick={() => router.push('/')}
               className="w-1/3 flex justify-center py-3 px-4 border border-gray-300 rounded-md text-gray-700 font-medium hover:bg-gray-50"
             >
               取消
-            </Link>
+            </button>
             {/* 🎨 按鈕使用橙色（代購者身份）*/}
             <button
               type="submit"

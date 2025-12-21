@@ -1,5 +1,14 @@
 /**
- * 🎯 Coach Mark 新手引導（3 步驟）
+ * ⚠️ DEPRECATED - 此組件已廢棄
+ * 
+ * 請使用 components/onboarding/ProductTour.tsx
+ * 
+ * 此組件保留但不再使用，避免雙重渲染問題。
+ * 已於 2024-12-21 停用。
+ * 
+ * ---
+ * 
+ * 🎯 Coach Mark 新手引導（3 步驟）- 舊版
  * 
  * 平台設計原則：
  * - 一步只教一件事
@@ -11,6 +20,8 @@
  * Step 1：這裡切換你的身分（買家 / 代購者）
  * Step 2：點這裡發佈需求（或行程）
  * Step 3：有人回應後，點這裡開始對話
+ * 
+ * @deprecated 使用 ProductTour 替代
  */
 
 'use client';

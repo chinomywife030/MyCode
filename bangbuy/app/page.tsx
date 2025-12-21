@@ -8,7 +8,7 @@ import Navbar from '@/components/Navbar';
 import { useUserMode } from '@/components/UserModeProvider';
 import RoleSelectorModal from '@/components/RoleSelectorModal';
 import EmptyState from '@/components/EmptyState';
-import InteractiveOnboarding from '@/components/InteractiveOnboarding';
+// InteractiveOnboarding 已移除 - 統一使用 ProductTour
 import { SearchBar, SearchEmptyState, FilterButton, FilterSheet } from '@/components/search';
 import ImageCarousel from '@/components/ImageCarousel';
 import { useEarlyAccess } from '@/hooks/useEarlyAccess';
@@ -412,8 +412,7 @@ function HomeContent() {
         mode={mode}
       />
       
-      {/* 🎯 互動式教學：指向身分切換按鈕（舊版，保留但被新版取代）*/}
-      <InteractiveOnboarding />
+      {/* 🎯 InteractiveOnboarding 已移除 - 統一使用上方的 ProductTour */}
       
       <RoleSelectorModal />
       <Navbar />
