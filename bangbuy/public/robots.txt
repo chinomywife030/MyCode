@@ -11,12 +11,18 @@ Allow: /disclaimer
 Allow: /cookies
 Allow: /copyright
 
+# 🔐 禁止登入/驗證相關頁面
+Disallow: /login
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /auth/
+Disallow: /verify
+Disallow: /verify-email
+
 # 禁止私人頁面
 Disallow: /dashboard
 Disallow: /chat
-Disallow: /verify
-Disallow: /reset-password
-Disallow: /auth/
+Disallow: /debug-env
 
 # Sitemap
 Sitemap: https://bangbuy.app/sitemap.xml

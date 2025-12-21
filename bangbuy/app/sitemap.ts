@@ -31,10 +31,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.7,
     },
     {
-      url: `${baseUrl}/login`,
+      url: `${baseUrl}/shipping-to-taiwan`,
       lastModified,
       changeFrequency: 'monthly',
-      priority: 0.5,
+      priority: 0.8,
     },
 
     // 法務頁面（重要：必須被索引）
@@ -68,6 +68,8 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: 'monthly',
       priority: 0.5,
     },
+    
+    // 🔐 注意：不包含 /login, /auth/*, /dashboard, /chat 等私密頁面
   ];
 }
 

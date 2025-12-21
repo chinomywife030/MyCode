@@ -20,6 +20,16 @@ export const metadata: Metadata = {
   authors: [{ name: 'BangBuy Team' }],
   keywords: ['代購', '留學生', '跨境購物', 'BangBuy', '幫買', '海外代購', '日本代購', '韓國代購', '美國代購'],
   
+  // 🖼️ Icons（favicon 會自動從 app/icon.ico 讀取）
+  icons: {
+    icon: [
+      { url: '/icon.ico', sizes: 'any' },
+    ],
+    apple: [
+      { url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
+  
   // 🔗 Canonical URL（防止 www 和 non-www 重複內容）
   alternates: {
     canonical: 'https://bangbuy.app',
