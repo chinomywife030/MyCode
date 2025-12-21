@@ -4,28 +4,66 @@ import BottomNav from '@/components/BottomNav';
 import Footer from '@/components/Footer';
 import CookieBanner from '@/components/CookieBanner';
 
-export const metadata = {
-  title: 'BangBuy 幫買',
-  description: '留學生跨境代購平台 - 全球代購媒合服務',
+import type { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  // 🔐 metadataBase 必須設定，讓相對路徑自動轉為絕對 URL
   metadataBase: new URL('https://bangbuy.app'),
+  
+  // 基本資訊
+  title: {
+    default: 'BangBuy 幫買 - 留學生跨境代購平台',
+    template: '%s | BangBuy 幫買',
+  },
+  description: '全球留學生代購媒合平台，想買什麼都有人幫你帶！發布需求、媒合代購、安心交易。',
   applicationName: 'BangBuy',
   authors: [{ name: 'BangBuy Team' }],
-  keywords: ['代購', '留學生', '跨境購物', 'BangBuy', '幫買'],
-  openGraph: {
-    title: 'BangBuy 幫買',
-    description: '留學生跨境代購平台 - 全球代購媒合服務',
-    url: 'https://bangbuy.app',
-    siteName: 'BangBuy',
-    type: 'website',
-    locale: 'zh_TW',
+  keywords: ['代購', '留學生', '跨境購物', 'BangBuy', '幫買', '海外代購', '日本代購', '韓國代購', '美國代購'],
+  
+  // 🔗 Canonical URL（防止 www 和 non-www 重複內容）
+  alternates: {
+    canonical: 'https://bangbuy.app',
   },
+  
+  // 📱 Open Graph（Facebook, LINE, Discord 等）
+  openGraph: {
+    type: 'website',
+    url: 'https://bangbuy.app',
+    title: 'BangBuy 幫買 - 留學生跨境代購平台',
+    description: '全球留學生代購媒合平台，想買什麼都有人幫你帶！發布需求、媒合代購、安心交易。',
+    siteName: 'BangBuy 幫買',
+    locale: 'zh_TW',
+    images: [
+      {
+        url: '/og.jpg',  // 使用相對路徑，metadataBase 會自動轉為絕對 URL
+        width: 1200,
+        height: 630,
+        alt: 'BangBuy 幫買 - 留學生跨境代購平台',
+      },
+    ],
+  },
+  
+  // 🐦 Twitter Card
   twitter: {
     card: 'summary_large_image',
-    title: 'BangBuy 幫買',
-    description: '留學生跨境代購平台 - 全球代購媒合服務',
+    title: 'BangBuy 幫買 - 留學生跨境代購平台',
+    description: '全球留學生代購媒合平台，想買什麼都有人幫你帶！',
+    images: ['/og.jpg'],
   },
+  
+  // 其他
   other: {
     'contact': 'support@bangbuy.app',
+  },
+  
+  // 🤖 Robots
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+    },
   },
 };
 

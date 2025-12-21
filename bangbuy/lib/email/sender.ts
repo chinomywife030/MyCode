@@ -13,6 +13,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { getSiteUrl } from '@/lib/siteUrl';
+import { logEmailSend, generateRequestId } from '@/lib/logger';
 
 // ========== Types ==========
 
@@ -41,6 +42,8 @@ export interface SendEmailResult {
   skipped?: boolean;
   reason?: string;
   envStatus?: Record<string, boolean>;
+  /** 請求追蹤 ID（用於 debug） */
+  requestId?: string;
 }
 
 // ========== Environment Variables ==========
@@ -356,6 +359,9 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   const config = getEnvConfig();
   const { to, subject, category, dedupeKey, userId } = params;
   
+  // 🔐 生成 request ID 用於追蹤
+  const requestId = generateRequestId();
+  
   // 1. 驗證環境變數
   const envValidation = validateEnv();
   
@@ -452,11 +458,39 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
 
     if (result.success && result.messageId) {
       logSuccess(result.messageId);
+      // 📊 結構化日誌
+      logEmailSend({
+        requestId,
+        to,
+        template: category,
+        result: 'success',
+        providerId: result.messageId,
+      });
+    } else if (!result.success) {
+      // 📊 結構化日誌
+      logEmailSend({
+        requestId,
+        to,
+        template: category,
+        result: 'fail',
+        errorMessage: result.error,
+      });
     }
 
-    return result;
+    // 加入 requestId 到回傳結果
+    return { ...result, requestId };
   } catch (error: any) {
     logError('Unexpected error in sendEmail', error);
+    
+    // 📊 結構化日誌
+    logEmailSend({
+      requestId,
+      to,
+      template: category,
+      result: 'fail',
+      errorCode: 'EXCEPTION',
+      errorMessage: error.message,
+    });
     
     await recordToOutbox({
       userId,
@@ -468,7 +502,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
       error: error.message,
     });
     
-    return { success: false, error: error.message };
+    return { success: false, error: error.message, requestId };
   }
 }
 

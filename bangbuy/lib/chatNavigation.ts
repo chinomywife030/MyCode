@@ -13,6 +13,7 @@
 import { supabase } from '@/lib/supabase';
 import { safeRpc } from '@/lib/safeCall';
 import { checkAuthForChat, buildLoginUrl } from '@/lib/authRedirect';
+import { logChatAction, generateRequestId } from '@/lib/logger';
 
 // Re-export for convenience
 export { buildLoginUrl } from '@/lib/authRedirect';
@@ -31,6 +32,8 @@ interface StartChatResult {
   /** 未登入時需要導向的登入頁 URL */
   requireLogin?: boolean;
   loginRedirectUrl?: string;
+  /** 請求追蹤 ID（用於 debug） */
+  requestId?: string;
 }
 
 /**
@@ -39,11 +42,14 @@ interface StartChatResult {
  */
 export async function getOrCreateConversation(params: StartChatParams): Promise<StartChatResult> {
   const { targetUserId, sourceType = 'direct', sourceId = null, sourceTitle = null } = params;
+  
+  // 🔐 生成 request ID 用於追蹤
+  const requestId = generateRequestId();
 
   try {
     // 1. 驗證參數
     if (!targetUserId || targetUserId === '00000000-0000-0000-0000-000000000000') {
-      return { success: false, error: '目標用戶 ID 無效' };
+      return { success: false, error: '目標用戶 ID 無效', requestId };
     }
 
     // 2. 先計算目標聊天 URL（用於 returnTo）
@@ -66,7 +72,7 @@ export async function getOrCreateConversation(params: StartChatParams): Promise<
     // 5. 不能和自己聊天
     const currentUserId = user?.id;
     if (currentUserId === targetUserId) {
-      return { success: false, error: '無法和自己對話' };
+      return { success: false, error: '無法和自己對話', requestId };
     }
 
     // 6. 調用 RPC 獲取或創建對話（DB 層保證唯一性）
@@ -82,19 +88,57 @@ export async function getOrCreateConversation(params: StartChatParams): Promise<
 
     if (rpcError) {
       console.error('[getOrCreateConversation] RPC error:', rpcError);
-      return { success: false, error: '無法建立對話，請稍後再試' };
+      // 📊 結構化日誌
+      logChatAction({
+        requestId,
+        action: 'create_conversation',
+        userId: currentUserId || '',
+        targetUserId,
+        result: 'fail',
+        errorCode: 'RPC_ERROR',
+        errorMessage: rpcError.message,
+      });
+      return { success: false, error: '無法建立對話，請稍後再試', requestId };
     }
 
     const conversationId = data?.[0]?.conversation_id;
     if (!conversationId) {
-      return { success: false, error: '無法建立對話' };
+      logChatAction({
+        requestId,
+        action: 'create_conversation',
+        userId: currentUserId || '',
+        targetUserId,
+        result: 'fail',
+        errorCode: 'NO_CONVERSATION_ID',
+      });
+      return { success: false, error: '無法建立對話', requestId };
     }
 
-    return { success: true, conversationId };
+    // 📊 結構化日誌 - 成功
+    logChatAction({
+      requestId,
+      action: 'create_conversation',
+      userId: currentUserId || '',
+      targetUserId,
+      conversationId,
+      result: 'success',
+    });
+
+    return { success: true, conversationId, requestId };
 
   } catch (err: any) {
     console.error('[getOrCreateConversation] Exception:', err);
-    return { success: false, error: err.message || '發生錯誤' };
+    // 📊 結構化日誌
+    logChatAction({
+      requestId,
+      action: 'create_conversation',
+      userId: '',
+      targetUserId,
+      result: 'fail',
+      errorCode: 'EXCEPTION',
+      errorMessage: err.message,
+    });
+    return { success: false, error: err.message || '發生錯誤', requestId };
   }
 }
 

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { logAuthCallback, generateRequestId } from '@/lib/logger';
 
 /**
  * 🔐 Auth Callback 處理
@@ -13,6 +14,9 @@ export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
   const type = requestUrl.searchParams.get('type');
+  
+  // 🔐 生成 request ID 用於追蹤
+  const requestId = generateRequestId();
 
   if (code) {
     const supabase = createClient(
@@ -26,6 +30,14 @@ export async function GET(request: Request) {
       
       if (error) {
         console.error('[Auth Callback] Exchange error:', error);
+        // 📊 結構化日誌
+        logAuthCallback({
+          requestId,
+          type: type || 'oauth',
+          result: 'fail',
+          errorCode: 'EXCHANGE_ERROR',
+          errorMessage: error.message,
+        });
         // 發生錯誤，導向登入頁
         return NextResponse.redirect(`${requestUrl.origin}/login`);
       }
@@ -53,14 +65,36 @@ export async function GET(request: Request) {
         return NextResponse.redirect(`${requestUrl.origin}/verify-email`);
       }
       
+      // 📊 結構化日誌 - 成功
+      logAuthCallback({
+        requestId,
+        type: type || 'oauth',
+        result: 'success',
+      });
+      
       // 🔐 OAuth 登入成功，導向 auth/redirect 頁面（client-side 處理 returnTo）
       return NextResponse.redirect(`${requestUrl.origin}/auth/redirect`);
       
-    } catch (err) {
+    } catch (err: any) {
       console.error('[Auth Callback] Error:', err);
+      // 📊 結構化日誌
+      logAuthCallback({
+        requestId,
+        type: type || 'oauth',
+        result: 'fail',
+        errorCode: 'EXCEPTION',
+        errorMessage: err.message,
+      });
       return NextResponse.redirect(`${requestUrl.origin}/login`);
     }
   }
+
+  // 📊 結構化日誌 - 無 code
+  logAuthCallback({
+    requestId,
+    type: 'no_code',
+    result: 'success',
+  });
 
   // 🔐 無 code 時也導向 redirect 頁面處理
   return NextResponse.redirect(`${requestUrl.origin}/auth/redirect`);
