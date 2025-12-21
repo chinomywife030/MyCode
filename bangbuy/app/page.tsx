@@ -158,6 +158,24 @@ function HomeContent() {
     return () => clearTimeout(timer);
   }, [currentUser, loading]);
 
+  // 🧪 開發環境：暴露手動觸發教學的方法
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      (window as any).__startTour = () => {
+        console.log('[Tour] 手動觸發教學');
+        localStorage.removeItem('bb_tour_v1_done');
+        setShowTour(true);
+      };
+      (window as any).__resetTour = () => {
+        console.log('[Tour] 重置教學狀態');
+        localStorage.removeItem('bb_tour_v1_done');
+        localStorage.removeItem('bangbuy_coach_mark_v2');
+        console.log('[Tour] 請重整頁面');
+      };
+      console.log('[Tour] 開發工具已載入：__startTour() / __resetTour()');
+    }
+  }, []);
+
 
   // ========== fetchTrips：Server-side filtering ==========
   const fetchTrips = useCallback(async (params: { 
