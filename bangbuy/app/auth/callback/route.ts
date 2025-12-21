@@ -53,12 +53,15 @@ export async function GET(request: Request) {
         return NextResponse.redirect(`${requestUrl.origin}/verify-email`);
       }
       
+      // 🔐 OAuth 登入成功，導向 auth/redirect 頁面（client-side 處理 returnTo）
+      return NextResponse.redirect(`${requestUrl.origin}/auth/redirect`);
+      
     } catch (err) {
       console.error('[Auth Callback] Error:', err);
       return NextResponse.redirect(`${requestUrl.origin}/login`);
     }
   }
 
-  // 跳轉回首頁
-  return NextResponse.redirect(requestUrl.origin);
+  // 🔐 無 code 時也導向 redirect 頁面處理
+  return NextResponse.redirect(`${requestUrl.origin}/auth/redirect`);
 }

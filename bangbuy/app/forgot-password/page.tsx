@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
 import TrustFooter from '@/components/TrustFooter';
+import { getResetPasswordUrl } from '@/lib/siteUrl';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -19,7 +20,8 @@ export default function ForgotPasswordPage() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${location.origin}/reset-password`,
+        // 🔐 使用統一的 site URL，確保重設密碼連結正確
+        redirectTo: getResetPasswordUrl(),
       });
 
       if (error) throw error;

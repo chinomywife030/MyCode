@@ -4,7 +4,10 @@
 
 import { generateEmailHtml, generateEmailText } from './base';
 
-const APP_URL = process.env.APP_URL || 'http://localhost:3000';
+import { getSiteUrl } from '@/lib/siteUrl';
+
+// 🔐 使用統一的 site URL
+const APP_URL = getSiteUrl();
 
 export interface OfferRejectedEmailParams {
   shopperName: string;

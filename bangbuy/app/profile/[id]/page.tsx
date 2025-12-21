@@ -2,15 +2,38 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/components/LanguageProvider';
 import { Profile } from '@/types';
+import { buildLoginUrl } from '@/lib/authRedirect';
 
 export default function ProfilePage() {
   const { id } = useParams();
+  const router = useRouter();
   const { t } = useLanguage();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // 檢查用戶登入狀態
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setCurrentUser(user);
+    });
+  }, []);
+
+  // 處理私訊按鈕點擊
+  const handleChatClick = () => {
+    if (!profile) return;
+    const chatUrl = `/chat?target=${profile.id}&source_type=direct`;
+    
+    if (!currentUser) {
+      router.push(buildLoginUrl(chatUrl));
+      return;
+    }
+    
+    router.push(chatUrl);
+  };
 
   const [userWishes, setUserWishes] = useState<any[]>([]);
   const [completedOrders, setCompletedOrders] = useState<any[]>([]);
@@ -110,12 +133,12 @@ export default function ProfilePage() {
               </div>
 
               <div className="w-full sm:w-auto mt-4 sm:mt-0">
-                <Link
-                  href={`/chat?target=${profile.id}&source_type=direct`}
+                <button
+                  onClick={handleChatClick}
                   className="w-full sm:w-auto bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold hover:bg-blue-700 transition shadow-md active:scale-95 text-center block"
                 >
                   {t.profile.contact}
-                </Link>
+                </button>
               </div>
             </div>
 

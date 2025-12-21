@@ -4,6 +4,7 @@ import { useEffect, useState, Suspense, useCallback, useRef, useMemo } from 'rea
 import { supabase } from '@/lib/supabase';
 import { safeRpc, safeQuery } from '@/lib/safeCall';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { buildLoginUrl, getCurrentPath } from '@/lib/authRedirect';
 import Navbar from '@/components/Navbar';
 import { ConversationList, ChatRoom } from '@/components/chat';
 import { eventBus, Events } from '@/lib/events';
@@ -61,7 +62,8 @@ function ChatContent() {
     async function initUser() {
       const { data: { user }, error } = await supabase.auth.getUser();
       if (error || !user) {
-        router.push('/login');
+        // 🔐 帶上 returnTo，登入後返回聊天頁
+        router.push(buildLoginUrl(getCurrentPath()));
         return;
       }
       currentUserRef.current = { id: user.id };
@@ -188,7 +190,7 @@ function ChatContent() {
 
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        router.push('/login');
+        router.push(buildLoginUrl(getCurrentPath()));
         return;
       }
 

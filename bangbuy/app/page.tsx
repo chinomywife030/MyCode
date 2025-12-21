@@ -957,6 +957,13 @@ function HomeContent() {
                                 sourceTitle: trip.destination || '',
                               });
 
+                              // 🔐 未登入：導向登入頁
+                              if (result.requireLogin && result.loginRedirectUrl) {
+                                router.push(result.loginRedirectUrl);
+                                setChatLoadingId(null);
+                                return;
+                              }
+
                               if (!result.success || !result.url) {
                                 setChatError(result.error || '無法建立對話，請稍後再試');
                                 setChatLoadingId(null);
@@ -1163,6 +1170,13 @@ function HomeContent() {
                                 sourceId: wish.id,
                                 sourceTitle: wish.title || '',
                               });
+
+                              // 🔐 未登入：導向登入頁
+                              if (result.requireLogin && result.loginRedirectUrl) {
+                                router.push(result.loginRedirectUrl);
+                                setChatLoadingId(null);
+                                return;
+                              }
 
                               if (!result.success || !result.url) {
                                 setChatError(result.error || '無法建立對話，請稍後再試');

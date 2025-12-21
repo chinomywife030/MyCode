@@ -3,9 +3,11 @@
  * 提供各類 Email 發送功能
  */
 
-import { sendEmail, EmailCategory, getAppUrl } from './sender';
+import { sendEmail, EmailCategory } from './sender';
+import { getSiteUrl } from '@/lib/siteUrl';
 
-const APP_URL = getAppUrl();
+// 🔐 使用統一的 site URL
+const APP_URL = getSiteUrl();
 import {
   offerCreatedEmail,
   offerAcceptedEmail,

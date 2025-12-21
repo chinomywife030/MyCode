@@ -3,11 +3,36 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { buildLoginUrl } from '@/lib/authRedirect';
 
 export default function TripsPage() {
+  const router = useRouter();
   const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // 檢查用戶登入狀態
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setCurrentUser(user);
+    });
+  }, []);
+
+  // 處理私訊按鈕點擊
+  const handleChatClick = async (trip: any) => {
+    const chatUrl = `/chat?target=${trip.shopper_id}&source_type=trip&source_id=${trip.id}&source_title=${encodeURIComponent(trip.destination || '')}`;
+    
+    if (!currentUser) {
+      // 未登入：導向登入頁
+      router.push(buildLoginUrl(chatUrl));
+      return;
+    }
+    
+    // 已登入：直接導向聊天頁
+    router.push(chatUrl);
+  };
 
   useEffect(() => {
     async function fetchTrips() {
@@ -155,12 +180,12 @@ export default function TripsPage() {
                       </span>
                     </Link>
 
-                    <Link 
-                      href={`/chat?target=${trip.shopper_id}&source_type=trip&source_id=${trip.id}&source_title=${encodeURIComponent(trip.destination || '')}`}
+                    <button 
+                      onClick={() => handleChatClick(trip)}
                       className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition active:scale-95 shadow-md shadow-blue-100"
                     >
                       💬 私訊
-                    </Link>
+                    </button>
                   </div>
                 </div>
               </div>

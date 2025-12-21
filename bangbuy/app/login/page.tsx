@@ -1,15 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import LegalConsentBlock from '@/components/LegalConsentBlock';
 import TrustFooter from '@/components/TrustFooter';
+import { isValidReturnTo } from '@/lib/authRedirect';
+import { getAuthCallbackUrl } from '@/lib/siteUrl';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [view, setView] = useState<'login' | 'signup'>('login');
+  
+  // 🔐 從 URL 獲取 returnTo 參數
+  const returnTo = searchParams.get('returnTo');
+  const validReturnTo = returnTo && isValidReturnTo(returnTo) ? returnTo : null;
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,10 +24,16 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const handleSocialLogin = async (provider: 'google' | 'facebook' | 'apple') => {
+    // 🔐 OAuth 回調時帶上 returnTo（存入 localStorage 以供 callback 使用）
+    if (validReturnTo) {
+      localStorage.setItem('bangbuy_auth_returnTo', validReturnTo);
+    }
+    
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${location.origin}/auth/callback`,
+        // 🔐 使用統一的 site URL，確保不會用到 www 或 preview domain
+        redirectTo: getAuthCallbackUrl(),
       },
     });
     if (error) setErrorMsg(error.message);
@@ -41,8 +54,8 @@ export default function LoginPage() {
             data: {
               name: name || email.split('@')[0],
             },
-            // 指定驗證信的 redirect URL
-            emailRedirectTo: `${location.origin}/auth/callback`,
+            // 🔐 使用統一的 site URL，確保驗證信連結正確
+            emailRedirectTo: getAuthCallbackUrl(),
           },
         });
         
@@ -89,7 +102,10 @@ export default function LoginPage() {
         if (data.user && !data.user.email_confirmed_at) {
           router.push('/verify-email');
         } else {
-          router.push('/');
+          // 🔐 登入成功後導向 returnTo 或首頁
+          const targetUrl = validReturnTo || '/';
+          console.log('[Login] 登入成功，導向:', targetUrl);
+          router.push(targetUrl);
         }
         router.refresh();
       }

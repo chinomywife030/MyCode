@@ -188,6 +188,13 @@ export default function WishDetailPage() {
         sourceTitle: wish.title || '',
       });
 
+      // 🔐 未登入：導向登入頁
+      if (result.requireLogin && result.loginRedirectUrl) {
+        router.push(result.loginRedirectUrl);
+        setIsChatLoading(false);
+        return;
+      }
+
       if (!result.success || !result.url) {
         alert(result.error || '無法建立對話，請稍後再試');
         setIsChatLoading(false);

@@ -13,6 +13,7 @@
 
 import 'server-only';
 import { Resend } from 'resend';
+import { getSiteUrl } from '@/lib/siteUrl';
 
 // ========== Types ==========
 
@@ -40,9 +41,7 @@ function validateEnv() {
   if (!process.env.EMAIL_FROM) {
     missing.push('EMAIL_FROM');
   }
-  if (!process.env.APP_URL) {
-    missing.push('APP_URL');
-  }
+  // APP_URL 不再必須，因為 getSiteUrl() 會處理
   
   if (missing.length > 0) {
     throw new Error(`Missing env: ${missing.join(', ')}`);
@@ -51,7 +50,8 @@ function validateEnv() {
   return {
     RESEND_API_KEY: process.env.RESEND_API_KEY!,
     EMAIL_FROM: process.env.EMAIL_FROM!,
-    APP_URL: process.env.APP_URL!,
+    // 🔐 使用統一的 site URL
+    APP_URL: getSiteUrl(),
     EMAIL_SEND_IN_DEV: process.env.EMAIL_SEND_IN_DEV === 'true',
   };
 }

@@ -12,6 +12,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import { getSiteUrl } from '@/lib/siteUrl';
 
 // ========== Types ==========
 
@@ -48,7 +49,8 @@ function getEnvConfig() {
   const config = {
     RESEND_API_KEY: process.env.RESEND_API_KEY || '',
     EMAIL_FROM: process.env.EMAIL_FROM || '',
-    APP_URL: process.env.APP_URL || 'http://localhost:3000',
+    // 🔐 使用統一的 site URL，確保 Email 連結正確
+    APP_URL: getSiteUrl(),
     EMAIL_SEND_IN_DEV: process.env.EMAIL_SEND_IN_DEV === 'true',
     NODE_ENV: process.env.NODE_ENV || 'development',
     SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL || '',

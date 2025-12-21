@@ -3,7 +3,10 @@
  * 簡潔設計，避免進垃圾信
  */
 
-const APP_URL = process.env.APP_URL || 'http://localhost:3000';
+import { getSiteUrl } from '@/lib/siteUrl';
+
+// 🔐 使用統一的 site URL，確保 Email 連結正確
+const APP_URL = getSiteUrl();
 
 export interface BaseTemplateParams {
   title: string;
