@@ -190,7 +190,13 @@ export default function Navbar() {
                 {profile?.is_supporter && profile?.display_name && !profile?.supporter_badge_hidden && (
                   <SupporterBadge size="small" clickable={true} />
                 )}
-                <a href="/dashboard" title="會員中心">
+                <a 
+                  href="/profile" 
+                  title="個人檔案"
+                  onClick={(e) => {
+                    console.log('[nav] go profile clicked (avatar)');
+                  }}
+                >
                   <div
                     className={`w-9 h-9 rounded-full flex items-center justify-center font-bold cursor-pointer transition-all duration-200 border-2 shadow-sm hover:shadow-md overflow-hidden ${
                       mode === 'shopper'
@@ -283,6 +289,16 @@ export default function Navbar() {
               <>
                 <a href="/dashboard" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
                   <span className="text-xl">👤</span> 我的頁面
+                </a>
+                <a 
+                  href="/profile" 
+                  onClick={(e) => {
+                    console.log('[nav] go profile clicked');
+                    setIsMenuOpen(false);
+                  }} 
+                  className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition"
+                >
+                  <span className="text-xl">✏️</span> 個人檔案
                 </a>
                 <a href="/chat" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
                   <span className="text-xl">💬</span> 訊息中心

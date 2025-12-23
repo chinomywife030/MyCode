@@ -6,15 +6,23 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Profile } from '@/types';
 import { uploadAvatar, updateProfileAvatar, validateImageFile } from '@/lib/avatarUpload';
+import { useToast } from '@/components/Toast';
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [displayName, setDisplayName] = useState('');
+  const [name, setName] = useState('');
   const [error, setError] = useState('');
+  
+  // Debug 模式（僅 dev）
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const isDev = process.env.NODE_ENV === 'development';
   
   // 頭像上傳相關狀態
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -24,27 +32,131 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let isMounted = true;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let isCompleted = false;
+
+    // 清除超時的輔助函數
+    const clearTimeoutSafe = () => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
     async function fetchProfile() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-      setUser(user);
+      console.log('[profile] mount');
+      
+      // 設定 8 秒超時
+      timeoutId = setTimeout(() => {
+        if (isMounted && !isCompleted) {
+          console.error('[profile] timeout - 8 seconds exceeded');
+          setLoadError('載入逾時，請重新整理頁面');
+          setLoading(false);
+          isCompleted = true;
+        }
+      }, 8000);
 
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle();
+      try {
+        console.log('[profile] session start');
+        const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+        
+        console.log('[profile] session', { 
+          hasUser: !!authUser, 
+          userId: authUser?.id,
+          email: authUser?.email,
+          authError: authError?.message || null
+        });
 
-      if (profileData) {
+        if (!isMounted) {
+          clearTimeoutSafe();
+          return;
+        }
+
+        if (authError) {
+          console.error('[profile] auth error', authError);
+          clearTimeoutSafe();
+          setLoadError('驗證失敗：' + authError.message);
+          setLoading(false);
+          isCompleted = true;
+          return;
+        }
+
+        if (!authUser) {
+          console.log('[profile] no user, redirecting to login');
+          clearTimeoutSafe();
+          setLoading(false);
+          isCompleted = true;
+          router.push('/login');
+          return;
+        }
+        
+        setUser(authUser);
+
+        console.log('[profile] profile fetch start', { userId: authUser.id });
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', authUser.id)
+          .maybeSingle();
+
+        console.log('[profile] profile fetch', { 
+          hasProfile: !!profileData,
+          error: profileError?.message || null,
+          profileId: profileData?.id,
+          name: profileData?.name,
+        });
+
+        if (!isMounted) {
+          clearTimeoutSafe();
+          return;
+        }
+
+        if (profileError) {
+          console.error('[profile] profile fetch error', profileError);
+          clearTimeoutSafe();
+          setLoadError('無法載入個人資料：' + profileError.message);
+          setLoading(false);
+          isCompleted = true;
+          return;
+        }
+
+        // 設定 profile（即使是 null 也要處理）
         setProfile(profileData);
-        setDisplayName(profileData.display_name || '');
+        if (profileData) {
+          setName(profileData.name || profileData.display_name || '');
+        }
+        
+        console.log('[profile] load complete', {
+          hasProfile: !!profileData,
+          profileId: profileData?.id,
+          name: profileData?.name,
+        });
+        
+        clearTimeoutSafe();
+        setLoading(false);  // ⚠️ 關鍵：成功路徑也要設定 loading=false
+        isCompleted = true;
+      } catch (err: any) {
+        console.error('[profile] unexpected error', err);
+        clearTimeoutSafe();
+        if (isMounted) {
+          setLoadError('發生錯誤：' + (err.message || '未知錯誤'));
+        }
+        isCompleted = true;
+      } finally {
+        clearTimeoutSafe();
+        if (isMounted && !isCompleted) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
     }
+
     fetchProfile();
+
+    return () => {
+      isMounted = false;
+      clearTimeoutSafe();
+    };
   }, [router]);
 
   // 處理頭像檔案選擇
@@ -138,39 +250,121 @@ export default function ProfilePage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLastError(null);
 
-    // 驗證顯示名稱
-    if (!displayName.trim()) {
-      setError('顯示名稱為必填');
+    // 驗證用戶必須存在
+    if (!user || !user.id) {
+      const errorMsg = '用戶未登入，請重新登入';
+      console.error('[profile-save] No user found');
+      setError(errorMsg);
+      showToast('error', errorMsg);
       return;
     }
 
-    if (displayName.trim().length < 2) {
-      setError('顯示名稱至少需要 2 個字元');
+    // 防呆：檢查 name 是否存在且不為空
+    if (!name || name.trim() === '') {
+      const errorMsg = '名稱為必填';
+      setError(errorMsg);
+      showToast('error', errorMsg);
       return;
     }
 
-    if (displayName.trim().length > 20) {
-      setError('顯示名稱最多 20 個字元');
+    const trimmedName = name.trim();
+
+    // 驗證名稱長度
+    if (trimmedName.length < 2) {
+      const errorMsg = '名稱至少需要 2 個字元';
+      setError(errorMsg);
+      showToast('error', errorMsg);
       return;
     }
+
+    if (trimmedName.length > 20) {
+      const errorMsg = '名稱最多 20 個字元';
+      setError(errorMsg);
+      showToast('error', errorMsg);
+      return;
+    }
+
+    // 日誌：開始
+    console.log('[profile-save] start', { 
+      name: trimmedName,
+      userId: user.id,
+      timestamp: new Date().toISOString(),
+    });
 
     setSaving(true);
     try {
-      const { error: updateError } = await supabase
+      // 使用 upsert 確保 row 存在，並回傳資料
+      // 明確指定 name 欄位（NOT NULL constraint）
+      const { data, error: upsertError } = await supabase
         .from('profiles')
-        .update({ display_name: displayName.trim() })
-        .eq('id', user.id);
+        .upsert(
+          { 
+            id: user.id, 
+            name: trimmedName,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'id' }
+        )
+        .select()
+        .single();
 
-      if (updateError) throw updateError;
+      if (upsertError) {
+        console.error('[profile-save] error', {
+          error: upsertError,
+          code: upsertError.code,
+          message: upsertError.message,
+          details: upsertError.details,
+          hint: upsertError.hint,
+        });
+        setLastError(upsertError.message || '儲存失敗');
+        const errorMsg = upsertError.message || '儲存失敗，請稍後再試';
+        setError(errorMsg);
+        showToast('error', errorMsg);
+        return;
+      }
 
-      // 更新本地狀態
-      setProfile({ ...profile, display_name: displayName.trim() } as Profile);
-      
-      // 成功後硬重整以確保資料同步
-      window.location.reload();
+      if (!data) {
+        const errorMsg = '儲存成功但未回傳資料';
+        console.error('[profile-save] error', { error: 'No data returned' });
+        setLastError(errorMsg);
+        setError(errorMsg);
+        showToast('error', errorMsg);
+        return;
+      }
+
+      // 日誌：成功
+      console.log('[profile-save] success', {
+        data,
+        name: data.name,
+        updated_at: data.updated_at,
+        timestamp: new Date().toISOString(),
+      });
+
+      // 更新本地狀態（立即刷新 UI）
+      setProfile(data as Profile);
+      setName(data.name || '');
+      setLastSavedAt(new Date());
+      setLastError(null);
+
+      // 顯示成功提示
+      showToast('success', '儲存成功');
+
+      // 不需要 reload，因為已經更新本地狀態
+      // 如果需要通知其他組件（如 Navbar），可以 dispatch event
+      window.dispatchEvent(new CustomEvent('profile-updated', { detail: data }));
+
     } catch (err: any) {
-      setError(err.message || '儲存失敗，請稍後再試');
+      console.error('[profile-save] error (exception)', {
+        error: err,
+        message: err.message,
+        stack: err.stack,
+      });
+      const errorMsg = err.message || '儲存失敗，請稍後再試';
+      setLastError(errorMsg);
+      setError(errorMsg);
+      showToast('error', errorMsg);
     } finally {
       setSaving(false);
     }
@@ -179,7 +373,103 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center text-gray-500">
-        載入中...
+        載入會員資料…
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-gray-500 gap-4">
+        <div className="text-red-500 text-center">
+          <p className="text-lg font-bold mb-2">載入失敗</p>
+          <p className="text-sm">{loadError}</p>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          重新載入
+        </button>
+        <a href="/login" className="text-blue-600 hover:underline text-sm">
+          前往登入
+        </a>
+      </div>
+    );
+  }
+
+  // 沒有登入（user 為 null）
+  if (!user) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-gray-500 gap-4">
+        <div className="text-center">
+          <p className="text-lg font-bold mb-2">請先登入</p>
+          <p className="text-sm">你需要登入才能查看個人檔案</p>
+        </div>
+        <a 
+          href="/login" 
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          前往登入
+        </a>
+      </div>
+    );
+  }
+
+  // 已登入但沒有 profile（需要建立）
+  if (!profile) {
+    const handleCreateProfile = async () => {
+      console.log('[profile] creating profile for user', user.id);
+      setSaving(true);
+      try {
+        const fallbackName = user.email?.split('@')[0] || '新用戶';
+        const { data, error: createError } = await supabase
+          .from('profiles')
+          .upsert(
+            { 
+              id: user.id, 
+              display_name: fallbackName,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'id' }
+          )
+          .select()
+          .single();
+
+        if (createError) {
+          console.error('[profile] create error', createError);
+          showToast('error', '建立個人資料失敗：' + createError.message);
+          return;
+        }
+
+        console.log('[profile] created', data);
+        setProfile(data);
+        setName(data.name || '');
+        showToast('success', '個人資料已建立');
+      } catch (err: any) {
+        console.error('[profile] create exception', err);
+        showToast('error', '建立失敗：' + err.message);
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-gray-500 gap-4">
+        <div className="text-center">
+          <p className="text-lg font-bold mb-2">找不到個人資料</p>
+          <p className="text-sm">尚未建立個人檔案，點擊下方按鈕建立</p>
+        </div>
+        <button
+          onClick={handleCreateProfile}
+          disabled={saving}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition"
+        >
+          {saving ? '建立中...' : '建立個人資料'}
+        </button>
+        <a href="/" className="text-blue-600 hover:underline text-sm">
+          返回首頁
+        </a>
       </div>
     );
   }
@@ -271,9 +561,9 @@ export default function ProfilePage() {
             
             <div className="mb-2">
               <p className="font-bold text-gray-800 text-lg">
-                {displayName || profile?.display_name || '未設定名稱'}
+                {name || profile?.name || profile?.display_name || '未設定名稱'}
               </p>
-              {profile?.is_supporter && displayName && !profile?.supporter_badge_hidden && (
+              {profile?.is_supporter && name && !profile?.supporter_badge_hidden && (
                 <div className="mt-2">
                   <span className="inline-flex items-center gap-1 px-3 py-1 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-sm font-bold rounded-full">
                     ⭐ Supporter
@@ -286,28 +576,41 @@ export default function ProfilePage() {
           {/* 表單 */}
           <form onSubmit={handleSave} className="space-y-6">
             <div>
-              <label htmlFor="display_name" className="block text-sm font-bold text-gray-700 mb-2">
-                顯示名稱 <span className="text-red-500">*</span>
+              <label htmlFor="name" className="block text-sm font-bold text-gray-700 mb-2">
+                名稱 <span className="text-red-500">*</span>
               </label>
               <input
-                id="display_name"
+                id="name"
                 type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="輸入你的顯示名稱（2-20 字元）"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="輸入你的名稱（2-20 字元）"
                 minLength={2}
                 maxLength={20}
                 required
                 className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200 text-gray-900"
               />
               <p className="text-xs text-gray-500 mt-1">
-                顯示名稱會顯示在個人檔案和側邊欄中（{displayName.length}/20）
+                名稱會顯示在個人檔案和側邊欄中（{name.length}/20）
               </p>
             </div>
 
             {error && (
               <div className="p-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg">
                 {error}
+              </div>
+            )}
+
+            {/* Debug 模式（僅 dev） */}
+            {isDev && (lastSavedAt || lastError) && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded-lg">
+                <p className="font-bold mb-1">🔍 Debug 資訊（僅開發模式）</p>
+                {lastSavedAt && (
+                  <p>最後儲存時間: {lastSavedAt.toLocaleString('zh-TW')}</p>
+                )}
+                {lastError && (
+                  <p className="text-red-600">最後錯誤: {lastError}</p>
+                )}
               </div>
             )}
 
@@ -321,7 +624,7 @@ export default function ProfilePage() {
               </button>
               <button
                 type="submit"
-                disabled={saving || !displayName.trim()}
+                disabled={saving || !name.trim()}
                 className="flex-1 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
               >
                 {saving ? '儲存中...' : '儲存'}

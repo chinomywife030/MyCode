@@ -2,37 +2,22 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useToast } from '@/components/Toast';
-import { formatDateRange } from '@/lib/dateFormat';
-import SupporterBadge from '@/components/SupporterBadge';
+import Link from 'next/link';
 
 export default function TripsPage() {
-  const { showToast } = useToast();
   const [trips, setTrips] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [deletingTripId, setDeletingTripId] = useState<string | null>(null);
 
-  // 載入用戶資訊
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setCurrentUser(user);
-    });
-  }, []);
-
-  // 載入行程資料
   useEffect(() => {
     async function fetchTrips() {
       setLoading(true);
       // 抓取行程資料，並關聯取出發布者的資訊 (profiles)
-      const today = new Date().toISOString().split('T')[0];
       const { data, error } = await supabase
         .from('trips')
-        .select('*, profiles:shopper_id(name, avatar_url, is_supporter)')
-        .or(`start_date.gte.${today},end_date.gte.${today},date.gte.${today}`) // 向下相容：支援舊的 date 欄位
-        .order('start_date', { ascending: true, nullsFirst: false }) // 優先使用 start_date
-        .order('date', { ascending: true, nullsFirst: false }); // 向下相容：如果沒有 start_date 則用 date
+        .select('*, profiles:shopper_id(name, avatar_url)')
+        .gte('date', new Date().toISOString().split('T')[0]) // 只顯示今天以後的行程
+        .order('date', { ascending: true }); // 日期近的排前面
 
       if (error) console.error('Error fetching trips:', error);
       setTrips(data || []);
@@ -40,51 +25,6 @@ export default function TripsPage() {
     }
     fetchTrips();
   }, []);
-
-  // 刪除行程功能
-  const handleDeleteTrip = async (tripId: string) => {
-    if (!currentUser) return;
-    
-    // 確認對話框
-    if (!confirm('確定要刪除這個行程嗎？\n刪除後不可復原。')) {
-      return;
-    }
-    
-    setDeletingTripId(tripId);
-    
-    try {
-      // Optimistic UI: 立即從列表中移除
-      setTrips(prev => prev.filter(t => t.id !== tripId));
-      
-      // 呼叫 API 刪除
-      const { error } = await supabase
-        .from('trips')
-        .delete()
-        .eq('id', tripId);
-      
-      if (error) {
-        // 如果失敗，恢復列表（重新載入）
-        throw error;
-      }
-      
-      // 成功：顯示 toast
-      showToast('success', '已刪除行程');
-    } catch (error: any) {
-      console.error('[DeleteTrip] Error:', error);
-      // 失敗：重新載入列表以恢復正確狀態
-      const today = new Date().toISOString().split('T')[0];
-      const { data } = await supabase
-        .from('trips')
-        .select('*, profiles:shopper_id(name, avatar_url, is_supporter)')
-        .or(`start_date.gte.${today},end_date.gte.${today},date.gte.${today}`)
-        .order('start_date', { ascending: true, nullsFirst: false })
-        .order('date', { ascending: true, nullsFirst: false });
-      if (data) setTrips(data);
-      showToast('error', error.message || '刪除失敗，請稍後再試');
-    } finally {
-      setDeletingTripId(null);
-    }
-  };
 
   // 根據搜尋關鍵字過濾 (搜尋地點或說明)
   const filteredTrips = trips.filter(trip => 
@@ -142,33 +82,8 @@ export default function TripsPage() {
                   {/* 日期標籤 */}
                   <div className="flex justify-between items-start mb-4">
                     <span className="bg-blue-50 text-blue-700 text-xs font-bold px-3 py-1 rounded-full border border-blue-100 flex items-center gap-1">
-                      📅 {formatDateRange(trip.start_date, trip.end_date, trip.date)}
+                      📅 {new Date(trip.date).toLocaleDateString()} 出發
                     </span>
-                    {/* 刪除按鈕（只有擁有者可見） */}
-                    {currentUser && trip.shopper_id === currentUser.id && (
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleDeleteTrip(trip.id);
-                        }}
-                        disabled={deletingTripId === trip.id}
-                        className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                        title="刪除行程"
-                        style={{ padding: '4px' }}
-                      >
-                        {deletingTripId === trip.id ? (
-                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                          </svg>
-                        ) : (
-                          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        )}
-                      </button>
-                    )}
                   </div>
 
                   {/* 地點與說明 */}
@@ -187,26 +102,21 @@ export default function TripsPage() {
                           <img src={trip.profiles.avatar_url} alt="avatar" className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-xs font-bold text-gray-500">
-                            {trip.profiles?.name?.[0] || '?'}
+                            {trip.profiles?.name?.[0]}
                           </div>
                         )}
                       </div>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-bold text-gray-500 group-hover/avatar:text-gray-800 transition">
-                          {trip.profiles?.name || '代購夥伴'}
-                        </span>
-                        {trip.profiles?.is_supporter && (
-                          <SupporterBadge size="small" />
-                        )}
-                      </div>
+                      <span className="text-xs font-bold text-gray-500 group-hover/avatar:text-gray-800 transition">
+                        {trip.profiles?.name || '代購夥伴'}
+                      </span>
                     </Link>
 
-                    <a 
+                    <Link 
                       href={`/chat?target=${trip.shopper_id}`}
                       className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold px-4 py-2 rounded-lg transition active:scale-95 shadow-md shadow-blue-100"
                     >
                       💬 私訊
-                    </a>
+                    </Link>
                   </div>
                 </div>
               </div>

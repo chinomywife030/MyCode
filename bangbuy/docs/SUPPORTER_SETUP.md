@@ -202,3 +202,4 @@ const canAccess = await hasAccess(user, 'early_access_demo');
 2. 確認 `plan_id` 與 `PAYPAL_PLAN_ID` 一致
 3. 檢查 API logs 是否有錯誤
 
+

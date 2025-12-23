@@ -23,3 +23,4 @@ CREATE INDEX IF NOT EXISTS idx_profiles_is_supporter ON profiles(is_supporter);
 SELECT 'Migration completed: display_name, is_supporter, and supporter_badge_hidden added to profiles table' AS status;
 
 
+

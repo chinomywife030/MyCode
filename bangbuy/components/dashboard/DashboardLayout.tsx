@@ -194,6 +194,10 @@ export default function DashboardLayout({ children, title, activeTab: activeTabP
 
               <a 
                 href="/profile" 
+                onClick={(e) => {
+                  console.log('[nav] go profile clicked (DashboardLayout)');
+                  // 確保是正常的導航，不要 preventDefault
+                }}
                 className="block w-full py-2 mt-4 border border-gray-200 text-gray-600 text-xs rounded hover:bg-gray-50 transition text-center"
               >
                 編輯個人檔案

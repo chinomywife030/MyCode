@@ -27,3 +27,4 @@ WHERE table_name = 'trips'
 
 SELECT 'Trips date range migration completed!' AS status;
 
+
