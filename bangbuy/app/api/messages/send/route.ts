@@ -13,6 +13,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendMessageEmailNotification } from '@/lib/messageNotifications';
 
+export const runtime = 'nodejs';
+
 // Supabase Anon Client（用於驗證 token）
 const supabaseAuth = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,

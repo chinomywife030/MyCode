@@ -90,11 +90,23 @@ function logEmailAttempt(params: SendEmailParams, extra?: Record<string, any>) {
   const config = getEnvConfig();
   const timestamp = new Date().toISOString();
   
+  // Mask API key（只顯示前 4 個字元）
+  const maskedKey = config.RESEND_API_KEY 
+    ? `${config.RESEND_API_KEY.substring(0, 4)}***${config.RESEND_API_KEY.substring(config.RESEND_API_KEY.length - 4)}`
+    : '(not set)';
+  
+  // Mask email from（只顯示前 3 個字元和域名）
+  const maskedFrom = config.EMAIL_FROM
+    ? `${config.EMAIL_FROM.substring(0, 3)}***@${config.EMAIL_FROM.split('@')[1] || '***'}`
+    : '(not set)';
+  
   console.log('═'.repeat(70));
   console.log(`[Email] ${timestamp}`);
   console.log(`  NODE_ENV: ${config.NODE_ENV}`);
-  console.log(`  EMAIL_FROM: ${config.EMAIL_FROM || '(not set)'}`);
+  console.log(`  ENABLE_MESSAGE_EMAIL_NOTIFICATIONS: ${process.env.ENABLE_MESSAGE_EMAIL_NOTIFICATIONS === 'true'}`);
   console.log(`  EMAIL_SEND_IN_DEV: ${config.EMAIL_SEND_IN_DEV}`);
+  console.log(`  RESEND_API_KEY: ${maskedKey}`);
+  console.log(`  EMAIL_FROM: ${maskedFrom}`);
   console.log(`  To: ${params.to}`);
   console.log(`  Subject: ${params.subject}`);
   console.log(`  Category: ${params.category}`);
@@ -319,6 +331,10 @@ async function sendViaResend(params: SendEmailParams): Promise<SendEmailResult> 
 
     if (!response.ok) {
       // 完整輸出 Resend 錯誤
+      console.error('[Email] ❌ Resend API error');
+      console.error('[Email] Status:', response.status, response.statusText);
+      console.error('[Email] Resend error response:', JSON.stringify(data, null, 2));
+      
       logError('Resend API error', {
         status: response.status,
         statusText: response.statusText,
@@ -329,17 +345,22 @@ async function sendViaResend(params: SendEmailParams): Promise<SendEmailResult> 
       const errorMessage = data.message || data.error || 'Unknown Resend error';
       
       if (errorMessage.includes('domain') || errorMessage.includes('verified')) {
+        console.error('[Email] Domain verification issue - EMAIL_FROM domain may not be verified in Resend');
         logError('Domain verification issue - EMAIL_FROM domain may not be verified in Resend');
       }
       if (errorMessage.includes('api_key') || errorMessage.includes('unauthorized')) {
+        console.error('[Email] API key issue - RESEND_API_KEY may be invalid or have insufficient permissions');
         logError('API key issue - RESEND_API_KEY may be invalid or have insufficient permissions');
       }
       
-      return { success: false, error: `Resend: ${errorMessage}` };
+      return { success: false, error: `Resend: ${errorMessage}`, envStatus: { resendError: data } };
     }
 
+    console.log('[Email] ✅ Sent successfully via Resend:', data.id);
     return { success: true, messageId: data.id };
   } catch (error: any) {
+    console.error('[Email] ❌ Resend request failed:', error);
+    console.error('[Email] Error stack:', error.stack);
     logError('Resend request failed', error);
     return { success: false, error: `Network error: ${error.message || 'Unknown'}` };
   }

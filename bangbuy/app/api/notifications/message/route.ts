@@ -9,6 +9,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { sendMessageEmailNotification, SendMessageNotificationParams } from '@/lib/messageNotifications';
 import { createClient } from '@supabase/supabase-js';
 
+export const runtime = 'nodejs';
+
 // Supabase Admin Client
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

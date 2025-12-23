@@ -3,11 +3,13 @@
  * 
  * GET /api/test-email?to=xxx@example.com
  * 
- * 用於測試 Resend 設定是否正確
+ * 用於測試 Resend 設定是否正確（Production 可用）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { sendEmail } from '@/lib/email/sender';
+
+export const runtime = 'nodejs';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -32,19 +34,40 @@ export async function GET(request: NextRequest) {
   console.log('[test-email] ========================================');
   console.log('[test-email] Sending test email to:', to);
   
-  // 檢查環境變數
+  // 檢查環境變數（mask key）
+  const enabled = process.env.ENABLE_MESSAGE_EMAIL_NOTIFICATIONS === 'true';
+  const nodeEnv = process.env.NODE_ENV || 'development';
+  const hasResendKey = !!process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM || '';
+  
   const envCheck = {
-    NODE_ENV: process.env.NODE_ENV || 'development',
-    EMAIL_SEND_IN_DEV: process.env.EMAIL_SEND_IN_DEV === 'true',
-    RESEND_API_KEY: !!process.env.RESEND_API_KEY,
-    EMAIL_FROM: !!process.env.EMAIL_FROM,
+    enabled,
+    nodeEnv,
+    hasResendKey,
+    from: from ? `${from.substring(0, 3)}***@${from.split('@')[1] || '***'}` : '(not set)',
   };
   
-  console.log('[test-email] Environment check:', envCheck);
+  console.log('[test-email] Environment status:', envCheck);
   
-  if (envCheck.NODE_ENV === 'development' && !envCheck.EMAIL_SEND_IN_DEV) {
+  // 檢查缺失的環境變數
+  const missing: string[] = [];
+  if (!process.env.RESEND_API_KEY) missing.push('RESEND_API_KEY');
+  if (!process.env.EMAIL_FROM) missing.push('EMAIL_FROM');
+  
+  if (missing.length > 0) {
+    console.error('[test-email] ❌ Missing environment variables:', missing);
+    return NextResponse.json(
+      {
+        ok: false,
+        error: `Missing environment variables: ${missing.join(', ')}`,
+        missing,
+      },
+      { status: 500 }
+    );
+  }
+  
+  if (nodeEnv === 'development' && process.env.EMAIL_SEND_IN_DEV !== 'true') {
     console.warn('[test-email] ⚠️ EMAIL_SEND_IN_DEV is not "true" - Email will be simulated!');
-    console.warn('[test-email] Set EMAIL_SEND_IN_DEV=true in .env.local to send real emails');
   }
   
   const testHtml = `
@@ -87,22 +110,19 @@ export async function GET(request: NextRequest) {
       const isSimulated = result.messageId?.startsWith('dev-') || result.skipped;
       
       return NextResponse.json({
-        success: true,
+        ok: true,
         messageId: result.messageId,
-        message: isSimulated 
-          ? 'Test email simulated (not actually sent). Set EMAIL_SEND_IN_DEV=true to send real emails.'
-          : 'Test email sent successfully',
         simulated: isSimulated,
         envCheck,
-        reason: result.reason,
       });
     } else {
       console.error('[test-email] ❌ Failed:', result.error);
+      console.error('[test-email] Resend error response:', JSON.stringify(result, null, 2));
+      
       return NextResponse.json(
         {
-          success: false,
-          error: result.error,
-          envStatus: result.envStatus,
+          ok: false,
+          error: result.error || 'Unknown error',
           envCheck,
         },
         { status: 500 }
@@ -110,9 +130,11 @@ export async function GET(request: NextRequest) {
     }
   } catch (error: any) {
     console.error('[test-email] ❌ Exception:', error);
+    console.error('[test-email] Error stack:', error.stack);
+    
     return NextResponse.json(
       {
-        success: false,
+        ok: false,
         error: error.message || 'Unknown error',
       },
       { status: 500 }

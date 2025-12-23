@@ -26,6 +26,7 @@ export interface SendMessageNotificationParams {
 // ========== Environment Variables ==========
 
 function getEnvConfig() {
+  // 確保只用字串比較
   const enabled = process.env.ENABLE_MESSAGE_EMAIL_NOTIFICATIONS === 'true';
   const sendInDev = process.env.EMAIL_SEND_IN_DEV === 'true';
   const nodeEnv = process.env.NODE_ENV || 'development';
@@ -135,7 +136,14 @@ export async function sendMessageEmailNotification(
   
   const env = getEnvConfig();
   
-  // 日誌：開始
+  // 日誌：開始（增強版，包含 env 狀態）
+  const hasResendKey = !!process.env.RESEND_API_KEY;
+  const from = process.env.EMAIL_FROM || '';
+  const maskedFrom = from ? `${from.substring(0, 3)}***@${from.split('@')[1] || '***'}` : '(not set)';
+  const maskedKey = process.env.RESEND_API_KEY 
+    ? `${process.env.RESEND_API_KEY.substring(0, 4)}***${process.env.RESEND_API_KEY.substring(process.env.RESEND_API_KEY.length - 4)}`
+    : '(not set)';
+  
   console.log('[msg-email] ========================================');
   console.log('[msg-email] start', {
     conversationId,
@@ -143,10 +151,12 @@ export async function sendMessageEmailNotification(
     receiverId,
     messageType,
   });
-  console.log('[msg-email] env', {
+  console.log('[msg-email] env status', {
     enabled: env.enabled,
-    sendInDev: env.sendInDev,
     nodeEnv: env.nodeEnv,
+    hasResendKey,
+    from: maskedFrom,
+    resendKey: maskedKey,
   });
   
   // 1. 功能總開關檢查
@@ -218,18 +228,23 @@ export async function sendMessageEmailNotification(
     });
     
     if (result.success) {
-      console.log('[msg-email] sent', {
+      console.log('[msg-email] ✅ sent', {
         id: result.messageId,
         to: receiverEmail,
       });
     } else {
-      console.error('[msg-email] failed', {
+      console.error('[msg-email] ❌ failed', {
         error: result.error,
         to: receiverEmail,
+        envStatus: result.envStatus,
       });
+      // 如果有 Resend error response，也印出來
+      if (result.envStatus?.resendError) {
+        console.error('[msg-email] Resend error response:', JSON.stringify(result.envStatus.resendError, null, 2));
+      }
     }
   } catch (error: any) {
-    console.error('[msg-email] failed', {
+    console.error('[msg-email] ❌ failed (exception)', {
       error: error.message,
       stack: error.stack,
       to: receiverEmail,
