@@ -383,8 +383,8 @@ export const safeFrom = {
       maybeSingle?: boolean;
     }
   ): Promise<SafeRpcResult<T>> => {
-    return safeQuery(async () => {
-      let query = supabase.from(table).select(columns);
+    return safeQuery<T>(async () => {
+      let query = supabase.from(table).select(columns) as any;
 
       if (options?.eq) {
         Object.entries(options.eq).forEach(([key, value]) => {
@@ -419,8 +419,8 @@ export const safeFrom = {
     data: any,
     options?: { select?: boolean }
   ): Promise<SafeRpcResult<T>> => {
-    return safeQuery(async () => {
-      let query = supabase.from(table).insert(data);
+    return safeQuery<T>(async () => {
+      let query = supabase.from(table).insert(data) as any;
       
       if (options?.select !== false) {
         query = query.select();
@@ -435,8 +435,8 @@ export const safeFrom = {
     data: any,
     match: Record<string, any>
   ): Promise<SafeRpcResult<T>> => {
-    return safeQuery(async () => {
-      let query = supabase.from(table).update(data);
+    return safeQuery<T>(async () => {
+      let query = supabase.from(table).update(data) as any;
       
       Object.entries(match).forEach(([key, value]) => {
         query = query.eq(key, value);
@@ -450,8 +450,8 @@ export const safeFrom = {
     table: string,
     match: Record<string, any>
   ): Promise<SafeRpcResult<null>> => {
-    return safeQuery(async () => {
-      let query = supabase.from(table).delete();
+    return safeQuery<null>(async () => {
+      let query = supabase.from(table).delete() as any;
       
       Object.entries(match).forEach(([key, value]) => {
         query = query.eq(key, value);

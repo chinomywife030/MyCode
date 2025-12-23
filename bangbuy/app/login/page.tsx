@@ -212,7 +212,7 @@ export default function LoginPage() {
             {/* 🔐 法務條款告知（純文字，不阻斷流程） */}
             <div className="pt-2">
               <LegalConsentBlock
-                mode={view}
+                mode={view === 'signup' ? 'register' : 'login'}
                 checked={false}
                 onChange={() => {}}
                 showError={false}

@@ -78,7 +78,7 @@ async function safeInsert<T>(
 ): Promise<SafeResult<T>> {
   return safeQuery(
     `Insert into ${table}`,
-    () => supabase.from(table).insert(data).select().single(),
+    async () => await supabase.from(table).insert(data).select().single(),
     context
   );
 }
@@ -102,7 +102,7 @@ async function safeUpdate<T>(
         query = query.eq(key, value);
       });
       
-      return query.select().single();
+      return await query.select().single();
     },
     context
   );
@@ -125,7 +125,7 @@ async function safeDelete(
         query = query.eq(key, value);
       });
       
-      return query;
+      return await (query as any);
     },
     context
   );
@@ -149,7 +149,7 @@ async function safeFetchOne<T>(
         query = query.eq(key, value);
       });
       
-      return query.maybeSingle();
+      return await query.maybeSingle();
     },
     context
   );
@@ -168,10 +168,10 @@ async function safeFetchMany<T>(
   },
   context?: ErrorContext
 ): Promise<SafeResult<T[]>> {
-  return safeQuery(
+  return safeQuery<T[]>(
     `Fetch many from ${table}`,
     async () => {
-      let query = supabase.from(table).select(options?.select || '*');
+      let query = supabase.from(table).select(options?.select || '*') as any;
       
       // 應用過濾條件
       if (options?.match) {

@@ -99,7 +99,7 @@ export function useConversations(options: UseConversationsOptions = {}): UseConv
 
     try {
       const { data: convData, error: convError } = await safeQuery(
-        () => supabase
+        async () => await supabase
           .from('conversations')
           .select('id, user1_id, user2_id, source_type, source_id, source_title, last_message_at, created_at')
           .or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`)

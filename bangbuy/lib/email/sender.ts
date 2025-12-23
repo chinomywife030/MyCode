@@ -22,6 +22,7 @@ export type EmailCategory =
   | 'offer_accepted' 
   | 'offer_rejected' 
   | 'message_digest'
+  | 'message_reminder'
   | 'test'
   | 'system';
 

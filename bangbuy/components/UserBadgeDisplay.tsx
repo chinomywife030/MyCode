@@ -70,7 +70,7 @@ export default function UserBadgeDisplay({
           {nameDisplay}
         </span>
         {isSupporter && (
-          <SupporterBadge size={size === 'lg' ? 'md' : 'sm'} />
+          <SupporterBadge size={size === 'lg' ? 'default' : 'small'} />
         )}
       </div>
     </div>

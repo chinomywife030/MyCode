@@ -227,7 +227,7 @@ function cleanupChannel(key: string) {
 // React Hook
 // ============================================
 
-interface UseSimpleRealtimeOptions<T = any> {
+interface UseSimpleRealtimeOptions<T extends { [key: string]: any } = any> {
   /** 唯一 key，例如 `messages:${conversationId}` */
   key: string;
   /** 是否啟用 */
@@ -245,7 +245,7 @@ interface UseSimpleRealtimeOptions<T = any> {
   onChange?: (payload: RealtimePostgresChangesPayload<T>) => void;
 }
 
-export function useSimpleRealtime<T = any>(options: UseSimpleRealtimeOptions<T>) {
+export function useSimpleRealtime<T extends { [key: string]: any } = any>(options: UseSimpleRealtimeOptions<T>) {
   const {
     key,
     enabled = true,
@@ -335,7 +335,7 @@ export function useSimpleRealtime<T = any>(options: UseSimpleRealtimeOptions<T>)
       try {
         const channel = supabase.channel(key);
 
-        channel.on(
+        (channel as any).on(
           'postgres_changes',
           { event, schema: 'public', table, filter },
           (payload: RealtimePostgresChangesPayload<T>) => {

@@ -103,7 +103,7 @@ function ChatContent() {
     try {
       // 1. 獲取目標用戶資料
       const { data: targetUser, error: profileError } = await safeQuery(
-        () => supabase
+        async () => await supabase
           .from('profiles')
           .select('id, name, avatar_url')
           .eq('id', targetUserId)
@@ -173,8 +173,15 @@ function ChatContent() {
 
     try {
       // 獲取對話資料
-      const { data: conv, error: convError } = await safeQuery(
-        () => supabase
+      const { data: conv, error: convError } = await safeQuery<{
+        id: string;
+        user1_id: string;
+        user2_id: string;
+        source_type: string | null;
+        source_id: string | null;
+        source_title: string | null;
+      }>(
+        async () => await supabase
           .from('conversations')
           .select('id, user1_id, user2_id, source_type, source_id, source_title')
           .eq('id', convId)
@@ -199,7 +206,7 @@ function ChatContent() {
 
       // 獲取對方資料
       const { data: otherUser } = await safeQuery(
-        () => supabase
+        async () => await supabase
           .from('profiles')
           .select('id, name, avatar_url')
           .eq('id', otherId)
@@ -297,7 +304,7 @@ function ChatContent() {
   const handleSelectConversation = useCallback(async (conversation: Conversation) => {
     try {
       const { data: otherUser, error } = await safeQuery(
-        () => supabase
+        async () => await supabase
           .from('profiles')
           .select('id, name, avatar_url')
           .eq('id', conversation.other_user_id)

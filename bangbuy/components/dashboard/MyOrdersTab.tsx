@@ -222,11 +222,12 @@ export default function MyOrdersTab({ userId }: MyOrdersTabProps) {
 
       {isFeatureEnabled('ratings') && reviewModal?.open && (
         <ReviewModal
+          isOpen={true}
           orderId={reviewModal.orderId}
-          targetId={reviewModal.targetId}
           targetName={reviewModal.targetName}
+          targetType="shopper"
           onClose={() => setReviewModal(null)}
-          onSuccess={() => {}}
+          onReviewSubmitted={() => {}}
         />
       )}
     </>

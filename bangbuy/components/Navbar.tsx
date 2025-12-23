@@ -18,7 +18,7 @@ export default function Navbar() {
   const { mode, toggleMode } = useUserMode();
 
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<{ avatar_url: string | null; name: string | null; display_name?: string | null; is_supporter?: boolean } | null>(null);
+  const [profile, setProfile] = useState<{ avatar_url: string | null; name: string | null; display_name?: string | null; is_supporter?: boolean; supporter_badge_hidden?: boolean } | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [avatarVersion, setAvatarVersion] = useState<number>(Date.now());
   

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 📧 Email 模板統一導出
  */
 
@@ -8,20 +8,4 @@ export * from './offerAccepted';
 export * from './offerRejected';
 export * from './messageDigest';
 export * from './newMessage';
-
-
-
-
-
- */
-
-export * from './base';
-export * from './offerCreated';
-export * from './offerAccepted';
-export * from './offerRejected';
-export * from './messageDigest';
-export * from './newMessage';
-
-
-
 

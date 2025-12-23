@@ -80,7 +80,7 @@ export function useSubmit(options: UseSubmitOptions = {}) {
  */
 export function useDebounceClick(callback: () => void | Promise<void>, delay: number = 500) {
   const [clicking, setClicking] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout>(null);
 
   const handleClick = useCallback(async () => {
     if (clicking) {

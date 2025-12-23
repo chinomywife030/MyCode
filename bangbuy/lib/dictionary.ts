@@ -78,6 +78,16 @@ export const dictionary = {
     allCountries: 'All countries',
     trips: 'Trips',
     calculator: 'FX Calculator',
+    // 模式切換相關
+    requesterMode: 'Requester',
+    shopperMode: 'Shopper',
+    // Hero 文案
+    heroRequesterTitle: 'Find reliable shoppers',
+    heroRequesterSubtitle: 'Post requests, shop globally with ease',
+    heroRequesterCTA: 'Post Request',
+    heroShopperTitle: 'Start earning',
+    heroShopperSubtitle: 'Use your trips to help others shop and earn',
+    heroShopperCTA: 'Post Trip',
     dashboard: {
       title: 'Dashboard',
       myWishes: 'My requests',
@@ -131,6 +141,16 @@ export const dictionary = {
     allCountries: 'すべての国',
     trips: '旅程',
     calculator: '為替計算機',
+    // 模式切換相關
+    requesterMode: '購入者',
+    shopperMode: '代購者',
+    // Hero 文案
+    heroRequesterTitle: '信頼できる代購者を見つける',
+    heroRequesterSubtitle: '依頼を投稿し、世界中から簡単にショッピング',
+    heroRequesterCTA: '依頼を投稿',
+    heroShopperTitle: '稼ぎを始める',
+    heroShopperSubtitle: '旅行を活かして代購で収入を得る',
+    heroShopperCTA: '旅程を投稿',
     dashboard: {
       title: 'マイページ',
       myWishes: '自分の依頼',
@@ -184,6 +204,16 @@ export const dictionary = {
     allCountries: '전체 국가',
     trips: '여행',
     calculator: '환율 계산기',
+    // 모드 전환 관련
+    requesterMode: '구매자',
+    shopperMode: '대행자',
+    // Hero 문구
+    heroRequesterTitle: '신뢰할 수 있는 대행자 찾기',
+    heroRequesterSubtitle: '요청을 등록하고 전 세계에서 쉽게 쇼핑하세요',
+    heroRequesterCTA: '요청 등록',
+    heroShopperTitle: '수익 창출 시작',
+    heroShopperSubtitle: '여행을 활용하여 대행으로 수입을 얻으세요',
+    heroShopperCTA: '여행 등록',
     dashboard: {
       title: '대시보드',
       myWishes: '나의 요청',
