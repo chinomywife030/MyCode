@@ -17,6 +17,11 @@ export default function RouteReloadGuard() {
 
   // 監聽路由變化
   useEffect(() => {
+    // 🔥 Dashboard 內部導覽不執行 reload（client-side navigation）
+    if (pathname?.startsWith('/dashboard')) {
+      return;
+    }
+
     // 先清除 __reloaded 參數（美化 URL）
     cleanReloadedParam();
 
@@ -34,6 +39,7 @@ export default function RouteReloadGuard() {
   // 這個組件不渲染任何 UI
   return null;
 }
+
 
 
 

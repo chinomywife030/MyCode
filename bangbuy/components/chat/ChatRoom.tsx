@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMessages, type Message } from '@/hooks/useMessages';
 import { useRealtimeChat } from '@/hooks/useRealtimeChat';
 import { supabase } from '@/lib/supabase';
-import Image from 'next/image';
+import SafeAvatar from '@/components/SafeAvatar';
 import Link from 'next/link';
 
 interface ChatRoomProps {
@@ -213,12 +213,6 @@ export default function ChatRoom({
     return prevDate !== currDate;
   };
 
-  // 獲取頭像 URL
-  const getAvatarUrl = (name: string | null, avatarUrl: string | null) => {
-    if (avatarUrl) return avatarUrl;
-    const initial = (name || '?')[0].toUpperCase();
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initial)}&background=3b82f6&color=fff`;
-  };
 
   // 訊息狀態圖示
   const MessageStatus = ({ status }: { status: string }) => {
@@ -261,31 +255,18 @@ export default function ChatRoom({
             </button>
           )}
           
-          <Image
-            src={getAvatarUrl(otherUser.name, otherUser.avatar_url)}
-            alt={otherUser.name || '用戶'}
-            width={40}
-            height={40}
-            className="w-10 h-10 rounded-full object-cover"
+          <SafeAvatar
+            src={otherUser.avatar_url}
+            name={otherUser.name}
+            size={40}
           />
           
           <div className="ml-3">
             <p className="font-medium text-gray-900">{otherUser.name || '未知用戶'}</p>
-            <div className="flex items-center text-xs text-gray-500">
-              {typingUsers.length > 0 ? (
-                <span className="text-blue-500">正在輸入...</span>
-              ) : isConnected ? (
-                <span className="flex items-center">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-1" />
-                  在線
-                </span>
-              ) : (
-                <span className="flex items-center">
-                  <span className="w-2 h-2 bg-gray-300 rounded-full mr-1" />
-                  離線
-                </span>
-              )}
-            </div>
+            {/* 顯示打字狀態（移除在線/離線顯示） */}
+            {typingUsers.length > 0 && (
+              <p className="text-xs text-blue-500">正在輸入...</p>
+            )}
           </div>
         </div>
 

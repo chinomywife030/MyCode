@@ -6,6 +6,7 @@ export type VerificationStatus = 'unverified' | 'pending' | 'verified' | 'reject
 export interface Profile {
   id: string;
   name: string;
+  display_name?: string | null;
   avatar_url?: string;
   role: 'buyer' | 'shopper';
   is_shopper: boolean;
@@ -15,6 +16,8 @@ export interface Profile {
   rating_count: number;
   deals_count?: number; // 成交數
   bio?: string;
+  is_supporter?: boolean;
+  supporter_badge_hidden?: boolean;
   // 關聯欄位
   reviews?: Review[];
 }
@@ -77,7 +80,9 @@ export interface Review {
 export interface Trip {
   id: string;
   destination: string;
-  date: string;
+  date?: string; // 向下相容：舊的單一日期欄位
+  start_date?: string; // 開始日期
+  end_date?: string; // 結束日期
   description?: string;
   shopper_id: string;
   shopper_name?: string;
@@ -86,9 +91,11 @@ export interface Trip {
   shopper?: {
     name: string;
     avatar_url?: string;
+    is_supporter?: boolean;
   };
   profiles?: {
     name: string;
     avatar_url?: string;
+    is_supporter?: boolean;
   };
 }

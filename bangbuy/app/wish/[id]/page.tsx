@@ -17,6 +17,7 @@ export default function WishDetailPage() {
   const [wish, setWish] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
   
   // 收藏與使用者狀態
   const [isFavorited, setIsFavorited] = useState(false);
@@ -28,6 +29,7 @@ export default function WishDetailPage() {
     avatar_url: string | null;
     email_verified: boolean;
     created_at: string | null;
+    is_supporter?: boolean;
   } | null>(null);
 
   // 私訊按鈕 loading 狀態
@@ -83,12 +85,12 @@ export default function WishDetailPage() {
       } else {
         setWish(wishData);
         
-        // 3. 抓取發布者資料（信任提示用）
+        // 3. 抓取發布者資料（信任提示用，包含 is_supporter）
         // 🔧 修復 406：使用 maybeSingle() 因為 profile 可能不存在
         if (wishData?.buyer_id) {
           const { data: profileData } = await supabase
             .from('profiles')
-            .select('name, avatar_url, email_verified, created_at')
+            .select('name, avatar_url, email_verified, created_at, is_supporter')
             .eq('id', wishData.buyer_id)
             .maybeSingle();
           
@@ -126,25 +128,175 @@ export default function WishDetailPage() {
     }
   }, [wish, user, fetchOffers]);
 
-  // ❤️ 切換收藏狀態
+  // ❤️ 切換收藏狀態（完整診斷版）
   const toggleFavorite = async () => {
-    if (!user) {
-      alert('請先登入才能收藏喔！');
+    // 🔐 防抖：如果正在處理中，直接返回
+    if (favoriteLoading) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[收藏] 請求進行中，忽略重複點擊');
+      }
       return;
     }
 
-    if (isFavorited) {
-      await supabase
-        .from('favorites')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('wish_id', wish.id);
-      setIsFavorited(false);
-    } else {
-      await supabase
-        .from('favorites')
-        .insert([{ user_id: user.id, wish_id: wish.id }]);
-      setIsFavorited(true);
+    // 🔐 未登入：導向登入頁
+    if (!user) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[收藏] 未登入，導向登入頁');
+      }
+      router.push(`/login?returnTo=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+
+    const action = isFavorited ? 'remove' : 'add';
+    
+    // 📊 完整診斷資訊（開發模式）
+    if (process.env.NODE_ENV === 'development') {
+      console.log('═'.repeat(60));
+      console.log('[收藏] 點擊收藏 - 開始');
+      console.log('  操作:', action);
+      console.log('  wishId:', wish.id);
+      console.log('  userId:', user.id);
+      console.log('  目前 UI 狀態 isFavorited:', isFavorited);
+      console.log('═'.repeat(60));
+    }
+
+    // 設定 loading 狀態
+    setFavoriteLoading(true);
+
+    // Optimistic update
+    setIsFavorited(!isFavorited);
+
+    try {
+      if (isFavorited) {
+        // 移除收藏
+        const { data, error } = await supabase
+          .from('favorites')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('wish_id', wish.id)
+          .select(); // 加入 select 以獲取刪除的資料
+
+        // 📊 完整診斷資訊
+        if (process.env.NODE_ENV === 'development') {
+          console.log('═'.repeat(60));
+          console.log('[收藏] DELETE 回應');
+          console.log('  data:', data);
+          console.log('  error:', error ? {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            status: (error as any).status,
+          } : null);
+          console.log('═'.repeat(60));
+        }
+
+        if (error) {
+          // Rollback optimistic update
+          setIsFavorited(true);
+          
+          // 判斷根因
+          if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('RLS')) {
+            console.error('🚨 [收藏] 根因：RLS 權限錯誤');
+            alert('權限不足，請確認您已登入且帳號狀態正常');
+          } else if (error.code === 'PGRST116') {
+            // 記錄不存在（可能已被刪除）
+            console.log('[收藏] 記錄不存在，狀態已正確');
+            // 不需要 rollback，狀態已正確
+          } else {
+            console.error('🚨 [收藏] 根因：其他錯誤', error);
+            alert('移除收藏失敗，請稍後再試');
+          }
+        } else {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('✅ [收藏] 移除成功');
+            console.log('  刪除的記錄數:', data?.length || 0);
+          }
+          
+          // 成功後重新 fetch 一次確認狀態（確保同步）
+          const { data: verifyData } = await supabase
+            .from('favorites')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('wish_id', wish.id)
+            .maybeSingle();
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[收藏] 驗證查詢結果:', verifyData ? '仍存在（異常）' : '已刪除（正常）');
+          }
+        }
+      } else {
+        // 新增收藏
+        const { data, error } = await supabase
+          .from('favorites')
+          .insert([{ user_id: user.id, wish_id: wish.id }])
+          .select(); // 加入 select 以獲取插入的資料
+
+        // 📊 完整診斷資訊
+        if (process.env.NODE_ENV === 'development') {
+          console.log('═'.repeat(60));
+          console.log('[收藏] INSERT 回應');
+          console.log('  data:', data);
+          console.log('  error:', error ? {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            status: (error as any).status,
+          } : null);
+          console.log('═'.repeat(60));
+        }
+
+        if (error) {
+          // Rollback optimistic update
+          setIsFavorited(false);
+          
+          // 判斷根因
+          if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('RLS')) {
+            console.error('🚨 [收藏] 根因：RLS 權限錯誤');
+            alert('權限不足，請確認您已登入且帳號狀態正常');
+          } else if (error.code === '23505') {
+            // 重複鍵（可能已存在）
+            console.log('[收藏] 已存在，同步狀態');
+            setIsFavorited(true);
+            // 不需要 rollback，狀態已正確
+          } else {
+            console.error('🚨 [收藏] 根因：其他錯誤', error);
+            alert('新增收藏失敗，請稍後再試');
+          }
+        } else {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('✅ [收藏] 新增成功');
+            console.log('  插入的記錄:', data?.[0]);
+          }
+          
+          // 成功後重新 fetch 一次確認狀態（確保同步）
+          const { data: verifyData } = await supabase
+            .from('favorites')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('wish_id', wish.id)
+            .maybeSingle();
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[收藏] 驗證查詢結果:', verifyData ? '已存在（正常）' : '不存在（異常）');
+          }
+          
+          // 如果驗證失敗，同步狀態
+          if (!verifyData) {
+            console.warn('[收藏] 驗證失敗，重新同步狀態');
+            setIsFavorited(false);
+          }
+        }
+      }
+    } catch (err: any) {
+      // Rollback optimistic update
+      setIsFavorited(isFavorited);
+      
+      console.error('🚨 [收藏] 根因：例外錯誤', err);
+      alert('操作失敗，請稍後再試');
+    } finally {
+      setFavoriteLoading(false);
     }
   };
 
@@ -350,7 +502,10 @@ export default function WishDetailPage() {
                 {!isOwner && (
                   <button 
                     onClick={toggleFavorite}
-                    className={`p-2 rounded-full transition ${isFavorited ? 'text-red-500 bg-red-50' : 'text-gray-300 hover:text-red-300 hover:bg-gray-50'}`}
+                    disabled={favoriteLoading}
+                    className={`p-2 rounded-full transition ${
+                      favoriteLoading ? 'opacity-50 cursor-not-allowed' : ''
+                    } ${isFavorited ? 'text-red-500 bg-red-50' : 'text-gray-300 hover:text-red-300 hover:bg-gray-50'}`}
                     title={isFavorited ? '取消收藏' : '加入收藏'}
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" fill={isFavorited ? "currentColor" : "none"} viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
@@ -429,10 +584,15 @@ export default function WishDetailPage() {
                 
                 {/* 信任指標 */}
                 <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="font-semibold text-slate-800">
-                      {buyerProfile.name || '匿名用戶'}
+                      {buyerProfile.name || '使用者'}
                     </span>
+                    {buyerProfile.is_supporter && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-[10px] font-bold rounded-full h-[18px] shrink-0">
+                        ⭐
+                      </span>
+                    )}
                     {isNewUser && (
                       <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-bold rounded-full">
                         新手

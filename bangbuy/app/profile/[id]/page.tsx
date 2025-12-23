@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/components/LanguageProvider';
 import { Profile } from '@/types';
 import { buildLoginUrl } from '@/lib/authRedirect';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 
 export default function ProfilePage() {
   const { id } = useParams();
@@ -89,7 +90,7 @@ export default function ProfilePage() {
   if (loading) return <div className="min-h-screen bg-gray-50 pt-20 text-center text-gray-500">載入中...</div>;
   if (!profile) return <div className="min-h-screen bg-gray-50 pt-20 text-center text-gray-500">找不到此用戶</div>;
 
-  const displayRating = profile.rating_avg ? profile.rating_avg.toFixed(1) : '暫無評價';
+  const displayRating = isFeatureEnabled('ratings') && profile.rating_avg ? profile.rating_avg.toFixed(1) : '暫無評價';
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -142,21 +143,25 @@ export default function ProfilePage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 py-6 my-8 bg-gray-50 rounded-xl border border-gray-100">
+            <div className={`grid gap-4 py-6 my-8 bg-gray-50 rounded-xl border border-gray-100 ${isFeatureEnabled('ratings') ? 'grid-cols-3' : 'grid-cols-1'}`}>
               <div className="text-center group cursor-help" title="完成的訂單數量">
                 <div className="text-2xl font-black text-gray-800">{profile.deals_count || 0}</div>
                 <div className="text-xs text-gray-500 font-medium mt-1">成交訂單</div>
               </div>
-              <div className="text-center border-l border-r border-gray-200">
-                <div className="text-2xl font-black text-yellow-500 flex items-center justify-center gap-1">
-                  {displayRating} <span className="text-lg">★</span>
-                </div>
-                <div className="text-xs text-gray-500 font-medium mt-1">信任評分</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-black text-gray-800">{reviews.length}</div>
-                <div className="text-xs text-gray-500 font-medium mt-1">收到評價</div>
-              </div>
+              {isFeatureEnabled('ratings') && (
+                <>
+                  <div className="text-center border-l border-r border-gray-200">
+                    <div className="text-2xl font-black text-yellow-500 flex items-center justify-center gap-1">
+                      {displayRating} <span className="text-lg">★</span>
+                    </div>
+                    <div className="text-xs text-gray-500 font-medium mt-1">信任評分</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-black text-gray-800">{reviews.length}</div>
+                    <div className="text-xs text-gray-500 font-medium mt-1">收到評價</div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="mb-8">
@@ -178,12 +183,14 @@ export default function ProfilePage() {
               >
                 代購紀錄 ({completedOrders.length})
               </button>
-              <button
-                onClick={() => setActiveTab('reviews')}
-                className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'reviews' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-              >
-                評價 ({reviews.length})
-              </button>
+              {isFeatureEnabled('ratings') && (
+                <button
+                  onClick={() => setActiveTab('reviews')}
+                  className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors ${activeTab === 'reviews' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  評價 ({reviews.length})
+                </button>
+              )}
             </div>
 
             <div className="min-h-[200px]">
@@ -237,7 +244,7 @@ export default function ProfilePage() {
                 )
               )}
 
-              {activeTab === 'reviews' && (
+              {isFeatureEnabled('ratings') && activeTab === 'reviews' && (
                 reviews.length === 0 ? (
                   <p className="text-gray-400 text-center py-10">尚未收到任何評價。</p>
                 ) : (
@@ -256,7 +263,7 @@ export default function ProfilePage() {
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-gray-800">{review.reviewer?.name || '匿名'}</span>
+                            <span className="font-bold text-gray-800">{review.reviewer?.name || '使用者'}</span>
                             {/* Fix: ensure rating is a valid number */}
                             <span className="text-yellow-500 text-sm">{'★'.repeat(Math.min(Math.max(review.rating || 0, 0), 5))}</span>
                           </div>

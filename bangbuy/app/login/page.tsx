@@ -167,7 +167,7 @@ export default function LoginPage() {
                 <input
                   type="text"
                   required
-                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition outline-none"
+                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition outline-none text-gray-900 placeholder:text-gray-700"
                   placeholder="例：小林 (日本留學生)"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
@@ -180,7 +180,7 @@ export default function LoginPage() {
               <input
                 type="email"
                 required
-                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition outline-none"
+                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition outline-none text-gray-900 placeholder:text-gray-700"
                 placeholder="name@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -202,7 +202,7 @@ export default function LoginPage() {
               <input
                 type="password"
                 required
-                className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition outline-none"
+                  className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition outline-none text-gray-900 placeholder:text-gray-700"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

@@ -22,6 +22,9 @@ export const FEATURE_FLAGS = {
   orders: false,
   reviews: false,
   
+  // 🔐 Beta 鎖定：評價系統暫時關閉
+  ratings: false,
+  
   // 📋 法務頁面（必須存在）
   terms: true,
   privacy: true,

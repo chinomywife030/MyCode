@@ -21,10 +21,10 @@ const nextConfig = {
         hostname: 'via.placeholder.com',
       },
       // 3. 允許 Supabase Storage 圖片 (使用者上傳的圖片)
-      // 使用 wildcard *.supabase.co 來匹配您的專案網域
+      // 使用專案的具體 hostname
       {
         protocol: 'https',
-        hostname: '*.supabase.co',
+        hostname: 'iaizclcplchjhbfafkiy.supabase.co',
       },
       // 4. 允許 UI Avatars (預設頭像)
       {

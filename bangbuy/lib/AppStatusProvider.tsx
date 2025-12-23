@@ -278,8 +278,13 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
         return;
       }
       
-      // 🔨 暴力解法：超過閾值就直接 reload
+      // 🔨 暴力解法：超過閾值就直接 reload（但排除 Dashboard）
       if (timeInBackground > FORCE_RELOAD_THRESHOLD) {
+        // Dashboard 內部導覽不執行 reload
+        if (window.location.pathname.startsWith('/dashboard')) {
+          log('app', 'Dashboard page - skipping reload');
+          return;
+        }
         log('app', '🔄 Force reloading page (was in background too long)');
         window.location.reload();
         return;
@@ -298,6 +303,11 @@ export function AppStatusProvider({ children }: { children: ReactNode }) {
         return;
       }
       
+      // Dashboard 內部導覽不執行 reload
+      if (window.location.pathname.startsWith('/dashboard')) {
+        log('app', 'Dashboard page - skipping reload on network online');
+        return;
+      }
       log('app', 'Network back online - reloading page');
       window.location.reload();
     };

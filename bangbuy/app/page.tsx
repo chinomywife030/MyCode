@@ -16,6 +16,11 @@ import { EarlyAccessNotice } from '@/components/EarlyAccessNotice';
 import { startChat } from '@/lib/chatNavigation';
 import ProductTour from '@/components/onboarding/ProductTour';
 import ShippingGuideBanner from '@/components/ShippingGuideBanner';
+import { isFeatureEnabled } from '@/lib/featureFlags';
+import { formatDateRange } from '@/lib/dateFormat';
+import { useToast } from '@/components/Toast';
+import SupporterBadge from '@/components/SupporterBadge';
+import SupporterPrompt from '@/components/SupporterPrompt';
 
 // ========== 國家列表（與發布許願單一致）==========
 const ALL_COUNTRIES = [
@@ -84,6 +89,7 @@ function useDebounce<T>(value: T, delay: number): T {
 function HomeContent() {
   const { mode } = useUserMode();
   const router = useRouter();
+  const { showToast } = useToast();
   
   // ========== 統一資料流的核心 State ==========
   const [wishes, setWishes] = useState<any[]>([]);
@@ -92,6 +98,7 @@ function HomeContent() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deletingTripId, setDeletingTripId] = useState<string | null>(null);
 
   // ========== 搜尋/Filter State（單一來源）==========
   const [search, setSearch] = useState('');
@@ -116,6 +123,44 @@ function HomeContent() {
   // 🔐 聊天按鈕 loading 狀態（防止連點）
   const [chatLoadingId, setChatLoadingId] = useState<string | null>(null);
   const [chatError, setChatError] = useState<string | null>(null);
+  
+  // 🗑️ 刪除行程功能（需要在 fetchTrips 定義後，所以用普通函數）
+  const handleDeleteTrip = async (tripId: string) => {
+    if (!currentUser) return;
+    
+    // 確認對話框
+    if (!confirm('確定要刪除這個行程嗎？\n刪除後不可復原。')) {
+      return;
+    }
+    
+    setDeletingTripId(tripId);
+    
+    try {
+      // Optimistic UI: 立即從列表中移除
+      setTrips(prev => prev.filter(t => t.id !== tripId));
+      
+      // 呼叫 API 刪除
+      const { error } = await supabase
+        .from('trips')
+        .delete()
+        .eq('id', tripId);
+      
+      if (error) {
+        // 如果失敗，恢復列表（重新載入）
+        throw error;
+      }
+      
+      // 成功：顯示 toast
+      showToast('success', '已刪除行程');
+    } catch (error: any) {
+      console.error('[DeleteTrip] Error:', error);
+      // 失敗：重新載入列表以恢復正確狀態
+      await fetchTrips({ search: debouncedSearch, country, sort, dateFrom, dateTo });
+      showToast('error', error.message || '刪除失敗，請稍後再試');
+    } finally {
+      setDeletingTripId(null);
+    }
+  };
 
   // 🎯 產品導覽狀態
   const [showTour, setShowTour] = useState(false);
@@ -188,10 +233,14 @@ function HomeContent() {
     console.log('[fetchTrips]', params);
     
     try {
-      // 🔧 修復：不使用顯式外鍵名稱，改用簡單查詢
+      // 🔥 查詢 trips 並 JOIN shopper profiles（代購者資訊）
+      // 使用正確的 FK relationship 名稱，包含 is_supporter
       let q = supabase
         .from('trips')
-        .select('*');
+        .select(`
+          *,
+          profiles!trips_shopper_id_fkey(id, name, avatar_url, is_supporter)
+        `);
 
       // Country Filter：trips 表用 destination 欄位 (文字)，需要用 ilike
       if (params.country !== 'ALL') {
@@ -204,12 +253,14 @@ function HomeContent() {
         q = q.or(`destination.ilike.%${params.search}%,description.ilike.%${params.search}%`);
       }
 
-      // 🆕 日期篩選（真實後端篩選）
+      // 🆕 日期篩選（真實後端篩選，支援日期區間）
       if (params.dateFrom) {
-        q = q.gte('date', params.dateFrom);
+        // 篩選：結束日期 >= 查詢開始日期（行程結束日期要在查詢範圍內）
+        q = q.or(`end_date.gte.${params.dateFrom},date.gte.${params.dateFrom}`);
       }
       if (params.dateTo) {
-        q = q.lte('date', params.dateTo);
+        // 篩選：開始日期 <= 查詢結束日期（行程開始日期要在查詢範圍內）
+        q = q.or(`start_date.lte.${params.dateTo},date.lte.${params.dateTo}`);
       }
 
       // 🔧 修復：只用 created_at 排序（priority 可能不存在）
@@ -227,8 +278,9 @@ function HomeContent() {
 
       const processedTrips = (data || []).map((trip: any) => ({
         ...trip,
-        // shopper 已經從 JOIN 獲取，如果沒有則用 shopper_name 或顯示匿名
-        shopper: trip.shopper || { name: trip.shopper_name || '匿名', avatar_url: '' }
+        // 🔥 永遠顯示 shopper 資訊，不顯示匿名
+        // profiles 是 JOIN 後的資料，統一命名為 shopper，包含 is_supporter
+        shopper: trip.profiles || { name: trip.shopper_name || '使用者', avatar_url: '', is_supporter: false }
       }));
       
       console.log('[fetchTrips] 結果:', processedTrips.length, '筆');
@@ -250,10 +302,14 @@ function HomeContent() {
     console.log('[fetchWishes]', params);
     
     try {
-      // 🔧 修復：不使用顯式外鍵名稱，改用簡單查詢
+      // 🔥 查詢 wish_requests 並 JOIN buyer profiles（發起者資訊）
+      // 使用正確的 FK relationship 名稱，包含 is_supporter
       let q = supabase
         .from('wish_requests')
-        .select('*')
+        .select(`
+          *,
+          profiles!wish_requests_buyer_id_fkey(id, name, avatar_url, is_supporter)
+        `)
         .eq('status', 'open');
 
       // Country Filter (server-side)
@@ -298,8 +354,9 @@ function HomeContent() {
 
       const processedWishes = (data || []).map((wish: any) => ({
         ...wish,
-        // buyer 已經從 JOIN 獲取，如果沒有則顯示匿名
-        buyer: wish.buyer || { name: '匿名', avatar_url: '' }
+        // 🔥 永遠顯示 buyer 資訊，不顯示匿名
+        // profiles 是 JOIN 後的資料，統一命名為 buyer，包含 is_supporter
+        buyer: wish.profiles || { name: '使用者', avatar_url: '', is_supporter: false }
       }));
       
       console.log('[fetchWishes] 結果:', processedWishes.length, '筆');
@@ -331,8 +388,25 @@ function HomeContent() {
 
           if (!isMounted) return;
 
-          if (!favError && favData) {
+          if (favError) {
+            // 📊 診斷資訊
+            if (process.env.NODE_ENV === 'development') {
+              console.error('[收藏] 載入收藏列表失敗', {
+                error: favError.message,
+                code: favError.code,
+                details: favError.details,
+                hint: favError.hint,
+              });
+            }
+            // 如果是 RLS 錯誤，可能是 policies 未正確設定
+            if (favError.code === '42501' || favError.message.includes('permission denied') || favError.message.includes('RLS')) {
+              console.warn('🚨 [收藏] 載入失敗：RLS 權限錯誤，請檢查 favorites 表的 policies');
+            }
+          } else if (favData) {
             setMyFavorites(favData.map((f: any) => f.wish_id));
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[收藏] 載入收藏列表成功', { count: favData.length });
+            }
           }
         }
       } catch (err) {
@@ -374,18 +448,48 @@ function HomeContent() {
     return () => { isMounted = false; };
   }, [debouncedSearch, country, sort, dateFrom, dateTo, fetchTrips, fetchWishes]);
 
-  // ========== 收藏功能（完全不變）==========
+  // ========== 收藏功能（完整診斷版）==========
+  const [favoriteLoading, setFavoriteLoading] = useState<Record<string, boolean>>({});
+  
   const toggleFavorite = useCallback(async (e: React.MouseEvent, wishId: string) => {
     e.preventDefault();
     e.stopPropagation();
 
+    // 🔐 防抖：如果正在處理中，直接返回
+    if (favoriteLoading[wishId]) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[收藏] 請求進行中，忽略重複點擊');
+      }
+      return;
+    }
+
+    // 🔐 未登入：導向登入頁
     if (!currentUser) {
-      alert('請先登入才能收藏');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[收藏] 未登入，導向登入頁');
+      }
+      router.push(`/login?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`);
       return;
     }
 
     const isFav = myFavorites.includes(wishId);
+    const action = isFav ? 'remove' : 'add';
 
+    // 📊 完整診斷資訊（開發模式）
+    if (process.env.NODE_ENV === 'development') {
+      console.log('═'.repeat(60));
+      console.log('[收藏] 點擊收藏 - 開始');
+      console.log('  操作:', action);
+      console.log('  wishId:', wishId);
+      console.log('  userId:', currentUser.id);
+      console.log('  目前 UI 狀態 isFavorited:', isFav);
+      console.log('═'.repeat(60));
+    }
+
+    // 設定 loading 狀態
+    setFavoriteLoading(prev => ({ ...prev, [wishId]: true }));
+
+    // Optimistic update
     if (isFav) {
       setMyFavorites(prev => prev.filter(id => id !== wishId));
     } else {
@@ -394,35 +498,156 @@ function HomeContent() {
 
     try {
       if (isFav) {
-        const { error } = await supabase
+        // 移除收藏
+        const { data, error } = await supabase
           .from('favorites')
           .delete()
           .eq('user_id', currentUser.id)
-          .eq('wish_id', wishId);
+          .eq('wish_id', wishId)
+          .select(); // 加入 select 以獲取刪除的資料
+
+        // 📊 完整診斷資訊
+        if (process.env.NODE_ENV === 'development') {
+          console.log('═'.repeat(60));
+          console.log('[收藏] DELETE 回應');
+          console.log('  data:', data);
+          console.log('  error:', error ? {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            status: (error as any).status,
+          } : null);
+          console.log('═'.repeat(60));
+        }
 
         if (error) {
+          // Rollback optimistic update
           setMyFavorites(prev => [...prev, wishId]);
-          alert('移除收藏失敗，請稍後再試');
+          
+          // 判斷根因
+          if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('RLS')) {
+            console.error('🚨 [收藏] 根因：RLS 權限錯誤');
+            alert('權限不足，請確認您已登入且帳號狀態正常');
+          } else if (error.code === 'PGRST116') {
+            // 記錄不存在（可能已被刪除）
+            console.log('[收藏] 記錄不存在，狀態已正確');
+            // 不需要 rollback，狀態已正確
+          } else {
+            console.error('🚨 [收藏] 根因：其他錯誤', error);
+            alert('移除收藏失敗，請稍後再試');
+          }
+        } else {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('✅ [收藏] 移除成功');
+            console.log('  刪除的記錄數:', data?.length || 0);
+          }
+          
+          // 成功後重新 fetch 一次確認狀態（確保同步）
+          const { data: verifyData } = await supabase
+            .from('favorites')
+            .select('wish_id')
+            .eq('user_id', currentUser.id)
+            .eq('wish_id', wishId)
+            .maybeSingle();
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[收藏] 驗證查詢結果:', verifyData ? '仍存在（異常）' : '已刪除（正常）');
+          }
+          
+          // 🔥 觸發收藏列表重新載入（確保 Dashboard 同步）
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('favoritesUpdated', { detail: { wishId, action: 'removed' } }));
+          }
         }
       } else {
-        const { error } = await supabase
+        // 新增收藏
+        const { data, error } = await supabase
           .from('favorites')
-          .insert([{ user_id: currentUser.id, wish_id: wishId }]);
+          .insert([{ user_id: currentUser.id, wish_id: wishId }])
+          .select(); // 加入 select 以獲取插入的資料
+
+        // 📊 完整診斷資訊
+        if (process.env.NODE_ENV === 'development') {
+          console.log('═'.repeat(60));
+          console.log('[收藏] INSERT 回應');
+          console.log('  data:', data);
+          console.log('  error:', error ? {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            status: (error as any).status,
+          } : null);
+          console.log('═'.repeat(60));
+        }
 
         if (error) {
+          // Rollback optimistic update
           setMyFavorites(prev => prev.filter(id => id !== wishId));
-          alert('新增收藏失敗，請稍後再試');
+          
+          // 判斷根因
+          if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('RLS')) {
+            console.error('🚨 [收藏] 根因：RLS 權限錯誤');
+            alert('權限不足，請確認您已登入且帳號狀態正常');
+          } else if (error.code === '23505') {
+            // 重複鍵（可能已存在）
+            console.log('[收藏] 已存在，同步狀態');
+            setMyFavorites(prev => [...prev, wishId]);
+            // 不需要 rollback，狀態已正確
+          } else {
+            console.error('🚨 [收藏] 根因：其他錯誤', error);
+            alert('新增收藏失敗，請稍後再試');
+          }
+        } else {
+          if (process.env.NODE_ENV === 'development') {
+            console.log('✅ [收藏] 新增成功');
+            console.log('  插入的記錄:', data?.[0]);
+          }
+          
+          // 成功後重新 fetch 一次確認狀態（確保同步）
+          const { data: verifyData } = await supabase
+            .from('favorites')
+            .select('wish_id')
+            .eq('user_id', currentUser.id)
+            .eq('wish_id', wishId)
+            .maybeSingle();
+          
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[收藏] 驗證查詢結果:', verifyData ? '已存在（正常）' : '不存在（異常）');
+          }
+          
+          // 如果驗證失敗，同步狀態
+          if (!verifyData) {
+            console.warn('[收藏] 驗證失敗，重新同步狀態');
+            setMyFavorites(prev => prev.filter(id => id !== wishId));
+          }
+          
+          // 🔥 觸發收藏列表重新載入（確保 Dashboard 同步）
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('favoritesUpdated', { detail: { wishId, action: 'added' } }));
+          }
         }
       }
-    } catch (err) {
+    } catch (err: any) {
+      // Rollback optimistic update
       if (isFav) {
         setMyFavorites(prev => [...prev, wishId]);
       } else {
         setMyFavorites(prev => prev.filter(id => id !== wishId));
       }
+      
+      console.error('🚨 [收藏] 根因：例外錯誤', err);
       alert('操作失敗，請稍後再試');
+    } finally {
+      // 清除 loading 狀態
+      setFavoriteLoading(prev => {
+        const next = { ...prev };
+        delete next[wishId];
+        return next;
+      });
     }
-  }, [currentUser, myFavorites]);
+  }, [currentUser, myFavorites, router, favoriteLoading]);
 
   // ========== 工具函數（完全不變）==========
   const getFlag = useCallback((code: string) => {
@@ -451,6 +676,9 @@ function HomeContent() {
       
       <RoleSelectorModal />
       <Navbar />
+
+      {/* ⭐ Supporter 橫向 Banner（可關閉）*/}
+      <SupporterPrompt />
 
       {/* 📦 運回台灣方式提示 Banner（可關閉）*/}
       <ShippingGuideBanner />
@@ -893,15 +1121,47 @@ function HomeContent() {
                             )}
                           </div>
                           <div>
-                            <p className="font-medium text-gray-500 group-hover:text-gray-700 transition" style={{ fontSize: '13px' }}>
-                              {trip.shopper_name || trip.shopper?.name || '匿名'}
-                            </p>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-medium text-gray-500 group-hover:text-gray-700 transition" style={{ fontSize: '13px' }}>
+                                {trip.shopper_name || trip.shopper?.name || '使用者'}
+                              </p>
+                              {trip.shopper?.is_supporter && (
+                                <SupporterBadge size="small" />
+                              )}
+                            </div>
                             <p className="text-gray-400 font-light" style={{ fontSize: '11px' }}>代購夥伴</p>
                           </div>
                         </Link>
-                        <span className="px-2.5 py-1 bg-gray-50 text-gray-500 rounded-lg border border-gray-200" style={{ fontSize: '12px' }}>
-                          {trip.date}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="px-2.5 py-1 bg-gray-50 text-gray-500 rounded-lg border border-gray-200" style={{ fontSize: '12px' }}>
+                            {formatDateRange(trip.start_date, trip.end_date, trip.date)}
+                          </span>
+                          {/* 刪除按鈕（只有擁有者可見） */}
+                          {currentUser && trip.shopper_id === currentUser.id && (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleDeleteTrip(trip.id);
+                              }}
+                              disabled={deletingTripId === trip.id}
+                              className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
+                              title="刪除行程"
+                              style={{ padding: '4px' }}
+                            >
+                              {deletingTripId === trip.id ? (
+                                <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                              ) : (
+                                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* Card Content - 地點：主視覺 */}
@@ -1070,7 +1330,12 @@ function HomeContent() {
                         {/* 收藏按鈕 - 圖片右上角 */}
                         <button 
                           onClick={(e) => toggleFavorite(e, wish.id)}
+                          disabled={favoriteLoading[wish.id]}
                           className={`absolute top-3 right-12 z-10 p-2.5 rounded-full backdrop-blur-md transition-all ${
+                            favoriteLoading[wish.id]
+                              ? 'opacity-50 cursor-not-allowed'
+                              : ''
+                          } ${
                             myFavorites.includes(wish.id)
                               ? 'bg-red-500 text-white shadow-lg'
                               : 'bg-white/90 text-gray-600 hover:bg-white hover:text-red-500 shadow-md'
@@ -1094,17 +1359,24 @@ function HomeContent() {
                           <div className="flex items-center gap-2.5 flex-1 min-w-0">
                             <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-medium shadow-sm shrink-0">
                               {wish.buyer?.avatar_url ? (
-                                <img src={wish.buyer.avatar_url} className="w-full h-full rounded-full object-cover" alt=""/>
+                                <img 
+                                  src={`${wish.buyer.avatar_url}?v=${wish.buyer.avatar_url.split('/').pop() || Date.now()}`} 
+                                  className="w-full h-full rounded-full object-cover" 
+                                  alt=""
+                                />
                               ) : (
                                 <span className="text-xs">{wish.buyer?.name?.[0]}</span>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5">
-                                <p className="text-xs font-medium text-gray-700 truncate">{wish.buyer?.name || '匿名'}</p>
-                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-gray-50 text-gray-600 border border-gray-200 rounded text-[9px] font-medium shrink-0">
-                                  ⭐ 4.8
-                                </span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="text-xs font-medium text-gray-700 truncate">{wish.buyer?.name || '使用者'}</p>
+                                  {wish.buyer?.is_supporter && (
+                                    <SupporterBadge size="small" />
+                                  )}
+                                </div>
+                                {/* 🔥 評價系統暫時關閉（Beta 階段） */}
                               </div>
                               <p className="text-[10px] text-gray-500 font-light">需要幫助</p>
                             </div>
@@ -1231,6 +1503,7 @@ function HomeContent() {
           </>
         )}
       </div>
+      
     </div>
   );
 }

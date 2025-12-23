@@ -26,9 +26,11 @@ export default function CreateTripPage() {
   
   const [formData, setFormData] = useState({
     destination: '',
-    date: '',
+    start_date: '',
+    end_date: '',
     description: '',
   });
+  const [dateError, setDateError] = useState('');
 
   const handleChange = (e: any) => {
     const { name, value } = e.target;
@@ -38,6 +40,22 @@ export default function CreateTripPage() {
   const handleSubmit = async (e: any) => {
     e.preventDefault();
     if (!user) return;
+
+    // 驗證日期
+    setDateError('');
+    if (!formData.start_date) {
+      setDateError('請選擇開始日期');
+      return;
+    }
+    if (!formData.end_date) {
+      setDateError('請選擇結束日期');
+      return;
+    }
+    if (new Date(formData.end_date) < new Date(formData.start_date)) {
+      setDateError('結束日期不得早於開始日期');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -56,23 +74,32 @@ export default function CreateTripPage() {
       }
 
       // 3. 寫入行程 (用真正的 ID)
-      const { error } = await supabase.from('trips').insert([
-        {
-          destination: formData.destination,
-          date: formData.date,
-          description: formData.description,
-          shopper_id: user.id, // 👈 真正的 ID
-          shopper_name: userName, // 暫時存名字，之後可以用關聯查
-        },
-      ]);
+      // 向下相容：如果 start_date/end_date 欄位不存在，只寫入 date
+      const insertData: any = {
+        destination: formData.destination,
+        date: formData.start_date, // 保留 date 欄位以向下相容
+        description: formData.description,
+        shopper_id: user.id, // 👈 真正的 ID
+        shopper_name: userName, // 暫時存名字，之後可以用關聯查
+      };
+      
+      // 如果欄位存在，同時寫入 start_date 和 end_date
+      if (formData.start_date) {
+        insertData.start_date = formData.start_date;
+      }
+      if (formData.end_date) {
+        insertData.end_date = formData.end_date;
+      }
+      
+      const { error } = await supabase.from('trips').insert([insertData]);
 
       if (error) {
         console.error('[CreateTrip] Trip insert failed:', error);
         throw error;
       }
 
-      alert('🎉 行程發布成功！');
-      router.push('/trips');
+      // 發布成功後跳轉到首頁
+      router.push('/');
 
     } catch (error: any) {
       console.error('[CreateTrip] Error:', error);
@@ -111,14 +138,37 @@ export default function CreateTripPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">出發/連線日期</label>
-            <input
-              name="date"
-              type="date"
-              required
-              className="mt-1 block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:ring-orange-500 focus:border-orange-500"
-              onChange={handleChange}
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-2">日期區間</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">開始日期</label>
+                <input
+                  name="start_date"
+                  type="date"
+                  required
+                  placeholder="yyyy/mm/dd"
+                  className="block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:ring-orange-500 focus:border-orange-500"
+                  onChange={handleChange}
+                  value={formData.start_date}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">結束日期</label>
+                <input
+                  name="end_date"
+                  type="date"
+                  required
+                  placeholder="yyyy/mm/dd"
+                  min={formData.start_date || undefined}
+                  className="block w-full rounded-md border border-gray-300 p-3 shadow-sm focus:ring-orange-500 focus:border-orange-500"
+                  onChange={handleChange}
+                  value={formData.end_date}
+                />
+              </div>
+            </div>
+            {dateError && (
+              <p className="mt-2 text-sm text-red-600">{dateError}</p>
+            )}
           </div>
 
           <div>

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useConversations, type Conversation } from '@/hooks/useConversations';
-import Image from 'next/image';
+import SafeAvatar from '@/components/SafeAvatar';
 
 interface ConversationListProps {
   activeConversationId?: string | null;
@@ -68,15 +68,6 @@ export default function ConversationList({
     }
   };
 
-  // 獲取頭像 URL 或預設值
-  const getAvatarUrl = (conversation: Conversation) => {
-    if (conversation.other_user_avatar) {
-      return conversation.other_user_avatar;
-    }
-    // 使用名字的第一個字作為預設頭像
-    const initial = (conversation.other_user_name || '?')[0].toUpperCase();
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(initial)}&background=3b82f6&color=fff`;
-  };
 
   if (error) {
     return (
@@ -160,12 +151,10 @@ export default function ConversationList({
               >
                 {/* 頭像 */}
                 <div className="relative flex-shrink-0">
-                  <Image
-                    src={getAvatarUrl(conversation)}
-                    alt={conversation.other_user_name || '用戶'}
-                    width={48}
-                    height={48}
-                    className="w-12 h-12 rounded-full object-cover"
+                  <SafeAvatar
+                    src={conversation.other_user_avatar}
+                    name={conversation.other_user_name}
+                    size={48}
                   />
                   {conversation.unread_count > 0 && (
                     <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">

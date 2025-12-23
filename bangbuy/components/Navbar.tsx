@@ -11,14 +11,16 @@ import { useLanguage } from '@/components/LanguageProvider';
 import ModeToggle from '@/components/ModeToggle';
 import NotificationDrawer from '@/components/NotificationDrawer';
 import { useNotificationBadge } from '@/hooks/useNotifications';
+import SupporterBadge from '@/components/SupporterBadge';
 
 export default function Navbar() {
   const { t } = useLanguage();
   const { mode, toggleMode } = useUserMode();
 
   const [user, setUser] = useState<User | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string>('');
+  const [profile, setProfile] = useState<{ avatar_url: string | null; name: string | null; display_name?: string | null; is_supporter?: boolean } | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [avatarVersion, setAvatarVersion] = useState<number>(Date.now());
   
   // 🔔 通知 drawer
   const [isNotificationOpen, setIsNotificationOpen] = useState(false);
@@ -41,27 +43,25 @@ export default function Navbar() {
 
   const fetchUserProfile = useCallback(async (userId: string) => {
     try {
-      // Fix: use maybeSingle() to handle case when profile doesn't exist yet
-      const { data: profile, error } = await supabase
+      // 查詢必要欄位（包含 Supporter 狀態）
+      const { data: profileData, error } = await supabase
         .from('profiles')
-        .select('avatar_url')
+        .select('id, name, avatar_url, display_name, is_supporter')
         .eq('id', userId)
         .maybeSingle();
 
       if (error) {
-        // Only log actual errors (not "profile not found")
         console.error('[Navbar] Error fetching user profile:', error);
-        setAvatarUrl('');
-      } else if (profile) {
-        setAvatarUrl(profile.avatar_url || '');
-      } else {
-        // Profile doesn't exist yet - this is normal for new users
-        setAvatarUrl('');
+        setProfile(null);
+        return;
       }
+
+      setProfile(profileData);
+      // 🔥 更新 avatar version 以觸發 cache-bust
+      setAvatarVersion(Date.now());
     } catch (error) {
-      // Fix: log unexpected errors
       console.error('[Navbar] Unexpected error fetching profile:', error);
-      setAvatarUrl('');
+      setProfile(null);
     }
   }, []);
 
@@ -82,19 +82,51 @@ export default function Navbar() {
       if (currentUser) {
         await fetchUserProfile(currentUser.id);
       } else {
-        setAvatarUrl('');
+        setProfile(null);
       }
     });
 
-    return () => subscription.unsubscribe();
+    // 監聽頭像更新事件
+    const handleAvatarUpdate = async () => {
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      if (currentUser) {
+        await fetchUserProfile(currentUser.id);
+      }
+    };
+    window.addEventListener('avatar-updated', handleAvatarUpdate);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('avatar-updated', handleAvatarUpdate);
+    };
   }, [fetchUserProfile]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     setUser(null);
-    setAvatarUrl('');
+    setProfile(null);
     router.refresh();
   };
+
+  // 🔥 單一真相來源：只從 profiles.avatar_url 讀取，不再從 user_metadata fallback
+  const profileAvatar = profile?.avatar_url ?? null;
+  
+  // 🔥 加入 cache-bust：確保瀏覽器不會顯示快取的舊圖片
+  // 使用 avatarVersion state 避免每次 render 都改變 URL
+  const avatarSrc = profileAvatar 
+    ? `${profileAvatar}?v=${avatarVersion}` 
+    : undefined;
+  
+  // 🐛 Debug log（完成後可移除）
+  if (process.env.NODE_ENV === 'development' && user) {
+    console.log('[HeaderAvatar]', { 
+      profileAvatar,
+      avatarSrc,
+      avatarVersion,
+      profileLoaded: !!profile,
+      userId: user?.id
+    });
+  }
 
   return (
     <>
@@ -109,11 +141,11 @@ export default function Navbar() {
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>
             </button>
 
-            <Link href="/" className="flex items-center gap-2 group shrink-0">
+            <a href="/" className="flex items-center gap-2 group shrink-0">
               <div className="transform transition-transform group-hover:rotate-12"><Logo className="w-8 h-8" /></div>
               <span className={`hidden sm:block text-xl font-black tracking-tighter transition-colors duration-200 ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>{t.siteName}</span>
               <span className={`sm:hidden text-lg font-black tracking-tighter transition-colors duration-200 ${mode === 'shopper' ? 'text-orange-500' : 'text-blue-600'}`}>BangBuy</span>
-            </Link>
+            </a>
 
             {/* 💊 身分膠囊 */}
             <ModeToggle className="shrink-0" />
@@ -153,20 +185,29 @@ export default function Navbar() {
             )}
             
             {user ? (
-              <Link href="/dashboard" title="會員中心">
-                <div
-                  className={`w-9 h-9 rounded-full flex items-center justify-center font-bold cursor-pointer transition-all duration-200 border-2 shadow-sm hover:shadow-md overflow-hidden ${
-                    mode === 'shopper'
-                      ? 'border-orange-100 hover:border-orange-300 bg-orange-50 text-orange-600'
-                      : 'border-blue-100 hover:border-blue-300 bg-blue-50 text-blue-600'
-                  }`}
-                >
-                  {/* Fix: safe email access with fallback */}
-                  {avatarUrl ? <img src={avatarUrl} alt="User" className="w-full h-full object-cover" /> : <span>{user.email?.[0]?.toUpperCase() || 'U'}</span>}
-                </div>
-              </Link>
+              <div className="flex items-center gap-2">
+                {/* Supporter 徽章（頭像旁） */}
+                {profile?.is_supporter && profile?.display_name && !profile?.supporter_badge_hidden && (
+                  <SupporterBadge size="small" clickable={true} />
+                )}
+                <a href="/dashboard" title="會員中心">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-bold cursor-pointer transition-all duration-200 border-2 shadow-sm hover:shadow-md overflow-hidden ${
+                      mode === 'shopper'
+                        ? 'border-orange-100 hover:border-orange-300 bg-orange-50 text-orange-600'
+                        : 'border-blue-100 hover:border-blue-300 bg-blue-50 text-blue-600'
+                    }`}
+                  >
+                    {avatarSrc ? (
+                      <img src={avatarSrc} alt="User" className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{user.email?.[0]?.toUpperCase() || 'U'}</span>
+                    )}
+                  </div>
+                </a>
+              </div>
             ) : (
-              <Link href="/login" className="text-gray-500 font-bold hover:text-gray-900 text-sm px-2 py-2 hover:bg-gray-50 rounded-lg transition whitespace-nowrap">登入</Link>
+              <a href="/login" className="text-gray-500 font-bold hover:text-gray-900 text-sm px-2 py-2 hover:bg-gray-50 rounded-lg transition whitespace-nowrap">登入</a>
             )}
           </div>
         </div>
@@ -184,62 +225,88 @@ export default function Navbar() {
           {user ? (
             <div className="flex items-center gap-3 pr-8">
               <div className="w-14 h-14 rounded-full bg-gray-200 overflow-hidden border-4 border-white shadow-sm shrink-0 flex items-center justify-center">
-                {/* Fix: safe email access with fallback */}
-                {avatarUrl ? <img src={avatarUrl} alt="User" className="w-full h-full object-cover" /> : <span className="font-bold text-gray-500 text-2xl">{user.email?.[0]?.toUpperCase() || 'U'}</span>}
+                {avatarSrc ? (
+                  <img src={avatarSrc} alt="User" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="font-bold text-gray-500 text-2xl">{user.email?.[0]?.toUpperCase() || 'U'}</span>
+                )}
               </div>
               <div className="overflow-hidden">
-                <p className="font-bold text-gray-800 truncate text-lg">會員中心</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-gray-800 truncate text-lg">
+                    {profile?.display_name || '會員中心'}
+                  </p>
+                  {profile?.is_supporter && profile?.display_name && !profile?.supporter_badge_hidden && (
+                    <SupporterBadge size="small" />
+                  )}
+                </div>
                 <p className="text-xs text-gray-500 truncate">{user.email || '用戶'}</p>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-3 mt-4">
               <p className="text-xl font-bold text-gray-800">歡迎來到 BangBuy 👋</p>
-              <Link href="/login" className="bg-blue-600 text-white text-center py-3 rounded-xl font-bold shadow-md hover:bg-blue-700 transition">立即登入 / 註冊</Link>
+              <a href="/login" className="bg-blue-600 text-white text-center py-3 rounded-xl font-bold shadow-md hover:bg-blue-700 transition">立即登入 / 註冊</a>
             </div>
           )}
         </div>
 
         <div className="flex-grow overflow-y-auto p-4 space-y-2">
           <div className="space-y-1">
-            <Link href="/" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
+            <a href="/" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
               <span className="text-xl">🏠</span> 首頁
-            </Link>
+            </a>
 
             {/* 📦 運回台灣方式（靠上位置，確保曝光）*/}
-            <Link href="/shipping-to-taiwan" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
+            <a href="/shipping-to-taiwan" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
               <span className="text-xl">📦</span> 運回台灣方式
-            </Link>
+            </a>
 
-            <Link href="/calculator" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
+            <a href="/calculator" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
               <span className="text-xl">🧮</span> 匯率計算器
-            </Link>
+            </a>
+
+            {/* ⭐ Supporter 連結 */}
+            <a 
+              href="/supporter" 
+              onClick={() => setIsMenuOpen(false)} 
+              className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-purple-50 rounded-xl font-medium transition group"
+            >
+              <span className="text-xl">⭐</span> 
+              <span>成為 Supporter</span>
+              {profile?.is_supporter && (
+                <span className="ml-auto text-xs text-purple-600 font-bold">已訂閱</span>
+              )}
+            </a>
 
             {user && (
               <>
-                <Link href="/dashboard" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
+                <a href="/dashboard" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
                   <span className="text-xl">👤</span> 我的頁面
-                </Link>
-                <Link href="/chat" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
+                </a>
+                <a href="/chat" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
                   <span className="text-xl">💬</span> 訊息中心
-                </Link>
+                </a>
+                <a href="/settings" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
+                  <span className="text-xl">⚙️</span> 設定
+                </a>
                 <div className="h-px bg-gray-100 my-3 mx-2" />
                 {mode === 'requester' ? (
-                  <Link
+                  <a
                     href="/create"
                     onClick={() => setIsMenuOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-md shadow-blue-100 hover:bg-blue-700 transition-all duration-200"
                   >
                     <span className="text-xl">＋</span> 發布需求
-                  </Link>
+                  </a>
                 ) : (
-                  <Link
+                  <a
                     href="/trips/create"
                     onClick={() => setIsMenuOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 bg-orange-500 text-white rounded-xl font-bold shadow-md shadow-orange-100 hover:bg-orange-600 transition-all duration-200"
                   >
                     <span className="text-xl">＋</span> 發布行程
-                  </Link>
+                  </a>
                 )}
               </>
             )}

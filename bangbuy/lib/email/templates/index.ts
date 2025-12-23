@@ -7,6 +7,8 @@ export * from './offerCreated';
 export * from './offerAccepted';
 export * from './offerRejected';
 export * from './messageDigest';
+export * from './newMessage';
+
 
 
 

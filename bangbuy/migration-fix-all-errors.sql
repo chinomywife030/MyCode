@@ -387,3 +387,4 @@ END $$;
 SELECT '✅ 所有錯誤修復完成！' AS status;
 SELECT '請重新整理瀏覽器並測試首頁、需求詳情、報價列表、通知列表' AS next_step;
 
+

@@ -291,32 +291,49 @@ export function useMessages(options: UseMessagesOptions): UseMessagesReturn {
     processedIds.current.add(clientMessageId);
 
     try {
-      const { data: insertData, error: insertError } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          sender_id: currentUserId,
+      // 取得 Supabase session token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      
+      if (!token) {
+        console.error('[useMessages] No session token available');
+        throw new Error('請先登入');
+      }
+      
+      // 🔔 改用 server-side API 發送訊息（包含 Email 通知）
+      const response = await fetch('/api/messages/send', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          conversationId,
           content: content.trim(),
-        })
-        .select('id')
-        .single();
+        }),
+      });
 
-      if (insertError) throw insertError;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to send message');
+      }
 
+      const result = await response.json();
+      
       // 更新為 sent
       setMessages(prev =>
         prev.map(m =>
           m.client_message_id === clientMessageId
-            ? { ...m, id: insertData.id, status: 'sent' as MessageStatus, isOptimistic: false }
+            ? { 
+                ...m, 
+                id: result.messageId, 
+                status: 'sent' as MessageStatus, 
+                isOptimistic: false,
+                created_at: result.createdAt,
+              }
             : m
         )
       );
-
-      // 更新 conversation 的 last_message_at
-      await supabase
-        .from('conversations')
-        .update({ last_message_at: new Date().toISOString() })
-        .eq('id', conversationId);
 
       return true;
     } catch (err: any) {
