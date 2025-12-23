@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { handleMessageNotification, MessageNotificationPayload } from '@/lib/messageNotifications';
+import { sendMessageEmailNotification, SendMessageNotificationParams } from '@/lib/messageNotifications';
 import { createClient } from '@supabase/supabase-js';
 
 // Supabase Admin Client
@@ -37,22 +37,53 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // 取得 conversation 以確定 receiverId
+    const supabaseAdmin = getSupabaseAdmin();
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      );
+    }
+    
+    const { data: conversation, error: convError } = await supabaseAdmin
+      .from('conversations')
+      .select('user1_id, user2_id')
+      .eq('id', conversationId)
+      .single();
+    
+    if (convError || !conversation) {
+      console.error('[API] Conversation not found:', convError);
+      return NextResponse.json(
+        { error: 'Conversation not found' },
+        { status: 404 }
+      );
+    }
+    
+    // 確定接收者
+    const receiverId = conversation.user1_id === senderId 
+      ? conversation.user2_id 
+      : conversation.user1_id;
+    
     // 建立 payload
-    const payload: MessageNotificationPayload = {
+    const params: SendMessageNotificationParams = {
       messageId,
       conversationId,
       senderId,
+      receiverId,
       content: content || '',
-      messageType: messageType || 'REPLY_MESSAGE',
+      messageType: (messageType || 'REPLY_MESSAGE') as 'FIRST_MESSAGE' | 'REPLY_MESSAGE',
       createdAt: body.createdAt || new Date().toISOString(),
     };
     
-    // 處理通知
-    const result = await handleMessageNotification(payload);
+    // 發送通知（非阻塞）
+    sendMessageEmailNotification(params).catch(err => {
+      console.error('[API] Email notification failed (non-blocking):', err);
+    });
     
     return NextResponse.json({
       success: true,
-      ...result,
+      message: 'Notification queued',
     });
     
   } catch (error: any) {
