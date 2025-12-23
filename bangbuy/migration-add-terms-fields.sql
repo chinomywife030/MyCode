@@ -33,3 +33,4 @@ SELECT 'Migration completed: terms_accepted_at and terms_version added to profil
 
 
 
+

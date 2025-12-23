@@ -69,3 +69,4 @@ CREATE TRIGGER on_auth_user_created
 SELECT 'Migration completed: Auto-create profiles trigger created' AS status;
 
 
+
