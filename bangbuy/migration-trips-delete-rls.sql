@@ -222,3 +222,4 @@ ORDER BY policyname;
 SELECT 'Trips delete RLS policy migration completed!' AS status;
 
 
+

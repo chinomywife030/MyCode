@@ -118,3 +118,4 @@ export default function SafeAvatar({ src, name, size = 40, className = '' }: Saf
 export { getDefaultAvatarUrl, isValidUrl };
 
 
+

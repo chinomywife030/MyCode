@@ -122,3 +122,4 @@ WHERE table_name = 'trips'
 - 舊資料會自動遷移（`date` → `start_date` 和 `end_date`）
 
 
+
