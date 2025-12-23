@@ -238,3 +238,198 @@ export async function sendMessageEmailNotification(
   
   console.log('[msg-email] ========================================');
 }
+
+// ========== Unread Reminders ==========
+
+/**
+ * 處理未讀提醒（Cron Job）
+ * 
+ * 掃描未讀訊息，對符合條件的用戶發送提醒 Email
+ */
+export async function processUnreadReminders(): Promise<{
+  processed: number;
+  sent: number;
+  errors: number;
+}> {
+  const env = getEnvConfig();
+  
+  console.log('[unread-reminders] ========================================');
+  console.log('[unread-reminders] start');
+  console.log('[unread-reminders] env', {
+    enabled: env.enabled,
+    sendInDev: env.sendInDev,
+    nodeEnv: env.nodeEnv,
+  });
+  
+  // 功能總開關檢查
+  if (!env.enabled) {
+    console.log('[unread-reminders] blocked: ENABLE_MESSAGE_EMAIL_NOTIFICATIONS is not "true"');
+    console.log('[unread-reminders] ========================================');
+    return { processed: 0, sent: 0, errors: 0 };
+  }
+  
+  const supabase = getSupabaseAdmin();
+  if (!supabase) {
+    console.error('[unread-reminders] No Supabase admin client');
+    return { processed: 0, sent: 0, errors: 0 };
+  }
+  
+  let processed = 0;
+  let sent = 0;
+  let errors = 0;
+  
+  try {
+    // 1. 取得所有開啟未讀提醒的用戶設定
+    const { data: profiles, error: profilesError } = await supabase
+      .from('profiles')
+      .select('id, notify_msg_unread_reminder_email, notify_msg_unread_hours, email')
+      .eq('notify_msg_unread_reminder_email', true);
+    
+    if (profilesError) {
+      console.error('[unread-reminders] Failed to fetch profiles:', profilesError);
+      return { processed: 0, sent: 0, errors: 1 };
+    }
+    
+    if (!profiles || profiles.length === 0) {
+      console.log('[unread-reminders] No users with unread reminders enabled');
+      console.log('[unread-reminders] ========================================');
+      return { processed: 0, sent: 0, errors: 0 };
+    }
+    
+    // 2. 對每個用戶檢查未讀訊息
+    for (const profile of profiles) {
+      processed++;
+      
+      const unreadHours = profile.notify_msg_unread_hours ?? 12;
+      const thresholdTime = new Date();
+      thresholdTime.setHours(thresholdTime.getHours() - unreadHours);
+      
+      // 查詢該用戶的未讀訊息（排除自己發的）
+      const { data: unreadMessages, error: messagesError } = await supabase
+        .from('messages')
+        .select(`
+          id,
+          conversation_id,
+          sender_id,
+          content,
+          created_at,
+          conversations!inner(user1_id, user2_id)
+        `)
+        .lt('created_at', thresholdTime.toISOString())
+        .neq('sender_id', profile.id)
+        .order('created_at', { ascending: false });
+      
+      if (messagesError) {
+        console.error(`[unread-reminders] Failed to fetch messages for user ${profile.id}:`, messagesError);
+        errors++;
+        continue;
+      }
+      
+      if (!unreadMessages || unreadMessages.length === 0) {
+        continue;
+      }
+      
+      // 3. 檢查是否已經提醒過（使用 conversation_reminders 表）
+      const conversationIds = [...new Set(unreadMessages.map(m => m.conversation_id))];
+      
+      for (const conversationId of conversationIds) {
+        // 檢查 24 小時內是否已提醒
+        const { data: reminder } = await supabase
+          .from('conversation_reminders')
+          .select('last_reminded_at')
+          .eq('conversation_id', conversationId)
+          .eq('user_id', profile.id)
+          .maybeSingle();
+        
+        if (reminder?.last_reminded_at) {
+          const lastReminded = new Date(reminder.last_reminded_at);
+          const hoursSinceReminder = (Date.now() - lastReminded.getTime()) / (1000 * 60 * 60);
+          
+          if (hoursSinceReminder < 24) {
+            // 24 小時內已提醒過，跳過
+            continue;
+          }
+        }
+        
+        // 4. 找到該對話中最新的未讀訊息
+        const conversationMessages = unreadMessages.filter(m => m.conversation_id === conversationId);
+        const latestMessage = conversationMessages[0];
+        
+        if (!latestMessage) continue;
+        
+        // 5. 取得發送者名稱
+        const senderName = await getUserDisplayName(latestMessage.sender_id);
+        
+        // 6. 取得接收者 Email
+        const receiverEmail = profile.email || await getUserEmail(profile.id);
+        if (!receiverEmail) {
+          console.log(`[unread-reminders] User ${profile.id} has no email, skipping`);
+          continue;
+        }
+        
+        // 7. 開發模式檢查
+        if (env.nodeEnv === 'development' && !env.sendInDev) {
+          console.log(`[unread-reminders] Would send reminder to ${receiverEmail} for conversation ${conversationId}`);
+          continue;
+        }
+        
+        // 8. 發送提醒 Email
+        const conversationUrl = `${getSiteUrl()}/chat?conversation=${conversationId}`;
+        const messageSnippet = latestMessage.content.length > 80 
+          ? latestMessage.content.substring(0, 77) + '...' 
+          : latestMessage.content;
+        
+        const { html, text, subject } = newMessageEmail({
+          recipientName: await getUserDisplayName(profile.id),
+          senderName,
+          messageSnippet,
+          conversationId,
+          messageType: 'REPLY_MESSAGE',
+        });
+        
+        try {
+          const result = await sendEmail({
+            to: receiverEmail,
+            subject: `[提醒] ${subject}`,
+            html,
+            text,
+            category: 'message_reminder',
+            dedupeKey: `unread_reminder:${conversationId}:${profile.id}:${Date.now()}`,
+            userId: profile.id,
+          });
+          
+          if (result.success) {
+            sent++;
+            
+            // 更新提醒記錄
+            await supabase
+              .from('conversation_reminders')
+              .upsert({
+                conversation_id: conversationId,
+                user_id: profile.id,
+                last_reminded_at: new Date().toISOString(),
+                last_message_id_reminded: latestMessage.id,
+              });
+            
+            console.log(`[unread-reminders] Sent reminder to ${receiverEmail} for conversation ${conversationId}`);
+          } else {
+            errors++;
+            console.error(`[unread-reminders] Failed to send reminder:`, result.error);
+          }
+        } catch (error: any) {
+          errors++;
+          console.error(`[unread-reminders] Error sending reminder:`, error);
+        }
+      }
+    }
+    
+    console.log(`[unread-reminders] Completed: processed=${processed}, sent=${sent}, errors=${errors}`);
+    console.log('[unread-reminders] ========================================');
+    
+    return { processed, sent, errors };
+    
+  } catch (error: any) {
+    console.error('[unread-reminders] Unexpected error:', error);
+    return { processed, sent, errors: errors + 1 };
+  }
+}
