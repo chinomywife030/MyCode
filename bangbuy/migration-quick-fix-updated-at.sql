@@ -19,3 +19,5 @@ SELECT 'updated_at 欄位已添加' AS status, count(*) AS wish_count FROM wish_
 
 
 
+
+

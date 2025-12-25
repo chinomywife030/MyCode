@@ -1,35 +1,17 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Profile } from '@/types';
-import Script from 'next/script';
-
-// PayPal 環境設定
-const PAYPAL_CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID || '';
-const PAYPAL_PLAN_ID = process.env.NEXT_PUBLIC_PAYPAL_PLAN_ID || 'P-02S95485WR471912RNFEVHJY';
-
-// PayPal 直接訂閱連結（Fallback）
-const PAYPAL_DIRECT_LINK = `https://www.paypal.com/webapps/billing/plans/subscribe?plan_id=${PAYPAL_PLAN_ID}`;
-
-declare global {
-  interface Window {
-    paypal?: any;
-  }
-}
+import PayPalSubscribeButton from '@/components/PayPalSubscribeButton';
 
 export default function SupporterCheckoutPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
-  const [paypalLoaded, setPaypalLoaded] = useState(false);
-  const [paypalError, setPaypalError] = useState<string | null>(null);
-  const paypalButtonRef = useRef<HTMLDivElement>(null);
-  const paypalRendered = useRef(false);
 
   useEffect(() => {
     async function fetchProfile() {
@@ -62,86 +44,6 @@ export default function SupporterCheckoutPage() {
 
   const hasDisplayName = profile?.display_name && profile.display_name.trim().length > 0;
 
-  // 渲染 PayPal 按鈕
-  useEffect(() => {
-    if (!paypalLoaded || !hasDisplayName || !paypalButtonRef.current || paypalRendered.current) {
-      return;
-    }
-
-    if (!window.paypal) {
-      setPaypalError('PayPal SDK 載入失敗');
-      return;
-    }
-
-    try {
-      window.paypal.Buttons({
-        style: {
-          shape: 'rect',
-          color: 'blue',
-          layout: 'vertical',
-          label: 'subscribe',
-        },
-        createSubscription: function(data: any, actions: any) {
-          return actions.subscription.create({
-            plan_id: PAYPAL_PLAN_ID,
-          });
-        },
-        onApprove: async function(data: any) {
-          const subscriptionID = data.subscriptionID;
-          console.log('[PayPal] Subscription approved:', subscriptionID);
-          
-          setProcessing(true);
-          try {
-            // 呼叫後端 API 驗證訂閱
-            const response = await fetch('/api/supporter/paypal/approve', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ subscriptionID }),
-            });
-
-            const result = await response.json();
-
-            if (response.ok && result.success) {
-              // 🔄 觸發資料刷新，確保 Supporter 狀態立即更新
-              router.refresh();
-              router.push('/supporter/success');
-            } else {
-              console.error('[PayPal] Approve failed:', result);
-              router.push('/supporter/error');
-            }
-          } catch (error) {
-            console.error('[PayPal] Error:', error);
-            router.push('/supporter/error');
-          } finally {
-            setProcessing(false);
-          }
-        },
-        onCancel: function() {
-          console.log('[PayPal] Subscription cancelled by user');
-        },
-        onError: function(err: any) {
-          console.error('[PayPal] Error:', err);
-          setPaypalError('PayPal 發生錯誤，請稍後再試');
-        },
-      }).render(paypalButtonRef.current);
-      
-      paypalRendered.current = true;
-    } catch (err) {
-      console.error('[PayPal] Render error:', err);
-      setPaypalError('PayPal 按鈕渲染失敗');
-    }
-  }, [paypalLoaded, hasDisplayName, router]);
-
-  const handlePayPalLoad = () => {
-    console.log('[PayPal] SDK loaded');
-    setPaypalLoaded(true);
-  };
-
-  const handlePayPalError = () => {
-    console.error('[PayPal] SDK load error');
-    setPaypalError('PayPal SDK 載入失敗');
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -152,15 +54,6 @@ export default function SupporterCheckoutPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50 py-12 px-4">
-      {/* PayPal SDK Script */}
-      {hasDisplayName && PAYPAL_CLIENT_ID && (
-        <Script
-          src={`https://www.paypal.com/sdk/js?client-id=${PAYPAL_CLIENT_ID}&vault=true&intent=subscription`}
-          onLoad={handlePayPalLoad}
-          onError={handlePayPalError}
-        />
-      )}
-
       <div className="max-w-xl mx-auto">
         {/* 返回按鈕 */}
         <Link 
@@ -293,53 +186,8 @@ export default function SupporterCheckoutPage() {
 
           {hasDisplayName ? (
             <>
-              {/* 處理中狀態 */}
-              {processing && (
-                <div className="flex items-center justify-center gap-3 py-8 text-gray-600">
-                  <div className="w-6 h-6 border-3 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                  <span>正在確認訂閱狀態...</span>
-                </div>
-              )}
-
-              {/* PayPal 錯誤 */}
-              {paypalError && !processing && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-                  <p className="text-red-700 text-sm mb-3">{paypalError}</p>
-                  <a
-                    href={PAYPAL_DIRECT_LINK}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block bg-[#0070ba] text-white px-5 py-2 rounded-lg font-medium hover:bg-[#005ea6] transition"
-                  >
-                    使用 PayPal 網頁訂閱
-                  </a>
-                </div>
-              )}
-
-              {/* PayPal 按鈕容器 */}
-              {!processing && !paypalError && (
-                <div ref={paypalButtonRef} className="min-h-[150px]">
-                  {!paypalLoaded && (
-                    <div className="flex items-center justify-center py-8 text-gray-500">
-                      <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin mr-2" />
-                      載入 PayPal...
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Fallback 連結 */}
-              <div className="mt-4 text-center">
-                <p className="text-xs text-gray-400 mb-2">若按鈕無法顯示，可使用以下連結：</p>
-                <a
-                  href={PAYPAL_DIRECT_LINK}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  前往 PayPal 訂閱頁面 →
-                </a>
-              </div>
+              {/* PayPal 訂閱按鈕 */}
+              <PayPalSubscribeButton className="w-full min-h-[150px]" />
             </>
           ) : (
             <div className="bg-gray-100 rounded-xl p-4 text-center text-gray-500">
@@ -384,4 +232,3 @@ export default function SupporterCheckoutPage() {
     </div>
   );
 }
-

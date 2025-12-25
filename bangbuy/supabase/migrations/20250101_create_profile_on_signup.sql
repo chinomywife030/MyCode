@@ -72,3 +72,5 @@ SELECT 'Migration completed: Auto-create profiles trigger created' AS status;
 
 
 
+
+
