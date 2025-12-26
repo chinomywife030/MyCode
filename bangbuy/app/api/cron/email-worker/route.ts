@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+export const runtime = "nodejs";
+
 export async function GET() {
   await fetch(
     `${process.env.SUPABASE_URL}/functions/v1/email-worker`,
