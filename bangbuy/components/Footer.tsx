@@ -21,6 +21,11 @@ export default function Footer() {
             <h3 className="text-sm font-bold text-gray-900 mb-3">關於 BangBuy</h3>
             <ul className="space-y-2">
               <li>
+                <Link href="/about" className="text-sm text-gray-600 hover:text-blue-600 transition">
+                  關於我們
+                </Link>
+              </li>
+              <li>
                 <FeatureLink href="/" className="text-sm text-gray-600 hover:text-blue-600 transition">
                   首頁
                 </FeatureLink>
@@ -101,6 +106,11 @@ export default function Footer() {
           <div>
             <h3 className="text-sm font-bold text-gray-900 mb-3">聯絡我們</h3>
             <ul className="space-y-2">
+              <li>
+                <Link href="/contact" className="text-sm text-gray-600 hover:text-blue-600 transition">
+                  聯絡我們
+                </Link>
+              </li>
               <li>
                 <a 
                   href="mailto:support@bangbuy.app" 

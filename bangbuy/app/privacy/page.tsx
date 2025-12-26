@@ -31,18 +31,23 @@ export default function PrivacyPage() {
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">2. 我們蒐集的資料</h2>
             <p>我們可能蒐集以下類型的個人資料：</p>
             
-            <h3 className="text-xl font-semibold text-gray-800 mt-4 mb-2">2.1 您提供的資料</h3>
+            <h3 className="text-xl font-semibold text-gray-800 mt-4 mb-2">2.1 帳號資料</h3>
             <ul className="list-disc pl-6 space-y-1">
-              <li>帳號資訊：Email、密碼（加密儲存）、暱稱</li>
-              <li>個人資料：頭貼、自我介紹、驗證資料（如提供）</li>
-              <li>發布內容：願望需求、代購行程、訊息、評價</li>
-              <li>交易資訊：報價金額、交易紀錄（不包含付款資訊）</li>
+              <li>Email 地址、密碼（加密儲存）、暱稱、顯示名稱</li>
+              <li>頭貼、自我介紹等個人資料</li>
             </ul>
 
-            <h3 className="text-xl font-semibold text-gray-800 mt-4 mb-2">2.2 自動蒐集的資料</h3>
+            <h3 className="text-xl font-semibold text-gray-800 mt-4 mb-2">2.2 使用紀錄</h3>
             <ul className="list-disc pl-6 space-y-1">
-              <li>裝置資訊：IP 位址、瀏覽器類型、作業系統</li>
-              <li>使用資料：頁面瀏覽紀錄、點擊行為、使用時間</li>
+              <li>發布的需求、代購行程、訊息內容</li>
+              <li>頁面瀏覽紀錄、點擊行為、使用時間</li>
+              <li>報價金額、交易紀錄（不包含付款資訊）</li>
+            </ul>
+
+            <h3 className="text-xl font-semibold text-gray-800 mt-4 mb-2">2.3 裝置資訊</h3>
+            <ul className="list-disc pl-6 space-y-1">
+              <li>IP 位址、瀏覽器類型、作業系統</li>
+              <li>裝置識別碼、語言設定</li>
               <li>Cookie 與類似技術（詳見 Cookie 政策）</li>
             </ul>
           </section>
@@ -51,10 +56,10 @@ export default function PrivacyPage() {
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">3. 資料使用目的</h2>
             <p>我們基於以下合法目的使用您的資料：</p>
             <ul className="list-disc pl-6 mt-2 space-y-1">
-              <li><strong>提供服務</strong>：帳號管理、媒合功能、通知系統</li>
-              <li><strong>服務改善</strong>：分析使用行為、優化功能、修復錯誤</li>
-              <li><strong>安全維護</strong>：防止詐騙、濫用、違法行為</li>
-              <li><strong>法律遵循</strong>：配合主管機關調查、法律義務</li>
+              <li><strong>提供服務</strong>：帳號管理、媒合功能、通知系統、訊息傳遞</li>
+              <li><strong>改善體驗</strong>：分析使用行為、優化功能、修復錯誤、提升使用者體驗</li>
+              <li><strong>安全</strong>：防止詐騙、濫用、違法行為、保護平台與使用者安全</li>
+              <li><strong>法律遵循</strong>：配合主管機關調查、遵守適用法律與規範</li>
               <li><strong>溝通聯繫</strong>：重要通知、服務更新（可選擇退訂）</li>
             </ul>
           </section>
@@ -131,12 +136,37 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">11. Cookie 與追蹤技術</h2>
-            <p>我們使用 Cookie 與類似技術改善服務。詳細資訊請參閱《Cookie 政策》。您可透過瀏覽器設定管理 Cookie，但可能影響部分功能。</p>
+            <p>我們使用 Cookie 與類似技術來：</p>
+            <ul className="list-disc pl-6 mt-2 space-y-1">
+              <li>維持您的登入狀態</li>
+              <li>記住您的偏好設定</li>
+              <li>分析網站使用情況</li>
+              <li>提供個人化內容（如未來啟用廣告服務）</li>
+            </ul>
+            <p className="mt-3">
+              <strong>Cookie 管理：</strong>您可透過瀏覽器設定管理 Cookie（通常在「設定」→「隱私權」→「Cookie」），包括：
+            </p>
+            <ul className="list-disc pl-6 mt-2 space-y-1">
+              <li>查看與刪除 Cookie</li>
+              <li>封鎖特定 Cookie</li>
+              <li>設定 Cookie 通知</li>
+            </ul>
+            <p className="mt-3">
+              請注意，停用 Cookie 可能影響部分功能（如登入狀態、偏好設定）。詳細資訊請參閱《Cookie 政策》。
+            </p>
           </section>
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">12. 第三方服務</h2>
-            <p>本平台可能包含第三方連結或服務（如 Google Analytics）。第三方的隱私實務不受本政策約束，請參閱其隱私權政策。</p>
+            <p>本平台可能使用以下第三方服務：</p>
+            <ul className="list-disc pl-6 mt-2 space-y-1">
+              <li><strong>分析工具</strong>：我們可能使用 Google Analytics 等分析工具來了解使用者行為，以改善服務品質</li>
+              <li><strong>未來廣告服務</strong>：我們可能使用 Google AdSense 等廣告服務來提供相關內容（您可透過 Cookie 設定管理）</li>
+              <li><strong>雲端服務</strong>：我們使用 Supabase、Vercel 等雲端服務提供商來儲存與處理資料</li>
+            </ul>
+            <p className="mt-3">
+              第三方的隱私實務不受本政策約束，請參閱其各自的隱私權政策。我們會確保第三方服務提供商符合資料保護標準。
+            </p>
           </section>
 
           <section>
@@ -146,7 +176,14 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">14. 聯絡與申訴</h2>
-            <p>如對隱私實務有疑問或投訴，請透過平台聯絡功能與我們聯繫。您也有權向當地資料保護主管機關提出申訴。</p>
+            <p>如對隱私實務有疑問或投訴，請透過以下方式與我們聯繫：</p>
+            <ul className="list-disc pl-6 mt-2 space-y-1">
+              <li>電子郵件：<a href="mailto:support@bangbuy.app" className="text-blue-600 hover:underline">support@bangbuy.app</a></li>
+              <li>透過平台內建的聯絡功能</li>
+            </ul>
+            <p className="mt-3">
+              您也有權向當地資料保護主管機關提出申訴。
+            </p>
           </section>
         </div>
 
@@ -162,6 +199,7 @@ export default function PrivacyPage() {
     </div>
   );
 }
+
 
 
 

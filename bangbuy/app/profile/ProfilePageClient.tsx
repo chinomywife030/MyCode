@@ -632,38 +632,13 @@ export default function ProfilePageClient() {
             </div>
           </form>
 
-          {/* Supporter 狀態 */}
-          <div className="mt-8 pt-8 border-t border-gray-100">
-            {profile?.is_supporter ? (
-              <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg border border-purple-200">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-2xl">⭐</span>
-                  <h3 className="font-bold text-gray-800">Supporter 狀態</h3>
-                </div>
-                <p className="text-sm text-gray-700">
-                  你目前是 Supporter，感謝你支持平台的持續維運。
-                </p>
-              </div>
-            ) : (
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <h3 className="font-bold text-gray-800 mb-2">成為 Supporter</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  支持平台持續發展，獲得專屬 Supporter 徽章。
-                </p>
-                <Link
-                  href="/supporter"
-                  className="inline-block px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-bold rounded-lg hover:from-purple-600 hover:to-pink-600 transition"
-                >
-                  成為 Supporter
-                </Link>
-              </div>
-            )}
-          </div>
+{/* Supporter 狀態區塊暫時停用（Supporter 功能下線） */}
         </div>
       </div>
     </div>
   );
 }
+
 
 
 

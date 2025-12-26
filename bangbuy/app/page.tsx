@@ -21,6 +21,7 @@ import { formatDateRange } from '@/lib/dateFormat';
 import { useToast } from '@/components/Toast';
 import SupporterBadge from '@/components/SupporterBadge';
 import SupporterPrompt from '@/components/SupporterPrompt';
+import AdSlot from '@/components/ads/AdSlot';
 
 // ========== 國家列表（與發布許願單一致）==========
 const ALL_COUNTRIES = [
@@ -94,7 +95,8 @@ function HomeContent() {
   // ========== 統一資料流的核心 State ==========
   const [wishes, setWishes] = useState<any[]>([]);
   const [trips, setTrips] = useState<any[]>([]);
-  const [myFavorites, setMyFavorites] = useState<string[]>([]);
+  // 收藏功能暫時停用（MVP 先不上）
+  // const [myFavorites, setMyFavorites] = useState<string[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -380,34 +382,7 @@ function HomeContent() {
         if (!userError && userResponse?.user) {
           setCurrentUser(userResponse.user);
 
-          // 載入收藏
-          const { data: favData, error: favError } = await supabase
-            .from('favorites')
-            .select('wish_id')
-            .eq('user_id', userResponse.user.id);
-
-          if (!isMounted) return;
-
-          if (favError) {
-            // 📊 診斷資訊
-            if (process.env.NODE_ENV === 'development') {
-              console.error('[收藏] 載入收藏列表失敗', {
-                error: favError.message,
-                code: favError.code,
-                details: favError.details,
-                hint: favError.hint,
-              });
-            }
-            // 如果是 RLS 錯誤，可能是 policies 未正確設定
-            if (favError.code === '42501' || favError.message.includes('permission denied') || favError.message.includes('RLS')) {
-              console.warn('🚨 [收藏] 載入失敗：RLS 權限錯誤，請檢查 favorites 表的 policies');
-            }
-          } else if (favData) {
-            setMyFavorites(favData.map((f: any) => f.wish_id));
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[收藏] 載入收藏列表成功', { count: favData.length });
-            }
-          }
+          // 收藏功能暫時停用（MVP 先不上）
         }
       } catch (err) {
         console.error('[loadUserData] Error:', err);
@@ -448,206 +423,7 @@ function HomeContent() {
     return () => { isMounted = false; };
   }, [debouncedSearch, country, sort, dateFrom, dateTo, fetchTrips, fetchWishes]);
 
-  // ========== 收藏功能（完整診斷版）==========
-  const [favoriteLoading, setFavoriteLoading] = useState<Record<string, boolean>>({});
-  
-  const toggleFavorite = useCallback(async (e: React.MouseEvent, wishId: string) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // 🔐 防抖：如果正在處理中，直接返回
-    if (favoriteLoading[wishId]) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[收藏] 請求進行中，忽略重複點擊');
-      }
-      return;
-    }
-
-    // 🔐 未登入：導向登入頁
-    if (!currentUser) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[收藏] 未登入，導向登入頁');
-      }
-      router.push(`/login?returnTo=${encodeURIComponent(window.location.pathname + window.location.search)}`);
-      return;
-    }
-
-    const isFav = myFavorites.includes(wishId);
-    const action = isFav ? 'remove' : 'add';
-
-    // 📊 完整診斷資訊（開發模式）
-    if (process.env.NODE_ENV === 'development') {
-      console.log('═'.repeat(60));
-      console.log('[收藏] 點擊收藏 - 開始');
-      console.log('  操作:', action);
-      console.log('  wishId:', wishId);
-      console.log('  userId:', currentUser.id);
-      console.log('  目前 UI 狀態 isFavorited:', isFav);
-      console.log('═'.repeat(60));
-    }
-
-    // 設定 loading 狀態
-    setFavoriteLoading(prev => ({ ...prev, [wishId]: true }));
-
-    // Optimistic update
-    if (isFav) {
-      setMyFavorites(prev => prev.filter(id => id !== wishId));
-    } else {
-      setMyFavorites(prev => [...prev, wishId]);
-    }
-
-    try {
-      if (isFav) {
-        // 移除收藏
-        const { data, error } = await supabase
-          .from('favorites')
-          .delete()
-          .eq('user_id', currentUser.id)
-          .eq('wish_id', wishId)
-          .select(); // 加入 select 以獲取刪除的資料
-
-        // 📊 完整診斷資訊
-        if (process.env.NODE_ENV === 'development') {
-          console.log('═'.repeat(60));
-          console.log('[收藏] DELETE 回應');
-          console.log('  data:', data);
-          console.log('  error:', error ? {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint,
-            status: (error as any).status,
-          } : null);
-          console.log('═'.repeat(60));
-        }
-
-        if (error) {
-          // Rollback optimistic update
-          setMyFavorites(prev => [...prev, wishId]);
-          
-          // 判斷根因
-          if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('RLS')) {
-            console.error('🚨 [收藏] 根因：RLS 權限錯誤');
-            alert('權限不足，請確認您已登入且帳號狀態正常');
-          } else if (error.code === 'PGRST116') {
-            // 記錄不存在（可能已被刪除）
-            console.log('[收藏] 記錄不存在，狀態已正確');
-            // 不需要 rollback，狀態已正確
-          } else {
-            console.error('🚨 [收藏] 根因：其他錯誤', error);
-            alert('移除收藏失敗，請稍後再試');
-          }
-        } else {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('✅ [收藏] 移除成功');
-            console.log('  刪除的記錄數:', data?.length || 0);
-          }
-          
-          // 成功後重新 fetch 一次確認狀態（確保同步）
-          const { data: verifyData } = await supabase
-            .from('favorites')
-            .select('wish_id')
-            .eq('user_id', currentUser.id)
-            .eq('wish_id', wishId)
-            .maybeSingle();
-          
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[收藏] 驗證查詢結果:', verifyData ? '仍存在（異常）' : '已刪除（正常）');
-          }
-          
-          // 🔥 觸發收藏列表重新載入（確保 Dashboard 同步）
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('favoritesUpdated', { detail: { wishId, action: 'removed' } }));
-          }
-        }
-      } else {
-        // 新增收藏
-        const { data, error } = await supabase
-          .from('favorites')
-          .insert([{ user_id: currentUser.id, wish_id: wishId }])
-          .select(); // 加入 select 以獲取插入的資料
-
-        // 📊 完整診斷資訊
-        if (process.env.NODE_ENV === 'development') {
-          console.log('═'.repeat(60));
-          console.log('[收藏] INSERT 回應');
-          console.log('  data:', data);
-          console.log('  error:', error ? {
-            message: error.message,
-            code: error.code,
-            details: error.details,
-            hint: error.hint,
-            status: (error as any).status,
-          } : null);
-          console.log('═'.repeat(60));
-        }
-
-        if (error) {
-          // Rollback optimistic update
-          setMyFavorites(prev => prev.filter(id => id !== wishId));
-          
-          // 判斷根因
-          if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('RLS')) {
-            console.error('🚨 [收藏] 根因：RLS 權限錯誤');
-            alert('權限不足，請確認您已登入且帳號狀態正常');
-          } else if (error.code === '23505') {
-            // 重複鍵（可能已存在）
-            console.log('[收藏] 已存在，同步狀態');
-            setMyFavorites(prev => [...prev, wishId]);
-            // 不需要 rollback，狀態已正確
-          } else {
-            console.error('🚨 [收藏] 根因：其他錯誤', error);
-            alert('新增收藏失敗，請稍後再試');
-          }
-        } else {
-          if (process.env.NODE_ENV === 'development') {
-            console.log('✅ [收藏] 新增成功');
-            console.log('  插入的記錄:', data?.[0]);
-          }
-          
-          // 成功後重新 fetch 一次確認狀態（確保同步）
-          const { data: verifyData } = await supabase
-            .from('favorites')
-            .select('wish_id')
-            .eq('user_id', currentUser.id)
-            .eq('wish_id', wishId)
-            .maybeSingle();
-          
-          if (process.env.NODE_ENV === 'development') {
-            console.log('[收藏] 驗證查詢結果:', verifyData ? '已存在（正常）' : '不存在（異常）');
-          }
-          
-          // 如果驗證失敗，同步狀態
-          if (!verifyData) {
-            console.warn('[收藏] 驗證失敗，重新同步狀態');
-            setMyFavorites(prev => prev.filter(id => id !== wishId));
-          }
-          
-          // 🔥 觸發收藏列表重新載入（確保 Dashboard 同步）
-          if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('favoritesUpdated', { detail: { wishId, action: 'added' } }));
-          }
-        }
-      }
-    } catch (err: any) {
-      // Rollback optimistic update
-      if (isFav) {
-        setMyFavorites(prev => [...prev, wishId]);
-      } else {
-        setMyFavorites(prev => prev.filter(id => id !== wishId));
-      }
-      
-      console.error('🚨 [收藏] 根因：例外錯誤', err);
-      alert('操作失敗，請稍後再試');
-    } finally {
-      // 清除 loading 狀態
-      setFavoriteLoading(prev => {
-        const next = { ...prev };
-        delete next[wishId];
-        return next;
-      });
-    }
-  }, [currentUser, myFavorites, router, favoriteLoading]);
+  // ========== 收藏功能暫時停用（MVP 先不上）==========
 
   // ========== 工具函數（完全不變）==========
   const getFlag = useCallback((code: string) => {
@@ -1296,7 +1072,7 @@ function HomeContent() {
                 />
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-7">
-                  {wishes.map((wish) => {
+                  {wishes.map((wish, index) => {
                     // 🎨 純 UI：模擬狀態（之後可從真實資料讀取）
                     const mockStatus = wish.status || 'pending';
                     const getStatusStyle = (status: string) => {
@@ -1315,10 +1091,11 @@ function HomeContent() {
                     };
 
                     return (
-                    <div 
-                      key={wish.id} 
-                      className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden h-full border border-gray-100 hover:border-orange-200"
-                    >
+                    <>
+                      <div 
+                        key={wish.id} 
+                        className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden h-full border border-gray-100 hover:border-orange-200"
+                      >
                       {/* Card Image - 使用 ImageCarousel */}
                       <div className="relative">
                         <ImageCarousel 
@@ -1327,24 +1104,7 @@ function HomeContent() {
                           aspectRatio="4/3"
                           showCounter={wish.images?.length > 1}
                         />
-                        {/* 收藏按鈕 - 圖片右上角 */}
-                        <button 
-                          onClick={(e) => toggleFavorite(e, wish.id)}
-                          disabled={favoriteLoading[wish.id]}
-                          className={`absolute top-3 right-12 z-10 p-2.5 rounded-full backdrop-blur-md transition-all ${
-                            favoriteLoading[wish.id]
-                              ? 'opacity-50 cursor-not-allowed'
-                              : ''
-                          } ${
-                            myFavorites.includes(wish.id)
-                              ? 'bg-red-500 text-white shadow-lg'
-                              : 'bg-white/90 text-gray-600 hover:bg-white hover:text-red-500 shadow-md'
-                          }`}
-                        >
-                          <svg className="w-5 h-5" fill={myFavorites.includes(wish.id) ? "currentColor" : "none"} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                          </svg>
-                        </button>
+                        {/* 收藏按鈕暫時停用（MVP 先不上） */}
                         {/* 國家標籤 - 圖片左上角 */}
                         <div className="absolute top-3 left-3 z-10 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-orange-700 text-xs font-bold rounded-full shadow-md flex items-center gap-1.5">
                           <span className="text-base">{getFlag(wish.target_country)}</span>
@@ -1495,6 +1255,11 @@ function HomeContent() {
                         </button>
                       </div>
                     </div>
+                    {/* 中插廣告：在第 3 個需求後插入（只在列表 >= 3 時顯示） */}
+                    {index === 2 && wishes.length >= 3 && (
+                      <AdSlot placement="feed_mid" className="col-span-1 md:col-span-2" />
+                    )}
+                    </>
                     );
                   })}
                 </div>

@@ -11,7 +11,8 @@ import { useLanguage } from '@/components/LanguageProvider';
 import ModeToggle from '@/components/ModeToggle';
 import NotificationDrawer from '@/components/NotificationDrawer';
 import { useNotificationBadge } from '@/hooks/useNotifications';
-import SupporterBadge from '@/components/SupporterBadge';
+// SupporterBadge 暫時停用（Supporter 功能下線）
+// import SupporterBadge from '@/components/SupporterBadge';
 
 export default function Navbar() {
   const { t } = useLanguage();
@@ -186,10 +187,7 @@ export default function Navbar() {
             
             {user ? (
               <div className="flex items-center gap-2">
-                {/* Supporter 徽章（頭像旁） */}
-                {profile?.is_supporter && profile?.display_name && !profile?.supporter_badge_hidden && (
-                  <SupporterBadge size="small" clickable={true} />
-                )}
+                {/* Supporter 徽章暫時停用（Supporter 功能下線） */}
                 <a 
                   href="/profile" 
                   title="個人檔案"
@@ -242,9 +240,7 @@ export default function Navbar() {
                   <p className="font-bold text-gray-800 truncate text-lg">
                     {profile?.display_name || '會員中心'}
                   </p>
-                  {profile?.is_supporter && profile?.display_name && !profile?.supporter_badge_hidden && (
-                    <SupporterBadge size="small" />
-                  )}
+                  {/* Supporter 徽章暫時停用（Supporter 功能下線） */}
                 </div>
                 <p className="text-xs text-gray-500 truncate">{user.email || '用戶'}</p>
               </div>
@@ -272,18 +268,7 @@ export default function Navbar() {
               <span className="text-xl">🧮</span> 匯率計算器
             </a>
 
-            {/* ⭐ Supporter 連結 */}
-            <a 
-              href="/supporter" 
-              onClick={() => setIsMenuOpen(false)} 
-              className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-purple-50 rounded-xl font-medium transition group"
-            >
-              <span className="text-xl">⭐</span> 
-              <span>成為 Supporter</span>
-              {profile?.is_supporter && (
-                <span className="ml-auto text-xs text-purple-600 font-bold">已訂閱</span>
-              )}
-            </a>
+            {/* Supporter 連結暫時停用（Supporter 功能下線） */}
 
             {user && (
               <>

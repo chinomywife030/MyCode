@@ -402,20 +402,7 @@ export default function SettingsPageClient() {
               </svg>
             </a>
             
-            {user && !user.app_metadata?.is_supporter && (
-              <a
-                href="/supporter/checkout"
-                className="flex items-center justify-between p-4 rounded-lg border border-purple-200 hover:bg-purple-50 transition-colors group"
-              >
-                <div>
-                  <span className="text-purple-700 font-medium">⭐ 成為 Supporter</span>
-                  <p className="text-sm text-purple-600 mt-0.5">優先體驗新功能、顯示專屬徽章</p>
-                </div>
-                <svg className="w-5 h-5 text-purple-400 group-hover:text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </a>
-            )}
+{/* Supporter 入口暫時停用（Supporter 功能下線） */}
           </div>
         </div>
       </div>

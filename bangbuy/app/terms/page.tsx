@@ -18,7 +18,15 @@ export default function TermsPage() {
         <div className="prose prose-gray max-w-none space-y-6 text-gray-700 leading-relaxed">
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">1. 服務說明</h2>
-            <p>BangBuy 提供代購媒合平台服務，讓使用者能夠發布代購需求或提供代購服務。本平台僅提供資訊媒合功能，不直接參與交易、金流、物流或商品真偽判定。</p>
+            <p>
+              BangBuy 是一個代購媒合平台，連結留學生與海外使用者與台灣端的代購需求。本平台<strong>僅提供資訊媒合功能</strong>，讓使用者能夠發布代購需求或提供代購服務。
+            </p>
+            <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mt-4">
+              <p className="font-semibold text-amber-800 mb-2">重要：平台不保證交易成功</p>
+              <p className="text-amber-700">
+                本平台<strong>不直接參與交易、金流、物流或商品真偽判定</strong>。平台不保證任何交易會成功完成，也不對交易結果負責。
+              </p>
+            </div>
           </section>
 
           <section>
@@ -34,6 +42,13 @@ export default function TermsPage() {
               <li>妥善保管帳號密碼，不得與他人共用</li>
               <li>對帳號下的所有活動負責</li>
               <li>發現帳號遭盜用時立即通知平台</li>
+            </ul>
+            <p className="mt-3 font-semibold">帳號與停權條款：</p>
+            <ul className="list-disc pl-6 mt-2 space-y-1">
+              <li>平台保留隨時暫停或終止違反本條款之帳號的權利</li>
+              <li>如帳號遭停權，您將無法使用平台服務，且可能無法恢復</li>
+              <li>停權後，您仍須對停權前的行為負責</li>
+              <li>平台無需事先通知即可執行停權措施</li>
             </ul>
           </section>
 
@@ -66,11 +81,27 @@ export default function TermsPage() {
               <li>您保證擁有完整權利並自行承擔法律責任</li>
               <li>您授權平台展示、儲存、處理該內容</li>
             </ul>
+            <p className="mt-3 font-semibold">使用者張貼內容責任：</p>
+            <ul className="list-disc pl-6 mt-2 space-y-1">
+              <li>您對發布的所有內容負完全責任</li>
+              <li>如內容涉及違法或侵權，您需自行承擔法律後果</li>
+              <li>平台有權移除任何違反本條款的內容，無需事先通知</li>
+            </ul>
           </section>
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">6. 交易與金流</h2>
-            <p>本平台不介入交易、不處理金流、不保管款項。所有交易行為由使用者自行協商與執行，風險自負。平台對交易糾紛、詐騙、商品瑕疵、運送問題等不負任何責任。</p>
+            <p>本平台不介入交易、不處理金流、不保管款項。所有交易行為由使用者自行協商與執行，風險自負。</p>
+            <div className="bg-red-50 border-l-4 border-red-500 p-4 mt-4">
+              <p className="font-semibold text-red-800 mb-2">平台不負責事項</p>
+              <ul className="list-disc pl-6 space-y-1 text-red-700">
+                <li>第三方商品品質、真偽、瑕疵</li>
+                <li>物流配送延遲、遺失、損壞</li>
+                <li>付款糾紛、詐騙、退款問題</li>
+                <li>交易糾紛、爭議處理</li>
+                <li>任何因交易產生的損失或損害</li>
+              </ul>
+            </div>
           </section>
 
           <section>
@@ -85,7 +116,17 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">9. 免責與責任限制</h2>
-            <p>本平台依「現況」提供服務，不保證服務不中斷、無錯誤或符合特定目的。對於使用本平台產生的任何直接、間接、附帶或衍生損失，平台概不負責。詳見《免責聲明》。</p>
+            <p>本平台依「現況」提供服務，不保證服務不中斷、無錯誤或符合特定目的。</p>
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mt-4">
+              <p className="font-semibold text-gray-900 mb-2">責任限制：</p>
+              <ul className="list-disc pl-6 space-y-1 text-gray-700">
+                <li>對於使用本平台產生的任何直接、間接、附帶或衍生損失，平台概不負責</li>
+                <li>平台不對任何交易結果、商品品質、服務品質負責</li>
+                <li>平台不對因系統故障、網路中斷、資料遺失造成的損失負責</li>
+                <li>在法律允許的最大範圍內，平台的責任上限為您支付給平台的費用（如適用）</li>
+              </ul>
+            </div>
+            <p className="mt-4">詳見《免責聲明》。</p>
           </section>
 
           <section>
@@ -100,7 +141,11 @@ export default function TermsPage() {
 
           <section>
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">12. 聯絡方式</h2>
-            <p>如對本條款有任何疑問，請透過平台聯絡功能與我們聯繫。</p>
+            <p>如對本條款有任何疑問，請透過以下方式與我們聯繫：</p>
+            <ul className="list-disc pl-6 mt-2 space-y-1">
+              <li>電子郵件：<a href="mailto:support@bangbuy.app" className="text-blue-600 hover:underline">support@bangbuy.app</a></li>
+              <li>透過平台內建的聯絡功能</li>
+            </ul>
           </section>
         </div>
 
@@ -113,6 +158,7 @@ export default function TermsPage() {
     </div>
   );
 }
+
 
 
 

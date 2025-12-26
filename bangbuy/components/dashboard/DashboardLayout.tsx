@@ -7,7 +7,8 @@ import { useLanguage } from '@/components/LanguageProvider';
 import { cleanupAllChannels } from '@/lib/realtime';
 import { Profile } from '@/types';
 import { isFeatureEnabled } from '@/lib/featureFlags';
-import SupporterBadge from '@/components/SupporterBadge';
+// SupporterBadge 暫時停用（Supporter 功能下線）
+// import SupporterBadge from '@/components/SupporterBadge';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -39,12 +40,13 @@ export default function DashboardLayout({ children, title, activeTab: activeTabP
   const [updating, setUpdating] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // 側邊欄選單項目（統一文案「我的 X」，順序：需求 → 行程 → 訂單 → 收藏）
+  // 側邊欄選單項目（統一文案「我的 X」，順序：需求 → 行程 → 訂單）
+  // 收藏功能暫時停用（MVP 先不上）
   const menuItems = [
     { id: 'wishes', icon: '🎁', label: '我的需求', path: '/dashboard/wishes' },
     { id: 'trips', icon: '✈️', label: '我的行程', path: '/dashboard/trips' },
     { id: 'orders', icon: '📦', label: '我的訂單', path: '/dashboard/orders' },
-    { id: 'favorites', icon: '❤️', label: '我的收藏', path: '/dashboard/favorites' },
+    // { id: 'favorites', icon: '❤️', label: '我的收藏', path: '/dashboard/favorites' },
   ];
 
   useEffect(() => {
@@ -174,21 +176,16 @@ export default function DashboardLayout({ children, title, activeTab: activeTabP
                 )}
               </div>
               
-              {/* 顯示名稱與 Supporter 徽章 */}
+              {/* 顯示名稱（Supporter 徽章暫時停用） */}
               <div className="mb-2">
                 <div className="flex items-center justify-center gap-2 flex-wrap">
                   <p className="font-bold text-gray-800 truncate text-lg">
                     {profile?.display_name || '未設定名稱'}
                   </p>
-                  {profile?.is_supporter && profile?.display_name && !profile?.supporter_badge_hidden && (
-                    <SupporterBadge size="small" />
-                  )}
+                  {/* Supporter 徽章暫時停用（Supporter 功能下線） */}
                 </div>
                 {!profile?.display_name && (
                   <p className="text-xs text-gray-500 mt-1">設定顯示名稱以完成個人檔案</p>
-                )}
-                {profile?.is_supporter && !profile?.display_name && (
-                  <p className="text-xs text-gray-500 mt-1">設定顯示名稱以顯示 Supporter 徽章</p>
                 )}
               </div>
 
@@ -241,16 +238,7 @@ export default function DashboardLayout({ children, title, activeTab: activeTabP
                   <span>回到首頁</span>
                 </a>
                 
-                {/* 成為 Supporter（非 Supporter 才顯示） */}
-                {!profile?.is_supporter && (
-                  <a
-                    href="/supporter/checkout"
-                    className="w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 text-purple-600 hover:bg-purple-50 hover:text-purple-700 border border-purple-200 text-sm"
-                  >
-                    <span className="text-xl">⭐</span>
-                    <span>成為 Supporter</span>
-                  </a>
-                )}
+                {/* 成為 Supporter 入口暫時停用（Supporter 功能下線） */}
                 
                 {/* 登出 */}
                 <button
@@ -337,4 +325,3 @@ export default function DashboardLayout({ children, title, activeTab: activeTabP
     </div>
   );
 }
-

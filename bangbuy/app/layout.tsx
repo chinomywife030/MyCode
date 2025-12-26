@@ -3,6 +3,8 @@ import Providers from '@/components/Providers';
 import BottomNav from '@/components/BottomNav';
 import Footer from '@/components/Footer';
 import CookieBanner from '@/components/CookieBanner';
+import GA4 from '@/components/analytics/GA4';
+import AdSenseVerification from '@/components/analytics/AdSenseVerification';
 
 import type { Metadata } from 'next';
 
@@ -84,7 +86,14 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh">
+      <head>
+        {/* 🔐 Google AdSense 網站驗證（僅 production） */}
+        <AdSenseVerification />
+      </head>
       <body className="flex flex-col min-h-screen">
+        {/* 📊 Google Analytics 4 */}
+        <GA4 />
+        
         <Providers>
           {/* 主內容區 */}
           <main className="flex-1">
