@@ -1285,3 +1285,8 @@ export default function Home() {
     </Suspense>
   );
 }
+
+// 🆕 首頁 Metadata - 確保 Google 可以正確抓取
+// 注意：由於這是 client component，metadata 需要在 layout.tsx 中設定
+// 但我們可以在這裡 export 一個 metadata 物件供參考
+// 實際的 metadata 已經在 app/layout.tsx 中設定為 index: true

@@ -122,7 +122,7 @@ export function newMessageEmail(params: NewMessageEmailParams): {
         此郵件由 BangBuy 自動發送
       </p>
       <p style="color: #9ca3af; font-size: 11px; margin: 0;">
-        如不想收到此類通知，請至 <a href="${APP_URL}/settings" style="color: #3b82f6; text-decoration: none;">設定頁面</a> 調整偏好
+        此郵件由 BangBuy 自動發送，如需協助請聯絡客服
       </p>
     </div>
     
@@ -142,8 +142,7 @@ ${messageType !== 'SYSTEM_MESSAGE' ? `— ${senderName}` : ''}
 前往查看對話：${conversationUrl}
 
 ---
-此郵件由 BangBuy 自動發送。
-如不想收到此類通知，請至 ${APP_URL}/settings 調整偏好。
+此郵件由 BangBuy 自動發送，如需協助請聯絡客服。
   `.trim();
 
   return { html, text, subject };

@@ -288,9 +288,7 @@ export default function Navbar() {
                 <a href="/chat" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
                   <span className="text-xl">💬</span> 訊息中心
                 </a>
-                <a href="/settings" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-xl font-medium transition">
-                  <span className="text-xl">⚙️</span> 設定
-                </a>
+                {/* 設定入口暫時停用（設定功能下線） */}
                 <div className="h-px bg-gray-100 my-3 mx-2" />
                 {mode === 'requester' ? (
                   <a
