@@ -1,0 +1,7 @@
+# Supabase Edge Functions (Deno runtime - not for Vercel/Next.js build)
+supabase/
+
+# Other development files
+*.md
+!README.md
+

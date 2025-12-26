@@ -1,0 +1,13 @@
+{
+    "crons": [
+      {
+        "path": "/api/cron/email-worker",
+        "schedule": "*/2 * * * *"
+      },
+      {
+        "path": "/api/cron/recommendations",
+        "schedule": "0 1 * * *"
+      }
+    ]
+  }
+  

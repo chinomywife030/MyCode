@@ -3,6 +3,10 @@
  * 
  * GET /api/user/notification-settings - 取得當前用戶的通知設定
  * PUT /api/user/notification-settings - 更新通知設定
+ * 
+ * 支援兩個設定來源：
+ * - profiles 表：私訊通知設定（notify_msg_*）
+ * - notification_preferences 表：推薦 Email 設定（email_reco_enabled, digest_mode）
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -68,8 +72,8 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // 取得用戶的通知設定
-    const { data: profile, error } = await supabaseAdmin
+    // 取得用戶的通知設定（從 profiles 表）
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select(`
         notify_msg_new_thread_email,
@@ -80,20 +84,34 @@ export async function GET(request: NextRequest) {
       .eq('id', user.id)
       .single();
     
-    if (error) {
-      console.error('[API] Error fetching settings:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch settings' },
-        { status: 500 }
-      );
+    if (profileError && profileError.code !== 'PGRST116') {
+      console.error('[API] Error fetching profile settings:', profileError);
+    }
+    
+    // 取得推薦設定（從 notification_preferences 表）
+    const { data: prefs, error: prefsError } = await supabaseAdmin
+      .from('notification_preferences')
+      .select(`
+        email_reco_enabled,
+        digest_mode
+      `)
+      .eq('user_id', user.id)
+      .single();
+    
+    if (prefsError && prefsError.code !== 'PGRST116') {
+      console.error('[API] Error fetching notification_preferences:', prefsError);
     }
     
     // 返回設定（使用預設值填充）
     return NextResponse.json({
+      // 私訊通知設定
       notify_msg_new_thread_email: profile?.notify_msg_new_thread_email ?? true,
       notify_msg_unread_reminder_email: profile?.notify_msg_unread_reminder_email ?? true,
       notify_msg_every_message_email: profile?.notify_msg_every_message_email ?? false,
       notify_msg_unread_hours: profile?.notify_msg_unread_hours ?? 12,
+      // 推薦 Email 設定
+      email_reco_enabled: prefs?.email_reco_enabled ?? true,
+      digest_mode: prefs?.digest_mode ?? 'daily',
     });
     
   } catch (error: any) {
@@ -120,50 +138,94 @@ export async function PUT(request: NextRequest) {
     
     const body = await request.json();
     
-    // 驗證欄位
-    const updates: Record<string, any> = {};
+    // 分離兩種設定
+    const profileUpdates: Record<string, any> = {};
+    const prefsUpdates: Record<string, any> = {};
     
+    // ========================================
+    // Profile 欄位（私訊通知）
+    // ========================================
     if (typeof body.notify_msg_new_thread_email === 'boolean') {
-      updates.notify_msg_new_thread_email = body.notify_msg_new_thread_email;
+      profileUpdates.notify_msg_new_thread_email = body.notify_msg_new_thread_email;
     }
     
     if (typeof body.notify_msg_unread_reminder_email === 'boolean') {
-      updates.notify_msg_unread_reminder_email = body.notify_msg_unread_reminder_email;
+      profileUpdates.notify_msg_unread_reminder_email = body.notify_msg_unread_reminder_email;
     }
     
     if (typeof body.notify_msg_every_message_email === 'boolean') {
-      updates.notify_msg_every_message_email = body.notify_msg_every_message_email;
+      profileUpdates.notify_msg_every_message_email = body.notify_msg_every_message_email;
     }
     
     if (typeof body.notify_msg_unread_hours === 'number') {
       // 限制範圍：1-72 小時
-      updates.notify_msg_unread_hours = Math.max(1, Math.min(72, body.notify_msg_unread_hours));
+      profileUpdates.notify_msg_unread_hours = Math.max(1, Math.min(72, body.notify_msg_unread_hours));
     }
     
-    if (Object.keys(updates).length === 0) {
+    // ========================================
+    // Notification Preferences 欄位（推薦 Email）
+    // ========================================
+    if (typeof body.email_reco_enabled === 'boolean') {
+      prefsUpdates.email_reco_enabled = body.email_reco_enabled;
+    }
+    
+    if (typeof body.digest_mode === 'string' && ['instant', 'hourly', 'daily'].includes(body.digest_mode)) {
+      prefsUpdates.digest_mode = body.digest_mode;
+    }
+    
+    const hasProfileUpdates = Object.keys(profileUpdates).length > 0;
+    const hasPrefsUpdates = Object.keys(prefsUpdates).length > 0;
+    
+    if (!hasProfileUpdates && !hasPrefsUpdates) {
       return NextResponse.json(
         { error: 'No valid fields to update' },
         { status: 400 }
       );
     }
     
-    // 更新設定
-    const { error } = await supabaseAdmin
-      .from('profiles')
-      .update(updates)
-      .eq('id', user.id);
+    // 更新 profiles 表
+    if (hasProfileUpdates) {
+      const { error } = await supabaseAdmin
+        .from('profiles')
+        .update(profileUpdates)
+        .eq('id', user.id);
+      
+      if (error) {
+        console.error('[API] Error updating profile settings:', error);
+        return NextResponse.json(
+          { error: 'Failed to update profile settings' },
+          { status: 500 }
+        );
+      }
+    }
     
-    if (error) {
-      console.error('[API] Error updating settings:', error);
-      return NextResponse.json(
-        { error: 'Failed to update settings' },
-        { status: 500 }
-      );
+    // 更新 notification_preferences 表（upsert）
+    if (hasPrefsUpdates) {
+      const { error } = await supabaseAdmin
+        .from('notification_preferences')
+        .upsert({
+          user_id: user.id,
+          ...prefsUpdates,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id',
+        });
+      
+      if (error) {
+        console.error('[API] Error updating notification_preferences:', error);
+        return NextResponse.json(
+          { error: 'Failed to update notification preferences' },
+          { status: 500 }
+        );
+      }
     }
     
     return NextResponse.json({
       success: true,
-      updated: updates,
+      updated: {
+        ...profileUpdates,
+        ...prefsUpdates,
+      },
     });
     
   } catch (error: any) {
@@ -174,4 +236,3 @@ export async function PUT(request: NextRequest) {
     );
   }
 }
-
