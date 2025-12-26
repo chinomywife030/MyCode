@@ -230,3 +230,4 @@ SELECT 'Trips delete RLS policy migration completed!' AS status;
 
 
 
+
