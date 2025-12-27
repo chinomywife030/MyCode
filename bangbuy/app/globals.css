@@ -86,3 +86,88 @@ body {
     background-position: -200% 0;
   }
 }
+
+/* ============================================
+ * 🌐 跨瀏覽器兼容性
+ * ============================================ */
+
+/* Backdrop filter 兼容性（Safari 需要 -webkit 前缀） */
+.backdrop-blur-sm {
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.backdrop-blur-md {
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+/* 🔋 低性能設備降級：減少 blur 使用 */
+@media (prefers-reduced-motion: reduce) {
+  .backdrop-blur-sm,
+  .backdrop-blur-md {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background-color: rgba(255, 255, 255, 0.95);
+  }
+}
+
+/* ============================================
+ * ⚡ 性能優化
+ * ============================================ */
+
+/* GPU 加速優化（用於動畫元素） */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
+/* 圖片容器：固定比例防止 layout shift */
+.aspect-4-3 {
+  aspect-ratio: 4 / 3;
+}
+
+.aspect-square {
+  aspect-ratio: 1 / 1;
+}
+
+/* 淡入動畫 */
+.animate-fade-in {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 長列表性能優化 */
+.contain-layout {
+  contain: layout;
+}
+
+.contain-paint {
+  contain: paint;
+}
+
+/* ============================================
+ * 📱 觸控優化
+ * ============================================ */
+
+/* 防止 iOS Safari 點擊時的 300ms 延遲 */
+button,
+a,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* 防止長按選取（用於可拖曳元素） */
+.no-select {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}

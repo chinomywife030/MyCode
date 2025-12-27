@@ -18,6 +18,7 @@ import { AuthProvider } from '@/lib/AuthProvider';
 import { EmailVerificationGuard } from '@/components/EmailVerificationGuard';
 import { ToastProvider } from '@/components/Toast';
 import RouteReloadGuard from '@/components/RouteReloadGuard';
+import ErrorTrackingInit from '@/components/ErrorTrackingInit';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -39,6 +40,8 @@ export default function Providers({ children }: ProvidersProps) {
               <Suspense fallback={null}>
                 <RouteReloadGuard />
               </Suspense>
+              {/* 🔍 錯誤追蹤初始化（全域） */}
+              <ErrorTrackingInit />
             </AppStatusProvider>
           </AuthProvider>
         </ToastProvider>

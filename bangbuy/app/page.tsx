@@ -22,6 +22,7 @@ import { useToast } from '@/components/Toast';
 import SupporterBadge from '@/components/SupporterBadge';
 import SupporterPrompt from '@/components/SupporterPrompt';
 import AdSlot from '@/components/ads/AdSlot';
+import { capturePerformance } from '@/lib/errorTracking';
 
 // ========== 國家列表（與發布許願單一致）==========
 const ALL_COUNTRIES = [
@@ -429,12 +430,20 @@ function HomeContent() {
     async function loadData() {
       setLoading(true);
       setError(null);
+      
+      // ⚡ 效能測量
+      const startTime = performance.now();
 
       try {
         await Promise.all([
           fetchTrips({ search: debouncedSearch, country, sort, dateFrom, dateTo }),
           fetchWishes({ search: debouncedSearch, country, sort, dateFrom, dateTo }),
         ]);
+        
+        // 記錄載入時間
+        const duration = performance.now() - startTime;
+        capturePerformance('home_data_load', duration, '/');
+        
       } catch (err: any) {
         if (isMounted) {
           setError(err?.message || '資料載入時發生錯誤');
