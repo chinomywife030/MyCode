@@ -7,12 +7,25 @@ import { createClient } from '@supabase/supabase-js';
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
   try {
-    const wishId = params.id;
+    // Next.js 16: params 可能是 Promise，需要 await
+    const resolvedParams = await Promise.resolve(params);
+    let wishId = resolvedParams?.id;
+
+    // 如果 params.id 不存在，嘗試從 URL 中提取
+    if (!wishId) {
+      const url = new URL(request.url);
+      const pathParts = url.pathname.split('/');
+      const completeIndex = pathParts.indexOf('complete');
+      if (completeIndex > 0) {
+        wishId = pathParts[completeIndex - 1];
+      }
+    }
 
     if (!wishId) {
+      console.error('[Complete Transaction] Missing wish ID. URL:', request.url, 'Params:', resolvedParams);
       return NextResponse.json(
         { success: false, error: 'Missing wish ID' },
         { status: 400 }
