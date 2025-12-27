@@ -18,8 +18,9 @@ export default function ForgotPasswordPage() {
     setSuccess(false);
 
     try {
+      // 直接導向 /reset-password（不使用 /auth/callback）
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://bangbuy.app/auth/callback',
+        redirectTo: 'https://bangbuy.app/reset-password',
       });
 
       if (error) throw error;

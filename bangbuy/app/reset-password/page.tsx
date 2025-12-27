@@ -2,16 +2,27 @@
 
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import TrustFooter from '@/components/TrustFooter';
 
+// 是否為開發模式（用於 logs）
+const isDev = process.env.NODE_ENV === 'development';
+
+function log(...args: any[]) {
+  // Production 也輸出（便於 debug），但可以改成 isDev only
+  console.log('[Reset Password]', ...args);
+}
+
 function ResetPasswordContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [errorType, setErrorType] = useState<'expired' | 'invalid' | 'generic' | null>(null);
   const [success, setSuccess] = useState(false);
   const [validToken, setValidToken] = useState(false);
   const [isProcessing, setIsProcessing] = useState(true);
@@ -21,55 +32,206 @@ function ResetPasswordContent() {
   const hasProcessedRef = useRef(false);
 
   useEffect(() => {
-    // 檢查 session（從 /auth/callback 進入時，session 應該已經建立）
-    const checkSession = async () => {
+    const processRecoveryLink = async () => {
       // 如果已經處理過，不再重複執行（React strict mode guard）
       if (hasProcessedRef.current) {
+        log('Already processed, skipping...');
         return;
       }
+      hasProcessedRef.current = true;
 
       try {
-        // 先等待一下，確保從 /auth/callback 跳轉過來的 session 已建立
-        await new Promise(resolve => setTimeout(resolve, 200));
-
-        // 檢查是否已有 session（從 /auth/callback 進入時應該已經有）
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // ============================================
+        // 1. 獲取當前 URL 資訊（用於 debug）
+        // ============================================
+        const fullUrl = window.location.href;
+        const hash = window.location.hash;
+        const search = window.location.search;
+        
+        log('========== Processing Recovery Link ==========');
+        log('Full URL:', fullUrl);
+        log('Hash:', hash || '(empty)');
+        log('Search:', search || '(empty)');
+        
+        // ============================================
+        // 2. 檢查是否有錯誤參數（真的過期）
+        // ============================================
+        // URL 可能包含 ?error=access_denied&error_code=403&error_description=...
+        // 或者 hash 中可能有 #error=...
+        const urlParams = new URLSearchParams(search);
+        const hashParams = new URLSearchParams(hash.substring(1));
+        
+        const urlError = urlParams.get('error');
+        const urlErrorCode = urlParams.get('error_code');
+        const urlErrorDesc = urlParams.get('error_description');
+        
+        const hashError = hashParams.get('error');
+        const hashErrorCode = hashParams.get('error_code');
+        const hashErrorDesc = hashParams.get('error_description');
+        
+        const error = urlError || hashError;
+        const errorCode = urlErrorCode || hashErrorCode;
+        const errorDesc = urlErrorDesc || hashErrorDesc;
         
         if (error) {
-          console.error('[Reset Password] Get session error:', error);
-          hasProcessedRef.current = true;
-          setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
+          log('❌ Error detected:', { error, errorCode, errorDesc });
+          
+          if (error === 'access_denied' && (errorCode === '403' || errorDesc?.includes('expired') || errorDesc?.includes('invalid'))) {
+            setErrorType('expired');
+            setErrorMsg('此重設連結已過期或已被使用，請重新申請。');
+          } else {
+            setErrorType('invalid');
+            setErrorMsg(errorDesc || '連結無效，請重新申請重設密碼。');
+          }
+          setValidToken(false);
+          setIsProcessing(false);
+          return;
+        }
+        
+        // ============================================
+        // 3. 檢查並處理 URL Query 中的 code（PKCE 格式）
+        // ============================================
+        const code = urlParams.get('code');
+        
+        if (code) {
+          log('📧 Found code in query, exchanging for session...');
+          log('Code (masked):', code.substring(0, 10) + '...');
+          
+          try {
+            const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+            
+            if (exchangeError) {
+              log('❌ exchangeCodeForSession failed:', exchangeError.message);
+              
+              if (exchangeError.message.includes('expired') || exchangeError.message.includes('invalid')) {
+                setErrorType('expired');
+                setErrorMsg('此重設連結已過期或已被使用，請重新申請。');
+              } else {
+                setErrorType('generic');
+                setErrorMsg(exchangeError.message || '驗證失敗，請重新申請重設密碼。');
+              }
+              setValidToken(false);
+              setIsProcessing(false);
+              return;
+            }
+            
+            log('✅ exchangeCodeForSession success');
+            log('Session user:', data.session?.user?.email);
+            
+            // 清除 URL query（避免重新整理時再次消耗）
+            window.history.replaceState({}, '', '/reset-password');
+            
+            setValidToken(true);
+            setIsProcessing(false);
+            return;
+            
+          } catch (err: any) {
+            log('❌ exchangeCodeForSession exception:', err.message);
+            setErrorType('generic');
+            setErrorMsg('處理重設連結時發生錯誤，請重新申請。');
+            setValidToken(false);
+            setIsProcessing(false);
+            return;
+          }
+        }
+        
+        // ============================================
+        // 4. 檢查並處理 URL Hash 中的 access_token（implicit 格式）
+        // ============================================
+        const accessToken = hashParams.get('access_token');
+        const refreshToken = hashParams.get('refresh_token');
+        const type = hashParams.get('type');
+        
+        if (accessToken && refreshToken) {
+          log('🔑 Found tokens in hash, setting session...');
+          log('Type:', type);
+          log('Access token (masked):', accessToken.substring(0, 20) + '...');
+          
+          try {
+            const { data, error: setSessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            
+            if (setSessionError) {
+              log('❌ setSession failed:', setSessionError.message);
+              
+              if (setSessionError.message.includes('expired') || setSessionError.message.includes('invalid')) {
+                setErrorType('expired');
+                setErrorMsg('此重設連結已過期或已被使用，請重新申請。');
+              } else {
+                setErrorType('generic');
+                setErrorMsg(setSessionError.message || '驗證失敗，請重新申請重設密碼。');
+              }
+              setValidToken(false);
+              setIsProcessing(false);
+              return;
+            }
+            
+            log('✅ setSession success');
+            log('Session user:', data.session?.user?.email);
+            
+            // 清除 URL hash（避免重新整理時再次消耗）
+            window.history.replaceState({}, '', '/reset-password');
+            
+            setValidToken(true);
+            setIsProcessing(false);
+            return;
+            
+          } catch (err: any) {
+            log('❌ setSession exception:', err.message);
+            setErrorType('generic');
+            setErrorMsg('處理重設連結時發生錯誤，請重新申請。');
+            setValidToken(false);
+            setIsProcessing(false);
+            return;
+          }
+        }
+        
+        // ============================================
+        // 5. 沒有 code 也沒有 hash token，檢查現有 session
+        // ============================================
+        log('ℹ️  No code or hash tokens found, checking existing session...');
+        
+        // 給 Supabase 一點時間處理可能的 auto-detection
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          log('❌ getSession error:', sessionError.message);
+          setErrorType('invalid');
+          setErrorMsg('無法驗證，請重新申請重設密碼。');
           setValidToken(false);
           setIsProcessing(false);
           return;
         }
         
         if (session) {
-          // 有 session，可以設定新密碼
-          console.log('[Reset Password] Session 有效，可以設定新密碼');
-          hasProcessedRef.current = true;
+          log('✅ Found existing session');
+          log('Session user:', session.user?.email);
           setValidToken(true);
           setIsProcessing(false);
           return;
         }
         
-        // 沒有 session，顯示錯誤
-        console.log('[Reset Password] 沒有有效的 session');
-        hasProcessedRef.current = true;
-        setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
+        // 真的沒有任何 session
+        log('⚠️  No session found');
+        setErrorType('invalid');
+        setErrorMsg('請從 Email 中的重設連結進入此頁面。');
         setValidToken(false);
         setIsProcessing(false);
         
       } catch (error: any) {
-        console.error('[Reset Password] Process error:', error);
-        hasProcessedRef.current = true; // 發生錯誤時標記為已處理，避免無限重試
+        log('❌ Unexpected error:', error.message);
+        setErrorType('generic');
         setErrorMsg('處理重設連結時發生錯誤，請重新申請。');
         setValidToken(false);
         setIsProcessing(false);
       }
     };
 
-    checkSession();
+    processRecoveryLink();
   }, []);
 
   const handleResetPassword = async (e: React.FormEvent) => {
@@ -97,12 +259,16 @@ function ResetPasswordContent() {
 
       if (error) throw error;
 
+      log('✅ Password updated successfully');
       setSuccess(true);
       
       // ✅ 完成後立即導向 /login
-      router.push('/login');
+      setTimeout(() => {
+        router.push('/login');
+      }, 2000);
 
     } catch (error: any) {
+      log('❌ updateUser error:', error.message);
       setErrorMsg(error.message || '重設失敗，請稍後再試');
       setLoading(false);
     }
@@ -119,8 +285,9 @@ function ResetPasswordContent() {
     setErrorMsg('');
 
     try {
+      // 直接導向 /reset-password，不使用 /auth/callback
       const { error } = await supabase.auth.resetPasswordForEmail(resendEmail, {
-        redirectTo: 'https://bangbuy.app/auth/callback',
+        redirectTo: 'https://bangbuy.app/reset-password',
       });
 
       if (error) throw error;
@@ -155,8 +322,22 @@ function ResetPasswordContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-bold text-gray-800 mb-2">連結無效或已過期</h3>
-              <p className="text-sm text-gray-600 mb-6">{errorMsg || '此重設連結已過期或已被使用，請重新申請。'}</p>
+              
+              {/* 根據錯誤類型顯示不同訊息 */}
+              {errorType === 'expired' ? (
+                <>
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">連結已過期或已使用</h3>
+                  <p className="text-sm text-gray-600 mb-6">
+                    此重設連結只能使用一次，或已超過有效期限。
+                    <br />請重新申請重設密碼。
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-xl font-bold text-gray-800 mb-2">連結無效</h3>
+                  <p className="text-sm text-gray-600 mb-6">{errorMsg || '請從 Email 中的連結進入此頁面。'}</p>
+                </>
+              )}
               
               {/* 重新發送選項 */}
               <div className="space-y-4">
@@ -187,7 +368,7 @@ function ResetPasswordContent() {
                 
                 <Link 
                   href="/forgot-password" 
-                  className="inline-block w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition"
+                  className="inline-block w-full bg-gray-100 text-gray-700 py-3 rounded-xl font-bold hover:bg-gray-200 transition text-center"
                 >
                   前往忘記密碼頁面
                 </Link>
@@ -302,4 +483,3 @@ export default function ResetPasswordPage() {
     </Suspense>
   );
 }
-
