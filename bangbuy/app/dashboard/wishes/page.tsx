@@ -22,6 +22,7 @@ export default function MyWishesPage() {
         .from('wish_requests')
         .select('*')
         .eq('buyer_id', user.id)
+        .neq('status', 'completed')  // 排除已完成的需求
         .order('created_at', { ascending: false });
       
       setMyWishes(wishes || []);

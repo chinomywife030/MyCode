@@ -43,6 +43,11 @@ export default function WishDetailPage() {
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [emailWarning, setEmailWarning] = useState<string | null>(null);
 
+  // 🏁 完成交易狀態
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showCompleteToast, setShowCompleteToast] = useState(false);
+
   // 獲取報價列表
   const fetchOffers = useCallback(async () => {
     if (!params.id) return;
@@ -135,6 +140,53 @@ export default function WishDetailPage() {
     }
   };
 
+  // 🏁 完成交易功能
+  const handleCompleteTransaction = async () => {
+    if (isCompleting) return;
+    
+    setIsCompleting(true);
+    setShowCompleteModal(false);
+
+    try {
+      // 取得 session token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        alert('請先登入');
+        setIsCompleting(false);
+        return;
+      }
+
+      const response = await fetch(`/api/wishes/${params.id}/complete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        alert('完成交易失敗：' + (result.error || '未知錯誤'));
+        setIsCompleting(false);
+        return;
+      }
+
+      // 顯示成功 Toast
+      setShowCompleteToast(true);
+      setTimeout(() => {
+        setShowCompleteToast(false);
+        // 導向 dashboard
+        router.push('/dashboard/wishes');
+      }, 2000);
+
+    } catch (error: any) {
+      console.error('[Complete Transaction] Error:', error);
+      alert('發生錯誤：' + error.message);
+      setIsCompleting(false);
+    }
+  };
+
   // 💬 私訊接單
   const handleStartChat = async () => {
     const targetUserId = wish.buyer_id;
@@ -221,6 +273,64 @@ export default function WishDetailPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
             <span className="font-semibold">報價已送出！等待買家回覆</span>
+          </div>
+        </div>
+      )}
+
+      {/* 🏁 完成交易 Toast */}
+      {showCompleteToast && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-fade-in">
+          <div className="bg-green-500 text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-2">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            <span className="font-semibold">🎉 交易已完成！</span>
+          </div>
+        </div>
+      )}
+
+      {/* 🏁 完成交易確認 Modal */}
+      {showCompleteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-fade-in">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">確認完成交易？</h3>
+              <p className="text-gray-600 text-sm">
+                確認後此需求將標記為已完成，不會再顯示在列表中。
+                <br />
+                代購者將收到通知。
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCompleteModal(false)}
+                className="flex-1 py-3 px-4 border border-gray-300 rounded-xl font-semibold text-gray-700 hover:bg-gray-50 transition"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCompleteTransaction}
+                disabled={isCompleting}
+                className="flex-1 py-3 px-4 bg-green-500 hover:bg-green-600 text-white rounded-xl font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isCompleting ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                    </svg>
+                    處理中...
+                  </>
+                ) : (
+                  '確認完成'
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -325,8 +435,19 @@ export default function WishDetailPage() {
                 NT$ {wish.budget}
               </div>
               
-              {/* 🗑️ 刪除按鈕 */}
-              {isOwner && (
+              {/* 🏁 完成交易按鈕 - 只在 in_progress 狀態顯示 */}
+              {isOwner && wish.status === 'in_progress' && (
+                <button 
+                  onClick={() => setShowCompleteModal(true)}
+                  disabled={isCompleting}
+                  className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-bold rounded-lg transition disabled:opacity-50"
+                >
+                  {isCompleting ? '處理中...' : '✅ 完成交易'}
+                </button>
+              )}
+              
+              {/* 🗑️ 刪除按鈕 - 只在 open 狀態顯示 */}
+              {isOwner && wish.status === 'open' && (
                 <button 
                   onClick={handleDelete}
                   disabled={isDeleting}
