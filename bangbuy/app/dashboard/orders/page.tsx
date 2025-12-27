@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import DashboardLayout from '@/components/dashboard/DashboardLayout';
 import EmptyState from '@/components/EmptyState';
