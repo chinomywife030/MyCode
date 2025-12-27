@@ -231,16 +231,24 @@ function HomeContent() {
     sort: string;
     dateFrom?: string;
     dateTo?: string;
-  }) => {
-    console.log('[fetchTrips]', params);
+  }, retryCount = 0) => {
+    console.log('[fetchTrips]', params, 'retry:', retryCount);
     
     try {
       // 🔥 查詢 trips 並 JOIN shopper profiles（代購者資訊）
-      // 使用正確的 FK relationship 名稱，包含 is_supporter
+      // ⚡ 效能優化：只抓首頁卡片需要的欄位
       let q = supabase
         .from('trips')
         .select(`
-          *,
+          id,
+          destination,
+          description,
+          date,
+          start_date,
+          end_date,
+          shopper_id,
+          shopper_name,
+          created_at,
           profiles!trips_shopper_id_fkey(id, name, avatar_url, is_supporter)
         `);
 
@@ -289,6 +297,12 @@ function HomeContent() {
       setTrips(processedTrips);
     } catch (err) {
       console.error('[fetchTrips] Exception:', err);
+      // ⚡ 自動重試 1 次
+      if (retryCount < 1) {
+        console.log('[fetchTrips] 自動重試...');
+        await new Promise(r => setTimeout(r, 1000));
+        return fetchTrips(params, retryCount + 1);
+      }
       setTrips([]);
     }
   }, []);
@@ -300,16 +314,24 @@ function HomeContent() {
     sort: string;
     dateFrom?: string;
     dateTo?: string;
-  }) => {
-    console.log('[fetchWishes]', params);
+  }, retryCount = 0) => {
+    console.log('[fetchWishes]', params, 'retry:', retryCount);
     
     try {
       // 🔥 查詢 wish_requests 並 JOIN buyer profiles（發起者資訊）
-      // 使用正確的 FK relationship 名稱，包含 is_supporter
+      // ⚡ 效能優化：只抓首頁卡片需要的欄位
       let q = supabase
         .from('wish_requests')
         .select(`
-          *,
+          id,
+          title,
+          budget,
+          target_country,
+          deadline,
+          status,
+          images,
+          buyer_id,
+          created_at,
           profiles!wish_requests_buyer_id_fkey(id, name, avatar_url, is_supporter)
         `)
         .eq('status', 'open');
@@ -365,6 +387,12 @@ function HomeContent() {
       setWishes(processedWishes);
     } catch (err) {
       console.error('[fetchWishes] Exception:', err);
+      // ⚡ 自動重試 1 次
+      if (retryCount < 1) {
+        console.log('[fetchWishes] 自動重試...');
+        await new Promise(r => setTimeout(r, 1000));
+        return fetchWishes(params, retryCount + 1);
+      }
       setWishes([]);
     }
   }, []);
@@ -1096,13 +1124,14 @@ function HomeContent() {
                         key={wish.id} 
                         className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden h-full border border-gray-100 hover:border-orange-200"
                       >
-                      {/* Card Image - 使用 ImageCarousel */}
+                      {/* Card Image - 使用 ImageCarousel + next/image 優化 */}
                       <div className="relative">
                         <ImageCarousel 
                           images={wish.images || []} 
                           alt={wish.title}
                           aspectRatio="4/3"
                           showCounter={wish.images?.length > 1}
+                          priority={index === 0}
                         />
                         {/* 收藏按鈕暫時停用（MVP 先不上） */}
                         {/* 國家標籤 - 圖片左上角 */}
@@ -1161,8 +1190,21 @@ function HomeContent() {
                         </div>
                       </Link>
                       
-                      {/* 🎯 私訊接單按鈕 - 放在 Link 外面 */}
-                      <div className="px-5 pb-5">
+                      {/* 🎯 雙 CTA 按鈕區 - 放在 Link 外面 */}
+                      <div className="px-5 pb-5 flex flex-col gap-2">
+                        {/* 主按鈕：我要接單報價 - 導向詳情頁 */}
+                        <Link
+                          href={`/wish/${wish.id}`}
+                          className="w-full flex items-center justify-center gap-2 py-3 font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg text-sm bg-orange-500 hover:bg-orange-600 text-white active:scale-95"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25zM6.75 12h.008v.008H6.75V12zm0 3h.008v.008H6.75V15zm0 3h.008v.008H6.75V18z" />
+                          </svg>
+                          <span>我要接單報價</span>
+                        </Link>
+                        
+                        {/* 次按鈕：先私訊詢問 */}
                         <button
                           disabled={chatLoadingId === `wish:${wish.id}`}
                           onClick={async (e) => {
@@ -1228,11 +1270,11 @@ function HomeContent() {
                             }
                           }}
                           className={`
-                            w-full flex items-center justify-center gap-2 py-3 font-bold rounded-xl 
-                            transition-all duration-200 shadow-md hover:shadow-lg text-sm
+                            w-full flex items-center justify-center gap-2 py-3 font-semibold rounded-xl 
+                            transition-all duration-200 text-sm border-2
                             ${chatLoadingId === `wish:${wish.id}`
-                              ? 'bg-orange-300 cursor-not-allowed'
-                              : 'bg-orange-500 hover:bg-orange-600 text-white active:scale-95'
+                              ? 'bg-gray-100 text-gray-400 border-gray-300 cursor-not-allowed'
+                              : 'bg-white hover:bg-orange-50 text-orange-600 border-orange-500 active:scale-95'
                             }
                           `}
                         >
@@ -1242,14 +1284,14 @@ function HomeContent() {
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                               </svg>
-                              <span className="text-white">處理中...</span>
+                              <span>處理中...</span>
                             </>
                           ) : (
                             <>
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                               </svg>
-                              <span>私訊接單</span>
+                              <span>先私訊詢問</span>
                             </>
                           )}
                         </button>

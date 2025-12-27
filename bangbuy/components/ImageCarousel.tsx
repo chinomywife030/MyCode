@@ -5,11 +5,13 @@
  * - 手機：touch swipe
  * - 桌面：拖曳滑動、箭頭按鈕、滾輪橫向滾動
  * - 防止外層 Link 點擊事件
+ * - ⚡ 使用 next/image 優化圖片載入
  */
 
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import Image from 'next/image';
 
 interface ImageCarouselProps {
   images: string[];
@@ -18,6 +20,8 @@ interface ImageCarouselProps {
   showCounter?: boolean;
   className?: string;
   onImageClick?: (index: number) => void;
+  /** 是否為首張優先載入（首頁第一張卡片用） */
+  priority?: boolean;
 }
 
 export default function ImageCarousel({
@@ -27,6 +31,7 @@ export default function ImageCarousel({
   showCounter = true,
   className = '',
   onImageClick,
+  priority = false,
 }: ImageCarouselProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -206,11 +211,18 @@ export default function ImageCarousel({
   if (images.length === 1) {
     return (
       <div className={`relative ${aspectClass} overflow-hidden ${className}`}>
-        <img
+        <Image
           src={images[0]}
           alt={alt}
-          className="w-full h-full object-cover"
-          draggable={false}
+          fill
+          sizes="(max-width: 768px) 100vw, 50vw"
+          className="object-cover"
+          priority={priority}
+          onError={(e) => {
+            // Fallback: 顯示灰底
+            (e.target as HTMLImageElement).style.display = 'none';
+            (e.target as HTMLImageElement).parentElement!.classList.add('bg-gray-200');
+          }}
         />
       </div>
     );
@@ -247,13 +259,21 @@ export default function ImageCarousel({
         {images.map((src, index) => (
           <div
             key={index}
-            className="flex-shrink-0 w-full h-full snap-start snap-always"
+            className="flex-shrink-0 w-full h-full snap-start snap-always relative"
           >
-            <img
+            <Image
               src={src}
               alt={`${alt} ${index + 1}`}
-              className="w-full h-full object-cover pointer-events-none"
-              draggable={false}
+              fill
+              sizes="(max-width: 768px) 100vw, 50vw"
+              className="object-cover pointer-events-none"
+              priority={priority && index === 0}
+              loading={index === 0 ? undefined : 'lazy'}
+              onError={(e) => {
+                // Fallback: 顯示灰底
+                (e.target as HTMLImageElement).style.display = 'none';
+                (e.target as HTMLImageElement).parentElement!.classList.add('bg-gray-200');
+              }}
             />
           </div>
         ))}
