@@ -135,8 +135,9 @@ export async function sendMessageEmailNotification(
   const { messageId, conversationId, senderId, receiverId, content, messageType, createdAt } = params;
   
   const env = getEnvConfig();
+  const supabase = getSupabaseAdmin();
   
-  // 日誌：開始（增強版，包含 env 狀態）
+  // 🆕 詳細的開始日誌（包含所有必要資訊）
   const hasResendKey = !!process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM || '';
   const maskedFrom = from ? `${from.substring(0, 3)}***@${from.split('@')[1] || '***'}` : '(not set)';
@@ -145,12 +146,12 @@ export async function sendMessageEmailNotification(
     : '(not set)';
   
   console.log('[msg-email] ========================================');
-  console.log('[msg-email] start', {
-    conversationId,
-    senderId,
-    receiverId,
-    messageType,
-  });
+  console.log('[msg-email] ========== First Message Email Notification ==========');
+  console.log('[msg-email] conversationId:', conversationId);
+  console.log('[msg-email] messageId:', messageId);
+  console.log('[msg-email] senderId:', senderId);
+  console.log('[msg-email] receiverId:', receiverId);
+  console.log('[msg-email] messageType:', messageType);
   console.log('[msg-email] env status', {
     enabled: env.enabled,
     nodeEnv: env.nodeEnv,
@@ -161,41 +162,75 @@ export async function sendMessageEmailNotification(
   
   // 1. 功能總開關檢查
   if (!env.enabled) {
-    console.log('[msg-email] blocked reason: ENABLE_MESSAGE_EMAIL_NOTIFICATIONS is not "true"');
+    console.log('[msg-email] ❌ BLOCKED: ENABLE_MESSAGE_EMAIL_NOTIFICATIONS is not "true"');
+    console.log('[msg-email] 💡 Fix: Set ENABLE_MESSAGE_EMAIL_NOTIFICATIONS=true in environment variables');
     console.log('[msg-email] ========================================');
     return;
   }
   
   // 2. 只處理新對話第一則訊息
   if (messageType !== 'FIRST_MESSAGE') {
-    console.log('[msg-email] skipped: Not a first message (type:', messageType, ')');
+    console.log('[msg-email] ⏭️  SKIPPED: Not a first message (type:', messageType, ')');
     console.log('[msg-email] ========================================');
     return;
   }
   
-  // 3. 檢查接收者是否開啟新對話通知
+  // 🆕 3. 檢查是否已經發送過 Email（使用 first_message_email_sent_at 去重）
+  if (!supabase) {
+    console.error('[msg-email] ❌ ERROR: Supabase admin client not available');
+    console.error('[msg-email] 💡 Fix: Set SUPABASE_SERVICE_ROLE_KEY in environment variables');
+    console.log('[msg-email] ========================================');
+    return;
+  }
+  
+  const { data: conversation, error: convError } = await supabase
+    .from('conversations')
+    .select('first_message_email_sent_at')
+    .eq('id', conversationId)
+    .single();
+  
+  if (convError) {
+    console.error('[msg-email] ❌ ERROR: Failed to fetch conversation:', convError.message);
+    console.log('[msg-email] ========================================');
+    return;
+  }
+  
+  // 🆕 如果已經發送過，跳過
+  if (conversation?.first_message_email_sent_at) {
+    console.log('[msg-email] ⏭️  SKIPPED: Email already sent at', conversation.first_message_email_sent_at);
+    console.log('[msg-email] 💡 This prevents duplicate emails');
+    console.log('[msg-email] ========================================');
+    return;
+  }
+  
+  // 4. 檢查接收者是否開啟新對話通知
   const shouldNotify = await shouldNotifyNewThread(receiverId);
   if (!shouldNotify) {
-    console.log('[msg-email] blocked reason: Receiver disabled new thread notifications');
+    console.log('[msg-email] ⏭️  SKIPPED: Receiver disabled new thread notifications');
     console.log('[msg-email] ========================================');
     return;
   }
   
-  // 4. 取得接收者 Email
+  // 5. 取得接收者 Email
   const receiverEmail = await getUserEmail(receiverId);
   if (!receiverEmail) {
-    console.log('[msg-email] blocked reason: Receiver has no email');
+    console.log('[msg-email] ❌ BLOCKED: Receiver has no email');
+    console.log('[msg-email] receiverId:', receiverId);
+    console.log('[msg-email] 💡 Fix: Ensure user has an email in profiles or auth.users');
     console.log('[msg-email] ========================================');
     return;
   }
   
-  // 5. 取得發送者名稱
+  // 🆕 記錄 receiver_email（用於可觀測性）
+  console.log('[msg-email] receiverEmail:', receiverEmail);
+  
+  // 6. 取得發送者名稱
   const senderName = await getUserDisplayName(senderId);
   const receiverName = await getUserDisplayName(receiverId);
   
-  // 6. 開發模式檢查
+  // 7. 開發模式檢查
   if (env.nodeEnv === 'development' && !env.sendInDev) {
-    console.log('[msg-email] blocked reason: Development mode with EMAIL_SEND_IN_DEV=false');
+    console.log('[msg-email] ⏭️  SKIPPED: Development mode with EMAIL_SEND_IN_DEV=false');
     console.log('[msg-email] Would send to:', receiverEmail);
     console.log('[msg-email] Sender:', senderName);
     console.log('[msg-email] Content snippet:', content.substring(0, 80));
@@ -203,7 +238,7 @@ export async function sendMessageEmailNotification(
     return;
   }
   
-  // 7. 準備 Email 內容
+  // 8. 準備 Email 內容
   const conversationUrl = `${getSiteUrl()}/chat?conversation=${conversationId}`;
   const messageSnippet = content.length > 80 ? content.substring(0, 77) + '...' : content;
   
@@ -215,8 +250,22 @@ export async function sendMessageEmailNotification(
     messageType: 'FIRST_MESSAGE',
   });
   
-  // 8. 發送 Email
+  // 9. 發送 Email（使用 transaction 確保只發送一次）
   try {
+    // 🆕 先標記為已發送（使用 upsert 避免 race condition）
+    const { error: updateError } = await supabase
+      .from('conversations')
+      .update({ first_message_email_sent_at: new Date().toISOString() })
+      .eq('id', conversationId)
+      .is('first_message_email_sent_at', null); // 只更新 NULL 的，避免覆蓋已發送的
+    
+    if (updateError) {
+      console.error('[msg-email] ⚠️  WARNING: Failed to update first_message_email_sent_at:', updateError.message);
+      // 繼續嘗試發送，但記錄警告
+    } else {
+      console.log('[msg-email] ✅ Marked conversation as email-sent (prevents duplicate)');
+    }
+    
     const result = await sendEmail({
       to: receiverEmail,
       subject,
@@ -227,28 +276,64 @@ export async function sendMessageEmailNotification(
       userId: receiverId,
     });
     
+    // 🆕 詳細的結果日誌
     if (result.success) {
-      console.log('[msg-email] ✅ sent', {
-        id: result.messageId,
-        to: receiverEmail,
-      });
+      console.log('[msg-email] ✅ EMAIL SENT SUCCESSFULLY');
+      console.log('[msg-email] Resend messageId:', result.messageId);
+      console.log('[msg-email] To:', receiverEmail);
+      console.log('[msg-email] Conversation:', conversationId);
+      console.log('[msg-email] Message:', messageId);
     } else {
-      console.error('[msg-email] ❌ failed', {
-        error: result.error,
-        to: receiverEmail,
-        envStatus: result.envStatus,
-      });
+      console.error('[msg-email] ❌ EMAIL SEND FAILED');
+      console.error('[msg-email] Error:', result.error);
+      console.error('[msg-email] To:', receiverEmail);
+      console.error('[msg-email] Conversation:', conversationId);
+      console.error('[msg-email] Message:', messageId);
+      
+      // 🆕 明確的錯誤提示
+      if (result.error?.includes('RESEND_API_KEY')) {
+        console.error('[msg-email] 💡 Fix: Set RESEND_API_KEY in environment variables');
+      }
+      if (result.error?.includes('EMAIL_FROM')) {
+        console.error('[msg-email] 💡 Fix: Set EMAIL_FROM in environment variables and verify domain in Resend');
+      }
+      if (result.error?.includes('domain') || result.error?.includes('verified')) {
+        console.error('[msg-email] 💡 Fix: Verify EMAIL_FROM domain in Resend dashboard');
+      }
+      if (result.error?.includes('api_key') || result.error?.includes('unauthorized')) {
+        console.error('[msg-email] 💡 Fix: Check RESEND_API_KEY is valid and has correct permissions');
+      }
+      
       // 如果有 Resend error response，也印出來
       if (result.envStatus?.resendError) {
         console.error('[msg-email] Resend error response:', JSON.stringify(result.envStatus.resendError, null, 2));
       }
+      
+      // 🆕 如果發送失敗，回滾 first_message_email_sent_at（允許重試）
+      if (updateError === null) {
+        await supabase
+          .from('conversations')
+          .update({ first_message_email_sent_at: null })
+          .eq('id', conversationId);
+        console.log('[msg-email] ⚠️  Rolled back first_message_email_sent_at (allows retry)');
+      }
     }
   } catch (error: any) {
-    console.error('[msg-email] ❌ failed (exception)', {
-      error: error.message,
-      stack: error.stack,
-      to: receiverEmail,
-    });
+    console.error('[msg-email] ❌ EXCEPTION during email send');
+    console.error('[msg-email] Error message:', error.message);
+    console.error('[msg-email] Error stack:', error.stack);
+    console.error('[msg-email] To:', receiverEmail);
+    console.error('[msg-email] Conversation:', conversationId);
+    console.error('[msg-email] Message:', messageId);
+    
+    // 🆕 回滾 first_message_email_sent_at（允許重試）
+    if (supabase) {
+      await supabase
+        .from('conversations')
+        .update({ first_message_email_sent_at: null })
+        .eq('id', conversationId);
+      console.log('[msg-email] ⚠️  Rolled back first_message_email_sent_at (allows retry)');
+    }
   }
   
   console.log('[msg-email] ========================================');
