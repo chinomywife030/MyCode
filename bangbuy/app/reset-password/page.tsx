@@ -23,7 +23,7 @@ function ResetPasswordContent() {
   const hasProcessedRef = useRef(false);
 
   useEffect(() => {
-    // 處理 reset password code
+    // 處理 reset password code/token
     const processResetCode = async () => {
       // 如果已經處理過，不再重複執行（React strict mode guard）
       if (hasProcessedRef.current) {
@@ -31,50 +31,114 @@ function ResetPasswordContent() {
       }
 
       try {
-        // 從 URL query 取得 code
+        // A) 優先處理 query code 格式 (?code=...)
         const code = searchParams?.get('code');
         
-        // 如果沒有 code，顯示錯誤
-        if (!code) {
-          setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
-          setValidToken(false);
+        if (code) {
+          // 標記為已處理，防止重複執行
+          hasProcessedRef.current = true;
+          
+          console.log('[Reset Password] 偵測到 code 格式，使用 exchangeCodeForSession');
+          
+          // 使用 exchangeCodeForSession 交換 session
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          
+          if (error) {
+            console.error('[Reset Password] Exchange code error:', error);
+            setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
+            setValidToken(false);
+            setIsProcessing(false);
+            return;
+          }
+          
+          // 確認有 session
+          if (!data.session) {
+            console.error('[Reset Password] No session after exchange');
+            setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
+            setValidToken(false);
+            setIsProcessing(false);
+            return;
+          }
+          
+          // ✅ 成功建立 session 後，才清除 URL
+          if (typeof window !== 'undefined') {
+            window.history.replaceState({}, '', '/reset-password');
+          }
+          
+          setValidToken(true);
           setIsProcessing(false);
           return;
         }
-
-        // 標記為已處理，防止 React strict mode 重複執行
-        hasProcessedRef.current = true;
         
-        // ✅ 使用 exchangeCodeForSession 交換 session
-        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-        
-        if (error) {
-          console.error('[Reset Password] Exchange code error:', error);
-          setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
-          setValidToken(false);
-          setIsProcessing(false);
-          return;
+        // B) 如果沒有 code，檢查 hash 格式 (#access_token=...&refresh_token=...)
+        if (typeof window !== 'undefined' && window.location.hash) {
+          const hash = window.location.hash.substring(1); // 移除 #
+          const params = new URLSearchParams(hash);
+          const accessToken = params.get('access_token');
+          const refreshToken = params.get('refresh_token');
+          const type = params.get('type'); // recovery 可忽略，但可用來判斷
+          const errorParam = params.get('error');
+          
+          // 如果有錯誤參數
+          if (errorParam) {
+            console.error('[Reset Password] Hash error:', errorParam);
+            hasProcessedRef.current = true;
+            setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
+            setValidToken(false);
+            setIsProcessing(false);
+            return;
+          }
+          
+          // 如果有 access_token 和 refresh_token
+          if (accessToken && refreshToken) {
+            // 標記為已處理，防止重複執行
+            hasProcessedRef.current = true;
+            
+            console.log('[Reset Password] 偵測到 hash 格式 (type=' + (type || 'unknown') + ')，使用 setSession');
+            
+            // 使用 setSession 建立 session
+            const { data, error } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
+            
+            if (error) {
+              console.error('[Reset Password] Set session error:', error);
+              setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
+              setValidToken(false);
+              setIsProcessing(false);
+              return;
+            }
+            
+            // 確認有 session
+            if (!data.session) {
+              console.error('[Reset Password] No session after setSession');
+              setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
+              setValidToken(false);
+              setIsProcessing(false);
+              return;
+            }
+            
+            // ✅ 成功建立 session 後，才清除 URL
+            window.history.replaceState({}, '', '/reset-password');
+            
+            setValidToken(true);
+            setIsProcessing(false);
+            return;
+          }
         }
         
-        // 確認有 session
-        if (!data.session) {
-          console.error('[Reset Password] No session after exchange');
-          setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
-          setValidToken(false);
-          setIsProcessing(false);
-          return;
-        }
-        
-        // ✅ 成功建立 session 後，才清除 URL query
-        if (typeof window !== 'undefined') {
-          window.history.replaceState({}, '', '/reset-password');
-        }
-        
-        setValidToken(true);
+        // C) 兩者都沒有，才顯示過期
+        // 如果既沒有 query code，也沒有有效的 hash tokens，才顯示錯誤
+        console.log('[Reset Password] 沒有偵測到 code 或有效的 hash tokens');
+        hasProcessedRef.current = true; // 確認沒有有效 token 後才標記為已處理
+        setErrorMsg('連結已過期或無效，請重新申請重設密碼。');
+        setValidToken(false);
         setIsProcessing(false);
         
       } catch (error: any) {
         console.error('[Reset Password] Process error:', error);
+        hasProcessedRef.current = true; // 發生錯誤時標記為已處理，避免無限重試
         setErrorMsg('處理重設連結時發生錯誤，請重新申請。');
         setValidToken(false);
         setIsProcessing(false);
@@ -82,9 +146,8 @@ function ResetPasswordContent() {
     };
 
     processResetCode();
-    // 注意：只依賴 searchParams，但使用 useRef 防止重複執行
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    // ✅ 依賴 searchParams，但使用 useRef guard 防止重複消耗
+  }, [searchParams]);
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
