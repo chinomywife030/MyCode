@@ -69,13 +69,11 @@ export default function LoginPage() {
           }
         }
         
-        // 🆕 儲存 email 到 localStorage（供 check-email 頁使用）
-        localStorage.setItem('bangbuy_signup_email', email);
-        
-        // ✅ 註冊成功後導向 check-email 頁面（帶上 email 參數）
+        // ✅ 註冊成功後直接導向首頁
         // 無論 session 是否為 null，只要沒 error 就視為註冊成功
-        router.replace(`/auth/check-email?email=${encodeURIComponent(email)}`);
-        return; // 不需要 refresh
+        router.replace('/');
+        router.refresh();
+        return;
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
@@ -83,15 +81,10 @@ export default function LoginPage() {
         });
         if (error) throw error;
         
-        // 🆕 登入後檢查 email 是否已驗證
-        if (data.user && !data.user.email_confirmed_at) {
-          router.push('/verify-email');
-        } else {
-          // 🔐 登入成功後導向 returnTo 或首頁
-          const targetUrl = validReturnTo || '/';
-          console.log('[Login] 登入成功，導向:', targetUrl);
-          router.push(targetUrl);
-        }
+        // 🔐 登入成功後導向 returnTo 或首頁（暫時不檢查 email 驗證）
+        const targetUrl = validReturnTo || '/';
+        console.log('[Login] 登入成功，導向:', targetUrl);
+        router.push(targetUrl);
         router.refresh();
       }
     } catch (error: any) {

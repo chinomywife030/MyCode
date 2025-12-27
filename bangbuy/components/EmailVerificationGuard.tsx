@@ -18,7 +18,7 @@ import { useAuth } from '@/lib/AuthProvider';
 const AUTH_WHITELIST = [
   '/login',
   '/verify-email',
-  '/auth/check-email',  // 🆕 註冊後驗證頁
+  // '/auth/check-email',  // 🆕 註冊後驗證頁（已刪除）
   '/forgot-password',
   '/reset-password',
   '/auth/callback',
@@ -89,14 +89,14 @@ export function EmailVerificationGuard({ children }: { children: React.ReactNode
       return;
     }
 
-    // 已登入但 email 未驗證 -> 導向驗證頁
-    if (user && !emailVerified) {
-      if (!hasRedirected.current) {
-        hasRedirected.current = true;
-        router.replace('/verify-email');
-      }
-      return;
-    }
+    // 已登入但 email 未驗證 -> 暫時不導向驗證頁（允許繼續使用）
+    // if (user && !emailVerified) {
+    //   if (!hasRedirected.current) {
+    //     hasRedirected.current = true;
+    //     router.replace('/verify-email');
+    //   }
+    //   return;
+    // }
 
     // 正常狀態，重置 redirect 標記
     hasRedirected.current = false;
@@ -136,17 +136,17 @@ export function EmailVerificationGuard({ children }: { children: React.ReactNode
     );
   }
 
-  // 已登入但未驗證：顯示 loading（等待 redirect）
-  if (!emailVerified) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4" />
-          <p className="text-gray-500 text-sm">請先驗證您的 Email...</p>
-        </div>
-      </div>
-    );
-  }
+  // 已登入但未驗證：暫時允許繼續使用（不阻擋）
+  // if (!emailVerified) {
+  //   return (
+  //     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+  //       <div className="text-center">
+  //         <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full mx-auto mb-4" />
+  //         <p className="text-gray-500 text-sm">請先驗證您的 Email...</p>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   // 正常渲染
   return <>{children}</>;

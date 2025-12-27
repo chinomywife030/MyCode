@@ -209,12 +209,12 @@ async function handleAuthFailure(): Promise<void> {
  * 🆕 處理 email 未驗證情境
  */
 function handleEmailNotVerified(): void {
-  log('Email not verified - redirecting');
+  log('Email not verified - 暫時不導向驗證頁（允許繼續使用）');
   
-  // 導向驗證頁
-  if (typeof window !== 'undefined') {
-    window.location.href = '/verify-email';
-  }
+  // 暫時不導向驗證頁（允許繼續使用）
+  // if (typeof window !== 'undefined') {
+  //   window.location.href = '/verify-email';
+  // }
 }
 
 // ============================================
