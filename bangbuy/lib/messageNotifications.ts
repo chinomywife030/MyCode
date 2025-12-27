@@ -147,26 +147,38 @@ export async function sendMessageEmailNotification(
   
   console.log('[msg-email] ========================================');
   console.log('[msg-email] ========== First Message Email Notification ==========');
+  console.log('[msg-email] Timestamp:', new Date().toISOString());
   console.log('[msg-email] conversationId:', conversationId);
   console.log('[msg-email] messageId:', messageId);
   console.log('[msg-email] senderId:', senderId);
   console.log('[msg-email] receiverId:', receiverId);
   console.log('[msg-email] messageType:', messageType);
-  console.log('[msg-email] env status', {
-    enabled: env.enabled,
-    nodeEnv: env.nodeEnv,
-    hasResendKey,
-    from: maskedFrom,
-    resendKey: maskedKey,
-  });
+  console.log('[msg-email] content snippet:', content?.substring(0, 50) + (content?.length > 50 ? '...' : ''));
+  console.log('[msg-email] env status:');
+  console.log('[msg-email]   ENABLE_MESSAGE_EMAIL_NOTIFICATIONS:', env.enabled);
+  console.log('[msg-email]   NODE_ENV:', env.nodeEnv);
+  console.log('[msg-email]   RESEND_API_KEY:', hasResendKey ? maskedKey : '❌ NOT SET');
+  console.log('[msg-email]   EMAIL_FROM:', from ? maskedFrom : '❌ NOT SET');
+  console.log('[msg-email]   EMAIL_SEND_IN_DEV:', env.sendInDev);
   
   // 1. 功能總開關檢查
   if (!env.enabled) {
     console.log('[msg-email] ❌ BLOCKED: ENABLE_MESSAGE_EMAIL_NOTIFICATIONS is not "true"');
-    console.log('[msg-email] 💡 Fix: Set ENABLE_MESSAGE_EMAIL_NOTIFICATIONS=true in environment variables');
+    console.log('[msg-email] 💡 Current value:', process.env.ENABLE_MESSAGE_EMAIL_NOTIFICATIONS);
+    console.log('[msg-email] 💡 Fix: Set ENABLE_MESSAGE_EMAIL_NOTIFICATIONS=true in Vercel environment variables');
     console.log('[msg-email] ========================================');
     return;
   }
+  
+  // 額外檢查：確認 RESEND_API_KEY 存在
+  if (!hasResendKey) {
+    console.log('[msg-email] ❌ BLOCKED: RESEND_API_KEY is not set');
+    console.log('[msg-email] 💡 Fix: Set RESEND_API_KEY in Vercel environment variables');
+    console.log('[msg-email] ========================================');
+    return;
+  }
+  
+  console.log('[msg-email] ✅ All environment checks passed');
   
   // 2. 只處理新對話第一則訊息
   if (messageType !== 'FIRST_MESSAGE') {
