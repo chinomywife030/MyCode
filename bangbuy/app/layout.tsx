@@ -14,10 +14,10 @@ export const metadata: Metadata = {
   
   // 基本資訊
   title: {
-    default: 'BangBuy 幫買 - 留學生跨境代購平台',
+    default: 'BangBuy｜留學生代購需求媒合',
     template: '%s | BangBuy 幫買',
   },
-  description: '全球留學生代購媒合平台，想買什麼都有人幫你帶！發布需求、媒合代購、安心交易。',
+  description: 'BangBuy 幫你把「想買」與「在國外的人」快速媒合。發布需求、私訊詢問、報價接單，流程清楚、安全透明。',
   applicationName: 'BangBuy',
   authors: [{ name: 'BangBuy Team' }],
   keywords: ['代購', '留學生', '跨境購物', 'BangBuy', '幫買', '海外代購', '日本代購', '韓國代購', '美國代購'],
@@ -41,8 +41,8 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     url: 'https://bangbuy.app',
-    title: 'BangBuy 幫買 - 留學生跨境代購平台',
-    description: '全球留學生代購媒合平台，想買什麼都有人幫你帶！發布需求、媒合代購、安心交易。',
+    title: 'BangBuy｜留學生代購需求媒合',
+    description: 'BangBuy 幫你把「想買」與「在國外的人」快速媒合。發布需求、私訊詢問、報價接單，流程清楚、安全透明。',
     siteName: 'BangBuy 幫買',
     locale: 'zh_TW',
     images: [
@@ -50,7 +50,7 @@ export const metadata: Metadata = {
         url: '/og.jpg',  // 使用相對路徑，metadataBase 會自動轉為絕對 URL
         width: 1200,
         height: 630,
-        alt: 'BangBuy 幫買 - 留學生跨境代購平台',
+        alt: 'BangBuy｜留學生代購需求媒合',
       },
     ],
   },
@@ -58,14 +58,14 @@ export const metadata: Metadata = {
   // 🐦 Twitter Card
   twitter: {
     card: 'summary_large_image',
-    title: 'BangBuy 幫買 - 留學生跨境代購平台',
-    description: '全球留學生代購媒合平台，想買什麼都有人幫你帶！',
+    title: 'BangBuy｜留學生代購需求媒合',
+    description: 'BangBuy 幫你把「想買」與「在國外的人」快速媒合。發布需求、私訊詢問、報價接單，流程清楚、安全透明。',
     images: ['/og.jpg'],
   },
   
   // 其他
   other: {
-    'contact': 'support@bangbuy.app',
+    'contact': 'bangbuy.contact@gmail.com',
   },
   
   // 🤖 Robots

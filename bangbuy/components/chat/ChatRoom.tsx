@@ -6,6 +6,8 @@ import { useRealtimeChat } from '@/hooks/useRealtimeChat';
 import { supabase } from '@/lib/supabase';
 import SafeAvatar from '@/components/SafeAvatar';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useToast } from '@/components/Toast';
 
 interface ChatRoomProps {
   conversationId: string;
@@ -56,11 +58,25 @@ export default function ChatRoom({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   
+  // 🏁 完成交易狀態
+  const [wishInfo, setWishInfo] = useState<{
+    id: string;
+    title: string;
+    status: string;
+    buyer_id: string;
+    budget: number;
+  } | null>(null);
+  const [isCompleting, setIsCompleting] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  
+  const router = useRouter();
+  const { showToast } = useToast();
 
   // 獲取當前用戶
   useEffect(() => {
@@ -70,6 +86,75 @@ export default function ChatRoom({
     }
     getUser();
   }, []);
+
+  // 🏁 載入 wish 資訊（如果 sourceType 是 wish_request）
+  useEffect(() => {
+    async function loadWishInfo() {
+      if (sourceType !== 'wish_request' || !sourceId || !currentUserId) return;
+      
+      try {
+        const { data: wish, error } = await supabase
+          .from('wish_requests')
+          .select('id, title, status, buyer_id, budget')
+          .eq('id', sourceId)
+          .single();
+        
+        if (!error && wish) {
+          setWishInfo(wish);
+        }
+      } catch (err) {
+        console.error('[ChatRoom] Load wish info error:', err);
+      }
+    }
+    
+    loadWishInfo();
+  }, [sourceType, sourceId, currentUserId]);
+
+  // 🏁 完成交易處理
+  const handleCompleteTransaction = async () => {
+    if (!wishInfo || !currentUserId || isCompleting) return;
+    
+    setIsCompleting(true);
+    setShowCompleteModal(false);
+    
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        alert('請先登入');
+        setIsCompleting(false);
+        return;
+      }
+
+      const response = await fetch(`/api/wishes/${wishInfo.id}/complete`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (!result.success) {
+        alert('完成交易失敗：' + (result.error || '未知錯誤'));
+        setIsCompleting(false);
+        return;
+      }
+
+      // 顯示成功 Toast
+      showToast('success', '交易已完成，已移入歷史訂單', 3000);
+      
+      // 導向歷史訂單頁
+      setTimeout(() => {
+        router.push('/dashboard/orders');
+      }, 1500);
+
+    } catch (error: any) {
+      console.error('[Complete Transaction] Error:', error);
+      alert('發生錯誤：' + error.message);
+      setIsCompleting(false);
+    }
+  };
 
   // ✅ 清理 typingTimeout（組件卸載時）
   useEffect(() => {
@@ -304,6 +389,54 @@ export default function ChatRoom({
         </div>
       </div>
 
+      {/* 🏁 完成交易 Sticky 行為列（只在 wish_request 且進行中時顯示） */}
+      {wishInfo && 
+       sourceType === 'wish_request' && 
+       wishInfo.status === 'in_progress' && 
+       wishInfo.buyer_id === currentUserId && (
+        <div className="sticky top-0 z-10 px-4 py-3 bg-gradient-to-r from-orange-50 to-orange-100 border-b border-orange-200 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-bold rounded-full">
+                  進行中
+                </span>
+                <span className="text-sm font-semibold text-gray-700">
+                  {wishInfo.title}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-gray-600">
+                <span>金額：NT$ {Number(wishInfo.budget).toLocaleString()}</span>
+                <span>•</span>
+                <span>對方：{otherUser.name || '未知'}</span>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowCompleteModal(true)}
+              disabled={isCompleting}
+              className="ml-4 px-4 py-2 bg-green-600 text-white rounded-lg font-bold hover:bg-green-700 transition shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed text-sm flex items-center gap-2"
+            >
+              {isCompleting ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  <span>完成中...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>完成交易</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 來源上下文 */}
       {sourceTitle && (
         <div className="px-4 py-2 bg-blue-50 border-b text-sm">
@@ -449,6 +582,33 @@ export default function ChatRoom({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
               </svg>
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 🏁 完成交易確認 Modal */}
+      {showCompleteModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold mb-4">確認完成交易</h3>
+            <p className="text-gray-600 mb-6">
+              確定要完成這筆交易嗎？完成後將無法再修改，訂單會移入歷史訂單。
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCompleteModal(false)}
+                className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleCompleteTransaction}
+                disabled={isCompleting}
+                className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {isCompleting ? '處理中...' : '確認完成'}
+              </button>
+            </div>
           </div>
         </div>
       )}

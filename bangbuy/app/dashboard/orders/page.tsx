@@ -9,6 +9,7 @@ import { isFeatureEnabled } from '@/lib/featureFlags';
 
 export default function MyOrdersPage() {
   const [myOrders, setMyOrders] = useState<any[]>([]);
+  const [activeOrders, setActiveOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [reviewModal, setReviewModal] = useState<{ open: boolean; orderId: string; targetId: string; targetName: string } | null>(null);
@@ -23,16 +24,64 @@ export default function MyOrdersPage() {
       }
       setUser(user);
 
-      const { data: orders } = await supabase
+      // 🔧 修復 400 錯誤：使用正確的 FK 關係名稱
+      const { data: orders, error: ordersError } = await supabase
         .from('orders')
         .select(`
           *,
-          wish_requests (title, images),
-          profiles!orders_shopper_id_fkey (name), 
-          buyer_profile:profiles!orders_buyer_id_fkey (name)
+          wish_requests!orders_wish_id_fkey (id, title, images),
+          shopper:profiles!orders_shopper_id_fkey (id, name), 
+          buyer:profiles!orders_buyer_id_fkey (id, name)
         `)
         .or(`buyer_id.eq.${user.id},shopper_id.eq.${user.id}`)
+        .eq('status', 'completed')
         .order('created_at', { ascending: false });
+
+      if (ordersError) {
+        console.error('[MyOrdersPage] Query error:', ordersError);
+        // 如果 FK 關係名稱錯誤，嘗試簡化查詢
+        const { data: ordersFallback, error: fallbackError } = await supabase
+          .from('orders')
+          .select('*')
+          .or(`buyer_id.eq.${user.id},shopper_id.eq.${user.id}`)
+          .eq('status', 'completed')
+          .order('created_at', { ascending: false });
+        
+        if (fallbackError) {
+          console.error('[MyOrdersPage] Fallback query error:', fallbackError);
+          setLoading(false);
+          return;
+        }
+        
+        // 手動載入關聯資料
+        if (ordersFallback && ordersFallback.length > 0) {
+          const enrichedOrders = await Promise.all(
+            ordersFallback.map(async (order) => {
+              const [wishData, shopperData, buyerData] = await Promise.all([
+                supabase.from('wish_requests').select('id, title, images').eq('id', order.wish_id).single(),
+                supabase.from('profiles').select('id, name').eq('id', order.shopper_id).single(),
+                supabase.from('profiles').select('id, name').eq('id', order.buyer_id).single(),
+              ]);
+              
+              return {
+                ...order,
+                wish_requests: wishData.data,
+                shopper: shopperData.data,
+                buyer: buyerData.data,
+              };
+            })
+          );
+          
+          const visibleOrders = enrichedOrders.filter((o) => {
+            if (o.buyer_id === user.id) return !o.archived_by_buyer;
+            if (o.shopper_id === user.id) return !o.archived_by_shopper;
+            return true;
+          });
+          setMyOrders(visibleOrders);
+          setLoading(false);
+          return;
+        }
+      }
 
       if (orders) {
         const visibleOrders = orders.filter((o) => {
@@ -41,6 +90,24 @@ export default function MyOrdersPage() {
           return true;
         });
         setMyOrders(visibleOrders);
+      }
+      
+      // 🆕 載入進行中的訂單（可選摘要，最多 5 筆）
+      const { data: activeOrders } = await supabase
+        .from('orders')
+        .select(`
+          *,
+          wish_requests!orders_wish_id_fkey (id, title, images),
+          shopper:profiles!orders_shopper_id_fkey (id, name), 
+          buyer:profiles!orders_buyer_id_fkey (id, name)
+        `)
+        .or(`buyer_id.eq.${user.id},shopper_id.eq.${user.id}`)
+        .in('status', ['pending', 'accepted', 'purchased', 'shipped'])
+        .order('created_at', { ascending: false })
+        .limit(5);
+      
+      if (activeOrders) {
+        setActiveOrders(activeOrders);
       }
       setLoading(false);
     }
@@ -107,7 +174,47 @@ export default function MyOrdersPage() {
   }
 
   return (
-    <DashboardLayout title="📦 我的訂單" activeTab="orders">
+    <DashboardLayout title="📦 歷史訂單" activeTab="orders">
+      {/* 🆕 進行中訂單摘要（可選） */}
+      {activeOrders && activeOrders.length > 0 && (
+        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-xl">
+          <h3 className="text-sm font-bold text-blue-900 mb-3">進行中（{activeOrders.length}）</h3>
+          <div className="space-y-2">
+            {activeOrders.map((order) => (
+              <div key={order.id} className="flex items-center justify-between p-2 bg-white rounded-lg">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-10 h-10 bg-gray-100 rounded-lg overflow-hidden shrink-0">
+                    {order.wish_requests?.images?.[0] ? (
+                      <img src={order.wish_requests.images[0]} className="w-full h-full object-cover" alt="" />
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-gray-400 text-xs">📦</div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {order.wish_requests?.title || '已刪除的需求'}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {order.status === 'pending' ? '待確認' : 
+                       order.status === 'accepted' ? '進行中' : 
+                       order.status === 'purchased' ? '已購買' : 
+                       order.status === 'shipped' ? '已寄出' : order.status}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href={order.wish_requests?.id ? `/wish/${order.wish_requests.id}` : '/chat'}
+                  className="ml-3 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shrink-0"
+                >
+                  查看詳情
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 歷史訂單列表 */}
       <div className="space-y-4">
         {myOrders.map((order) => {
           const isBuyer = user?.id === order.buyer_id;
@@ -127,7 +234,7 @@ export default function MyOrdersPage() {
                 <div>
                   <h4 className="font-bold text-lg text-gray-800">{order.wish_requests?.title || '已刪除的需求'}</h4>
                   <p className="text-sm text-gray-500">
-                    {isBuyer ? `代購者: ${order.profiles?.name || '未知'}` : `買家: ${order.buyer_profile?.name || '未知'}`}
+                    {isBuyer ? `代購者: ${order.shopper?.name || order.buyer?.name || '未知'}` : `買家: ${order.buyer?.name || order.shopper?.name || '未知'}`}
                   </p>
                   <p className="text-sm font-bold text-blue-600 mt-1">${order.price || 0}</p>
                 </div>
@@ -175,7 +282,7 @@ export default function MyOrdersPage() {
 
                 {order.status === 'completed' && isFeatureEnabled('ratings') && (() => {
                   const targetId = isBuyer ? order.shopper_id : order.buyer_id;
-                  const targetName = isBuyer ? (order.profiles?.name || '代購') : (order.buyer_profile?.name || '買家');
+                  const targetName = isBuyer ? (order.shopper?.name || order.buyer?.name || '代購') : (order.buyer?.name || order.shopper?.name || '買家');
                   const hasReviewed = order.id?.endsWith('1') || false;
                   
                   return hasReviewed ? (

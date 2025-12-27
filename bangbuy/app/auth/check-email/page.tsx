@@ -382,8 +382,8 @@ export default function CheckEmailPage() {
       <div className="mt-6 text-center text-sm text-gray-500 max-w-md">
         <p>
           如需協助，請聯繫{' '}
-          <a href="mailto:support@bangbuy.app" className="text-blue-600 hover:underline">
-            support@bangbuy.app
+          <a href="mailto:bangbuy.contact@gmail.com" className="text-blue-600 hover:underline">
+            bangbuy.contact@gmail.com
           </a>
         </p>
       </div>

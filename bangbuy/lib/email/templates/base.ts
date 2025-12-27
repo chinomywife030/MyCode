@@ -107,7 +107,7 @@ export function generateEmailHtml(params: BaseTemplateParams): string {
                       <a href="${APP_URL}/terms" style="color: #6b7280; text-decoration: none;">服務條款</a>
                     </p>
                     <p style="margin: 0; font-size: 13px; color: #9ca3af;">
-                      聯絡我們：<a href="mailto:support@bangbuy.app" style="color: #9ca3af;">support@bangbuy.app</a>
+                      聯絡我們：<a href="mailto:bangbuy.contact@gmail.com" style="color: #9ca3af;">bangbuy.contact@gmail.com</a>
                     </p>
                   </td>
                 </tr>
@@ -145,7 +145,7 @@ export function generateEmailText(params: {
   text += '若非本人操作，請忽略此信。\n\n';
   text += `隱私權政策：${APP_URL}/privacy\n`;
   text += `服務條款：${APP_URL}/terms\n`;
-  text += '聯絡我們：support@bangbuy.app\n';
+  text += '聯絡我們：bangbuy.contact@gmail.com\n';
   
   return text;
 }

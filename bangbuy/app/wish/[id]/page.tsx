@@ -176,9 +176,9 @@ export default function WishDetailPage() {
       setShowCompleteToast(true);
       setTimeout(() => {
         setShowCompleteToast(false);
-        // 導向 dashboard
-        router.push('/dashboard/wishes');
-      }, 2000);
+        // 導向歷史訂單頁
+        router.push('/dashboard/orders');
+      }, 1500);
 
     } catch (error: any) {
       console.error('[Complete Transaction] Error:', error);

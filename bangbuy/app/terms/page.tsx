@@ -143,7 +143,7 @@ export default function TermsPage() {
             <h2 className="text-2xl font-bold text-gray-900 mt-8 mb-4">12. 聯絡方式</h2>
             <p>如對本條款有任何疑問，請透過以下方式與我們聯繫：</p>
             <ul className="list-disc pl-6 mt-2 space-y-1">
-              <li>電子郵件：<a href="mailto:support@bangbuy.app" className="text-blue-600 hover:underline">support@bangbuy.app</a></li>
+              <li>電子郵件：<a href="mailto:bangbuy.contact@gmail.com" className="text-blue-600 hover:underline">bangbuy.contact@gmail.com</a></li>
               <li>透過平台內建的聯絡功能</li>
             </ul>
           </section>

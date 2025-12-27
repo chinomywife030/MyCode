@@ -6,6 +6,7 @@
  */
 
 import Link from 'next/link';
+import { CONTACT_EMAIL } from '@/lib/constants';
 
 interface TrustFooterProps {
   className?: string;
@@ -25,10 +26,10 @@ export default function TrustFooter({ className = '' }: TrustFooterProps) {
         </Link>
         <span className="text-gray-300">|</span>
         <a 
-          href="mailto:support@bangbuy.app" 
+          href={`mailto:${CONTACT_EMAIL}`} 
           className="hover:text-blue-600 hover:underline transition"
         >
-          support@bangbuy.app
+          {CONTACT_EMAIL}
         </a>
       </div>
       

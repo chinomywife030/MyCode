@@ -297,8 +297,8 @@ export default function VerifyEmailPage() {
         <p>沒收到驗證信？請檢查垃圾郵件資料夾，或確認 Email 地址是否正確。</p>
         <p className="mt-2">
           如需協助，請聯繫{' '}
-          <a href="mailto:support@bangbuy.app" className="text-blue-600 hover:underline">
-            support@bangbuy.app
+          <a href="mailto:bangbuy.contact@gmail.com" className="text-blue-600 hover:underline">
+            bangbuy.contact@gmail.com
           </a>
         </p>
       </div>

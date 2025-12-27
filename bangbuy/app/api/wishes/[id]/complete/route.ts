@@ -126,14 +126,33 @@ export async function POST(
       );
     }
 
-    // 6. 將其他 pending offers 設為 expired
+    // 6. 同步更新對應的 order 狀態為 completed（如果存在）
+    const { data: orders } = await supabase
+      .from('orders')
+      .select('id')
+      .eq('wish_id', wishId)
+      .in('status', ['pending', 'accepted', 'purchased', 'shipped']);
+
+    if (orders && orders.length > 0) {
+      const orderIds = orders.map(o => o.id);
+      await supabase
+        .from('orders')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .in('id', orderIds);
+    }
+
+    // 7. 將其他 pending offers 設為 expired
     await supabase
       .from('offers')
       .update({ status: 'expired', updated_at: new Date().toISOString() })
       .eq('wish_id', wishId)
       .eq('status', 'pending');
 
-    // 7. 發送通知給代購者（如果有）
+    // 8. 發送通知給代購者（如果有）
     if (shopperId) {
       // 獲取買家名稱
       const { data: buyerProfile } = await supabase

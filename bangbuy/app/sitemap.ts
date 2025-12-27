@@ -11,13 +11,15 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const lastModified = new Date();
 
   return [
-    // 主要頁面
+    // 🏠 首頁（最重要，priority 最高）
     {
       url: baseUrl,
       lastModified,
       changeFrequency: 'daily',
-      priority: 1,
+      priority: 1.0,
     },
+
+    // 📄 公開功能頁面
     {
       url: `${baseUrl}/trips`,
       lastModified,
@@ -37,7 +39,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.8,
     },
 
-    // 法務頁面（重要：必須被索引）
+    // 📜 法務頁面（重要：必須被索引）
     {
       url: `${baseUrl}/privacy`,
       lastModified,
@@ -69,7 +71,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.5,
     },
     
-    // 🔐 注意：不包含 /login, /auth/*, /dashboard, /chat 等私密頁面
+    // 🔐 注意：不包含以下私有頁面
+    // - /dashboard, /settings, /messages, /notifications
+    // - /login, /auth/*, /reset-password, /forgot-password
+    // - /chat, /create, /trips/create, /profile/*
   ];
 }
 

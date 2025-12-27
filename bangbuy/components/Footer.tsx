@@ -9,6 +9,7 @@
 
 import Link from 'next/link';
 import FeatureLink from '@/components/FeatureLink';
+import { CONTACT_EMAIL } from '@/lib/constants';
 
 export default function Footer() {
   return (
@@ -113,10 +114,10 @@ export default function Footer() {
               </li>
               <li>
                 <a 
-                  href="mailto:support@bangbuy.app" 
+                  href={`mailto:${CONTACT_EMAIL}`} 
                   className="text-sm text-gray-600 hover:text-blue-600 transition"
                 >
-                  📧 support@bangbuy.app
+                  📧 {CONTACT_EMAIL}
                 </a>
               </li>
               <li className="text-sm text-gray-600">

@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import TrustFooter from '@/components/TrustFooter';
+import { CONTACT_EMAIL } from '@/lib/constants';
 
 export const metadata: Metadata = {
   title: '聯絡我們 - BangBuy',
@@ -21,8 +22,8 @@ export default function ContactPage() {
             <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
               <p className="font-semibold text-blue-800 mb-2">📧 電子郵件</p>
               <p className="text-blue-700">
-                <a href="mailto:support@bangbuy.app" className="text-blue-600 hover:underline font-medium">
-                  support@bangbuy.app
+                <a href={`mailto:${CONTACT_EMAIL}`} className="text-blue-600 hover:underline font-medium">
+                  {CONTACT_EMAIL}
                 </a>
               </p>
             </div>
