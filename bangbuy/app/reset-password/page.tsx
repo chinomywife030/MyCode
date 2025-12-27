@@ -21,7 +21,7 @@ function ResetPasswordContent() {
   const hasProcessedRef = useRef(false);
 
   useEffect(() => {
-    // 檢查 session（從 /auth/callback 進入時，session 已經建立）
+    // 檢查 session（從 /auth/callback 進入時，session 應該已經建立）
     const checkSession = async () => {
       // 如果已經處理過，不再重複執行（React strict mode guard）
       if (hasProcessedRef.current) {
@@ -29,6 +29,9 @@ function ResetPasswordContent() {
       }
 
       try {
+        // 先等待一下，確保從 /auth/callback 跳轉過來的 session 已建立
+        await new Promise(resolve => setTimeout(resolve, 200));
+
         // 檢查是否已有 session（從 /auth/callback 進入時應該已經有）
         const { data: { session }, error } = await supabase.auth.getSession();
         
@@ -43,6 +46,7 @@ function ResetPasswordContent() {
         
         if (session) {
           // 有 session，可以設定新密碼
+          console.log('[Reset Password] Session 有效，可以設定新密碼');
           hasProcessedRef.current = true;
           setValidToken(true);
           setIsProcessing(false);

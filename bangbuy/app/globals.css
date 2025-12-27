@@ -171,3 +171,66 @@ a,
   user-select: none;
   -webkit-touch-callout: none;
 }
+
+/* ============================================
+ * 📱 手機版 Input/Textarea 文字顏色修復
+ * ============================================ */
+
+@layer base {
+  /* 所有 input 和 textarea 的輸入文字顏色 */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="tel"],
+  input[type="url"],
+  input[type="search"],
+  textarea {
+    color: #111827; /* text-gray-900 */
+    background-color: #ffffff; /* bg-white */
+    -webkit-text-fill-color: #111827; /* iOS Safari 需要 */
+  }
+
+  /* Placeholder 保持較淡顏色 */
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af; /* text-gray-400 */
+    opacity: 1; /* 確保在 iOS 上顯示 */
+    -webkit-text-fill-color: #9ca3af; /* iOS Safari 需要 */
+  }
+
+  /* 確保在 iOS Safari 上文字顏色正確顯示 */
+  input:-webkit-autofill,
+  textarea:-webkit-autofill {
+    -webkit-text-fill-color: #111827 !important;
+    -webkit-box-shadow: 0 0 0px 1000px #ffffff inset !important;
+  }
+
+  /* 深色模式下的調整（如果有的話） */
+  @media (prefers-color-scheme: dark) {
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="url"],
+    input[type="search"],
+    textarea {
+      color: #f9fafb; /* text-gray-50 */
+      background-color: #1f2937; /* bg-gray-800 */
+      -webkit-text-fill-color: #f9fafb;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: #6b7280; /* text-gray-500 */
+      -webkit-text-fill-color: #6b7280;
+    }
+
+    input:-webkit-autofill,
+    textarea:-webkit-autofill {
+      -webkit-text-fill-color: #f9fafb !important;
+      -webkit-box-shadow: 0 0 0px 1000px #1f2937 inset !important;
+    }
+  }
+}

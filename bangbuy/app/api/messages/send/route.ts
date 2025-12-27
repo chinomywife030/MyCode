@@ -124,6 +124,13 @@ export async function POST(request: NextRequest) {
       ? conversation.user2_id 
       : conversation.user1_id;
     
+    // 🆕 檢查 conversation 的 first_message_notified_at（用於 debug）
+    const { data: convWithFlag } = await supabaseAdmin
+      .from('conversations')
+      .select('first_message_notified_at')
+      .eq('id', conversationId)
+      .single();
+    
     // 計算接收者已收到的訊息數量（排除接收者自己發的）
     const { count: messageCount } = await supabaseAdmin
       .from('messages')
@@ -134,9 +141,16 @@ export async function POST(request: NextRequest) {
     const isFirstMessage = (messageCount ?? 0) === 0;
     const messageType = isFirstMessage ? 'FIRST_MESSAGE' : 'REPLY_MESSAGE';
     
-    console.log('[api-send] messageCount:', messageCount);
+    // 🆕 詳細的 debug logs（production-safe）
+    console.log('[api-send] ========== First Message Detection ==========');
+    console.log('[api-send] conversationId:', conversationId);
+    console.log('[api-send] senderId:', user.id);
+    console.log('[api-send] receiverId:', receiverId);
+    console.log('[api-send] messageCount (excluding receiver own):', messageCount);
     console.log('[api-send] isFirstMessage:', isFirstMessage);
     console.log('[api-send] messageType:', messageType);
+    console.log('[api-send] first_message_notified_at:', convWithFlag?.first_message_notified_at || 'NULL');
+    console.log('[api-send] =============================================');
     
     // 5. 插入訊息（使用 admin client）
     const { data: messageData, error: insertError } = await supabaseAdmin
@@ -159,12 +173,19 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('[api-send] ✅ Message inserted:', messageData.id);
+    console.log('[api-send] messageId:', messageData.id);
+    console.log('[api-send] messageCreatedAt:', messageData.created_at);
     
     // 6. 更新 conversation 的 last_message_at
     await supabaseAdmin
       .from('conversations')
       .update({ last_message_at: new Date().toISOString() })
       .eq('id', conversationId);
+    
+    // 🆕 驗證 trigger 是否會創建通知（debug）
+    // 注意：trigger 會在資料庫層自動執行，這裡只是 log
+    console.log('[api-send] ⚠️  Trigger should create notification now');
+    console.log('[api-send] ⚠️  Notification type should be:', isFirstMessage ? 'message.first' : 'message.new');
     
     // 7. 發送 Email 通知（非阻塞）
     sendMessageEmailNotification({
