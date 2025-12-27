@@ -1,45 +1,26 @@
 'use client'
 
 import { useEffect } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function AuthCallbackPage() {
   const router = useRouter()
-  const searchParams = useSearchParams()
 
   useEffect(() => {
     const run = async () => {
-      // 檢查是否有 code 需要處理
-      const code = searchParams?.get('code')
-      
-      if (code) {
-        // 使用 exchangeCodeForSession 交換 session
-        const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-        
-        if (error || !data.session) {
-          console.error('[Auth Callback] Exchange code error:', error)
-          router.replace('/forgot-password')
-          return
-        }
-      }
-      
-      // 等待一下讓 Supabase 處理完 session
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
-      // 檢查 session
-      const { data } = await supabase.auth.getSession()
+      // ⛔ 不要在這裡判斷 session 成功與否
+      // Supabase recovery 會在 reset-password 再完成流程
 
-      if (!data.session) {
-        router.replace('/forgot-password')
-        return
-      }
+      // 確保 supabase 有機會處理 hash
+      await supabase.auth.getSession()
 
+      // 一律導向 reset-password
       router.replace('/reset-password')
     }
 
     run()
-  }, [router, searchParams])
+  }, [router])
 
   return <p>驗證中…</p>
 }
