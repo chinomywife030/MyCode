@@ -33,7 +33,7 @@ export default function ProfilePageClient() {
 
   useEffect(() => {
     let isMounted = true;
-    let timeoutId: NodeJS.Timeout | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let isCompleted = false;
 
     // 清除超時的輔助函數
