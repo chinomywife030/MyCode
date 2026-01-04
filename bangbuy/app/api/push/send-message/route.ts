@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
     // 5. 準備推播內容
     const title = 'BangBuy';
     const pushBody = `${senderName}: ${message.content.substring(0, 40)}${message.content.length > 40 ? '...' : ''}`;
-    const data = { conversationId };
+    const data = { type: 'chat', conversationId };
 
     console.log(`[POST /api/push/send-message] Sending to ${pushTokens.length} tokens for recipient: ${recipientId}`);
 

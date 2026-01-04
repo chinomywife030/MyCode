@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     setToken(token);
 
     // 印出收到的 token
-    console.log('[POST /api/push/register] Received token:', token);
+    console.log('[push/register] token received:', token);
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {

@@ -15,10 +15,13 @@ type PushData = {
   // 去重用：notificationId（優先）或使用 identifier
   notificationId?: string;
   
-  // 兼容舊格式
-  type?: string;
-  chatId?: string;
+  // 新格式：type + conversationId/wishId
+  type?: 'chat' | 'wish';
+  conversationId?: string;
   wishId?: string;
+  
+  // 兼容舊格式
+  chatId?: string;
 };
 
 /**
@@ -94,6 +97,21 @@ function parseUrlFromData(data: PushData): string | null {
     }
     
     return screenPath;
+  }
+  
+  // 新格式：type + conversationId/wishId
+  if (data.type === 'chat' && data.conversationId && typeof data.conversationId === 'string') {
+    const conversationId = data.conversationId.trim();
+    if (conversationId) {
+      return `/chat/${conversationId}`;
+    }
+  }
+  
+  if (data.type === 'wish' && data.wishId && typeof data.wishId === 'string') {
+    const wishId = data.wishId.trim();
+    if (wishId) {
+      return `/wish/${wishId}`;
+    }
   }
   
   // 兼容舊格式：chatId
