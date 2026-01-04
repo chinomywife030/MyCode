@@ -90,7 +90,7 @@ async function removeInvalidTokens(
     const { error } = await supabase
       .from('push_tokens')
       .delete()
-      .in('expo_push_token', invalidTokens);
+      .in('token', invalidTokens);
 
     if (error) {
       console.error('[removeInvalidTokens] Error:', error);
@@ -127,7 +127,7 @@ export async function POST(request: NextRequest) {
     // 查詢該用戶的所有 push tokens
     const { data: tokens, error: tokensError } = await supabase
       .from('push_tokens')
-      .select('expo_push_token')
+      .select('token')
       .eq('user_id', user_id);
 
     if (tokensError) {
@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 提取所有 token
-    const pushTokens = tokens.map((t) => t.expo_push_token).filter(Boolean);
+    const pushTokens = tokens.map((t) => t.token).filter(Boolean);
 
     if (pushTokens.length === 0) {
       console.log(`[POST /api/push/send] No valid push tokens for user: ${user_id}`);

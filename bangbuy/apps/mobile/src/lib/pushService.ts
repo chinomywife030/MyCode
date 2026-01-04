@@ -99,7 +99,7 @@ export async function registerPushTokenToSupabase(): Promise<{
     const { data: existingToken } = await supabase
       .from('push_tokens')
       .select('id')
-      .eq('expo_push_token', token)
+      .eq('token', token)
       .single();
 
     // 4. 如果不存在，則插入
@@ -108,7 +108,7 @@ export async function registerPushTokenToSupabase(): Promise<{
         .from('push_tokens')
         .insert({
           user_id: user.id,
-          expo_push_token: token,
+          token: token,
           platform: platform,
         });
 

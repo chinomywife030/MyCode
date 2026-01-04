@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendMessageEmailNotification } from '@/lib/messageNotifications';
+import { enqueueNotification } from '@/lib/notificationQueue';
 
 export const runtime = 'nodejs';
 
@@ -199,6 +200,40 @@ export async function POST(request: NextRequest) {
     }).catch(err => {
       // Email 失敗不影響訊息發送
       console.error('[api-send] Email notification failed (non-blocking):', err);
+    });
+    
+    // 8. 發送 Push 通知（使用去重與節流機制，非阻塞）
+    // 查詢發送者名稱（用於 push body）
+    const { data: senderProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('name, display_name')
+      .eq('id', user.id)
+      .single();
+    
+    const senderName = senderProfile?.display_name || senderProfile?.name || '有人';
+    const messagePreview = content.trim().substring(0, 60);
+    const pushBody = `${senderName}: ${messagePreview}${content.trim().length > 60 ? '...' : ''}`;
+    
+    // 構建去重與節流的 key
+    const dedupeKey = `chat:${conversationId}:${messageData.id}:${receiverId}`;
+    const throttleKey = `chat:${conversationId}:${receiverId}`;
+    
+    enqueueNotification({
+      userId: receiverId,
+      type: 'chat',
+      entityId: conversationId,
+      title: 'BangBuy',
+      body: pushBody,
+      data: {
+        type: 'chat',
+        conversationId,
+      },
+      dedupeKey,
+      throttleKey,
+      throttleWindowSec: 30,
+    }).catch(err => {
+      // Push 失敗不影響訊息發送
+      console.error('[api-send] Push notification failed (non-blocking):', err);
     });
     
     console.log('[api-send] ✅ Message sent successfully');
