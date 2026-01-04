@@ -1,9 +1,11 @@
-import { StyleSheet, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
+import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, View, Text, TouchableOpacity, Alert } from 'react-native';
 import { useState } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { Ionicons } from '@expo/vector-icons';
+import { Screen, Card, Button, Input } from '@/src/ui';
+import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/tokens';
 import { createWishReply } from '@/src/lib/replies';
+import { requireAuth } from '@/src/lib/auth';
 
 export default function ReplyScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -21,16 +23,21 @@ export default function ReplyScreen() {
       return;
     }
 
+    // 檢查登入狀態
+    const replyRoute = `/wish/${id}/reply`;
+    const isAuthenticated = await requireAuth(replyRoute);
+    if (!isAuthenticated) {
+      return;
+    }
+
     setSubmitting(true);
     try {
       const result = await createWishReply(id as string, message);
-      
+
       if (result.success) {
-        // 成功後返回詳情頁
         router.back();
-        // 使用 setTimeout 確保返回後再顯示提示（因為 router.back() 是異步的）
         setTimeout(() => {
-          Alert.alert('成功', '已送出');
+          Alert.alert('成功', '已送出回覆');
         }, 300);
       } else {
         Alert.alert('錯誤', result.error || '送出失敗');
@@ -43,127 +50,142 @@ export default function ReplyScreen() {
     }
   };
 
-  return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
-    >
-      <ThemedView style={styles.content}>
-        <ThemedView style={styles.header}>
-          <ThemedText type="title" style={styles.title}>
-            我要回覆/報價
-          </ThemedText>
-        </ThemedView>
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/');
+    }
+  };
 
+  return (
+    <Screen>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>回覆/報價</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      >
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          <ThemedView style={styles.formSection}>
-            <ThemedText type="defaultSemiBold" style={styles.label}>
-              訊息內容
-            </ThemedText>
-            <TextInput
-              style={styles.textInput}
-              placeholder="請輸入您的回覆或報價訊息..."
-              placeholderTextColor="#999"
-              multiline
-              numberOfLines={8}
+          {/* 提示卡片 */}
+          <Card style={styles.tipCard}>
+            <View style={styles.tipHeader}>
+              <Ionicons name="information-circle-outline" size={20} color={colors.brandBlue} />
+              <Text style={styles.tipTitle}>回覆小提示</Text>
+            </View>
+            <Text style={styles.tipText}>
+              • 說明你可以提供的服務或商品{'\n'}
+              • 提供你的報價與運費說明{'\n'}
+              • 標明你的行程日期或預計到貨時間
+            </Text>
+          </Card>
+
+          {/* 表單 */}
+          <Card style={styles.formCard}>
+            <Input
+              label="訊息內容"
+              placeholder="請輸入您的回覆或報價訊息...&#10;&#10;例如：&#10;我可以幫你代購這個商品！&#10;商品價格：NT$500&#10;代購費：NT$100&#10;運費：NT$60&#10;預計 3/15 可寄出"
               value={message}
               onChangeText={setMessage}
               editable={!submitting}
+              multiline
+              numberOfLines={10}
+              style={styles.messageInput}
             />
-          </ThemedView>
 
-          <TouchableOpacity
-            style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
-            onPress={handleSubmit}
-            disabled={submitting}
-          >
-            <ThemedText style={styles.submitButtonText}>
-              {submitting ? '送出中...' : '送出'}
-            </ThemedText>
-          </TouchableOpacity>
+            <Button
+              title={submitting ? '送出中...' : '送出回覆'}
+              onPress={handleSubmit}
+              loading={submitting}
+              disabled={submitting}
+              fullWidth
+              size="lg"
+            />
 
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={() => router.back()}
-            disabled={submitting}
-          >
-            <ThemedText style={styles.cancelButtonText}>取消</ThemedText>
-          </TouchableOpacity>
+            <Button
+              title="取消"
+              onPress={handleBack}
+              variant="outline"
+              fullWidth
+              size="lg"
+              disabled={submitting}
+              style={styles.cancelButton}
+            />
+          </Card>
         </ScrollView>
-      </ThemedView>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  content: {
-    flex: 1,
-    paddingTop: 60,
-  },
   header: {
-    padding: 20,
-    paddingBottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.bgCard,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    borderBottomColor: colors.border,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
+  backButton: {
+    padding: spacing.sm,
+    marginLeft: -spacing.sm,
+  },
+  headerTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    padding: spacing.lg,
+    paddingBottom: spacing['3xl'],
   },
-  formSection: {
-    marginBottom: 24,
+  tipCard: {
+    marginBottom: spacing.md,
+    backgroundColor: '#eff6ff', // Light blue background
   },
-  label: {
-    fontSize: 16,
-    marginBottom: 12,
-    opacity: 0.8,
-  },
-  textInput: {
-    minHeight: 150,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    textAlignVertical: 'top',
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-  },
-  submitButton: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 16,
-    borderRadius: 8,
+  tipHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.sm,
   },
-  submitButtonDisabled: {
-    backgroundColor: '#9ca3af',
-    opacity: 0.6,
+  tipTitle: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+    color: colors.brandBlue,
+    marginLeft: spacing.sm,
   },
-  submitButtonText: {
-    color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+  tipText: {
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
+    lineHeight: fontSize.sm * 1.6,
+  },
+  formCard: {
+    marginBottom: spacing.lg,
+  },
+  messageInput: {
+    height: 200,
   },
   cancelButton: {
-    paddingVertical: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.2)',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    opacity: 0.7,
+    marginTop: spacing.md,
   },
 });
-

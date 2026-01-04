@@ -90,7 +90,7 @@ export default function SearchBar({
         className={`
           w-full h-10 pl-10 pr-10
           bg-gray-100 border border-transparent
-          rounded-xl
+          rounded-lg
           text-sm text-gray-900 placeholder-gray-500
           outline-none
           transition-all duration-200
@@ -132,6 +132,10 @@ export default function SearchBar({
     </div>
   );
 }
+
+
+
+
 
 
 

@@ -1,95 +1,79 @@
-import { supabase } from './supabase';
+/**
+ * Wish 模組 - 使用 @bangbuy/core
+ * 
+ * 這個檔案現在是 @bangbuy/core/wish 的 re-export
+ * 保留這個檔案是為了向後兼容，讓現有的 import 不用改變
+ */
 
-export type Wish = {
-  id: string;
-  title: string;
-  description?: string;
-  productUrl?: string;
-  budget?: number;
-  price?: number;
-  commission?: number;
-  targetCountry?: string;
-  category?: string;
-  deadline?: string;
-  status?: string;
-  createdAt?: string;
-};
+import { ensureCoreInitialized } from './core';
+import {
+  getWishes as coreGetWishes,
+  getWishById as coreGetWishById,
+  createWish as coreCreateWish,
+  updateWishStatus as coreUpdateWishStatus,
+  type Wish,
+  type CreateWishParams,
+  type CreateWishResult,
+  type WishStatus,
+} from '@bangbuy/core';
+
+// 確保 core 已初始化
+ensureCoreInitialized();
+
+// Re-export types
+export type { Wish, CreateWishParams, CreateWishResult, WishStatus };
 
 /**
- * 從 Supabase 獲取所有 wishes（列表頁用，只取必要欄位）
+ * 從 Supabase 獲取所有 wishes（列表頁用）
  */
-export async function getWishes(): Promise<Wish[]> {
-  try {
-    const { data, error } = await supabase
-      .from('wish_requests')
-      .select('id, title, created_at')
-      .eq('status', 'open')
-      .order('created_at', { ascending: false })
-      .limit(50);
-
-    if (error) {
-      console.error('[getWishes] Error:', error);
-      throw new Error(`載入失敗：${error.message || '無法連接到伺服器'}`);
-    }
-
-    return (data || []).map((item) => ({
-      id: item.id,
-      title: item.title || '',
-      createdAt: item.created_at,
-    }));
-  } catch (error) {
-    console.error('[getWishes] Exception:', error);
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('載入失敗：發生未知錯誤');
-  }
+export async function getWishes(keyword?: string): Promise<Wish[]> {
+  ensureCoreInitialized();
+  return coreGetWishes({ keyword });
 }
 
 /**
- * 從 Supabase 根據 id 獲取單筆 wish（詳情頁用，取完整欄位）
+ * 從 Supabase 根據 id 獲取單筆 wish（詳情頁用）
  */
 export async function getWishById(id: string): Promise<Wish | undefined> {
-  try {
-    const { data, error } = await supabase
-      .from('wish_requests')
-      .select('id, title, description, product_url, budget, price, commission, target_country, category, deadline, status, created_at')
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      console.error('[getWishById] Error:', error);
-      // 如果是 406 (PGRST116) 或找不到資料，返回 undefined（不是錯誤）
-      if (error.code === 'PGRST116' || error.message?.includes('No rows')) {
-        return undefined;
-      }
-      throw new Error(`載入失敗：${error.message || '無法連接到伺服器'}`);
-    }
-
-    if (!data) {
-      return undefined;
-    }
-
-    return {
-      id: data.id,
-      title: data.title || '',
-      description: data.description || undefined,
-      productUrl: data.product_url || undefined,
-      budget: data.budget ? Number(data.budget) : undefined,
-      price: data.price ? Number(data.price) : undefined,
-      commission: data.commission ? Number(data.commission) : undefined,
-      targetCountry: data.target_country || undefined,
-      category: data.category || undefined,
-      deadline: data.deadline || undefined,
-      status: data.status || undefined,
-      createdAt: data.created_at,
-    };
-  } catch (error) {
-    console.error('[getWishById] Exception:', error);
-    if (error instanceof Error) {
-      throw error;
-    }
-    throw new Error('載入失敗：發生未知錯誤');
-  }
+  ensureCoreInitialized();
+  return coreGetWishById(id);
 }
 
+/**
+ * 創建一個新的 wish
+ */
+export async function createWish(
+  title: string,
+  description?: string,
+  budget?: number,
+  price?: number,
+  commission?: number,
+  productUrl?: string,
+  targetCountry?: string,
+  category?: string,
+  deadline?: string
+): Promise<CreateWishResult> {
+  ensureCoreInitialized();
+  return coreCreateWish({
+    title,
+    description,
+    budget,
+    price,
+    commission,
+    productUrl,
+    targetCountry,
+    category,
+    deadline,
+  });
+}
+
+/**
+ * 更新需求狀態
+ */
+export async function updateWishStatus(
+  wishId: string,
+  status: WishStatus
+): Promise<{ success: boolean; error?: string }> {
+  ensureCoreInitialized();
+  return coreUpdateWishStatus(wishId, status);
+}

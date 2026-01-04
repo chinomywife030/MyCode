@@ -1,10 +1,16 @@
-import { StyleSheet, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
+import { StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, Text, View } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
 import { useLocalSearchParams, Link, useFocusEffect, router as expoRouter } from 'expo-router';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { getWishById, type Wish } from '@/src/lib/wishes';
 import { getLatestWishReply, type WishReply } from '@/src/lib/replies';
+import { getCurrentUser } from '@/src/lib/auth';
+import { navigateToRoute } from '@/src/lib/navigation';
+import { Screen } from '@/src/ui/Screen';
+import { TopBar } from '@/src/ui/TopBar';
+import { Card } from '@/src/ui/Card';
+import { Tag } from '@/src/ui/Tag';
+import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/tokens';
+import { WishHeroCarousel } from '@/src/components/WishHeroCarousel';
 
 /**
  * 安全地開啟 URL
@@ -12,12 +18,10 @@ import { getLatestWishReply, type WishReply } from '@/src/lib/replies';
 function openUrl(url: string) {
   let finalUrl = url.trim();
   
-  // 如果沒有 http/https 前綴，自動補 https://
   if (!finalUrl.match(/^https?:\/\//i)) {
     finalUrl = `https://${finalUrl}`;
   }
   
-  // 基本 URL 驗證
   try {
     new URL(finalUrl);
     Linking.openURL(finalUrl).catch(() => {
@@ -36,6 +40,25 @@ export default function WishDetailScreen() {
   const [notFound, setNotFound] = useState(false);
   const [latestReply, setLatestReply] = useState<WishReply | undefined>(undefined);
   const [replyLoading, setReplyLoading] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        setCheckingAuth(false);
+      } catch (error) {
+        console.error('[WishDetailScreen] Auth check error:', error);
+        setCheckingAuth(false);
+      }
+    };
+
+    if (id) {
+      checkAuth();
+    } else {
+      setCheckingAuth(false);
+      setNotFound(true);
+    }
+  }, [id]);
 
   const fetchWish = async () => {
     if (!id) {
@@ -53,7 +76,6 @@ export default function WishDetailScreen() {
         setNotFound(true);
       } else {
         setWish(data);
-        // 載入 wish 後，同時載入最新回復
         fetchLatestReply();
       }
     } catch (err) {
@@ -80,10 +102,11 @@ export default function WishDetailScreen() {
   };
 
   useEffect(() => {
-    fetchWish();
-  }, [id]);
+    if (!checkingAuth && id) {
+      fetchWish();
+    }
+  }, [id, checkingAuth]);
 
-  // 當頁面獲得焦點時（例如從回復頁返回），刷新最新回復
   useFocusEffect(
     useCallback(() => {
       if (id && wish) {
@@ -111,298 +134,305 @@ export default function WishDetailScreen() {
     }
   };
 
-  if (loading) {
+  if (checkingAuth || loading) {
     return (
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.content}>
-          <ThemedText style={styles.loadingText}>載入中...</ThemedText>
-        </ThemedView>
-      </ThemedView>
+      <Screen>
+        <TopBar />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>載入中...</Text>
+        </View>
+      </Screen>
     );
   }
 
   if (error) {
     return (
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.content}>
-          <ThemedText type="title" style={styles.title}>
-            Wish Detail
-          </ThemedText>
-          <ThemedText style={styles.errorText}>⚠️ {error}</ThemedText>
+      <Screen>
+        <TopBar />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Wish Detail</Text>
+          <Text style={styles.errorText}>⚠️ {error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={handleRetry}>
-            <ThemedText style={styles.retryButtonText}>重試</ThemedText>
+            <Text style={styles.retryButtonText}>重試</Text>
           </TouchableOpacity>
           <Link href="/" style={styles.link}>
-            <ThemedText type="link">返回首頁</ThemedText>
+            <Text style={styles.linkText}>返回首頁</Text>
           </Link>
-        </ThemedView>
-      </ThemedView>
+        </View>
+      </Screen>
     );
   }
 
   if (notFound || !wish) {
     return (
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.content}>
-          <ThemedText type="title" style={styles.title}>
-            Wish Detail
-          </ThemedText>
-          <ThemedText style={styles.notFound}>找不到這個願望單</ThemedText>
+      <Screen>
+        <TopBar />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorTitle}>Wish Detail</Text>
+          <Text style={styles.notFound}>找不到這個願望單</Text>
           <Link href="/" style={styles.link}>
-            <ThemedText type="link">返回首頁</ThemedText>
+            <Text style={styles.linkText}>返回首頁</Text>
           </Link>
-        </ThemedView>
-      </ThemedView>
+        </View>
+      </Screen>
     );
   }
 
   return (
-    <ThemedView style={styles.container}>
+    <Screen>
+      <TopBar />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <ThemedText type="title" style={styles.title}>
-          {wish.title}
-        </ThemedText>
+        {/* Hero 圖片輪播 */}
+        <WishHeroCarousel images={wish.images || []} />
 
-        {/* 分隔線 */}
-        <ThemedView style={styles.divider} />
+        {/* 標題卡片 */}
+        <Card style={styles.titleCard}>
+          <Text style={styles.title}>{wish.title}</Text>
+          {wish.targetCountry && (
+            <View style={styles.tagContainer}>
+              <Tag label={wish.targetCountry === 'JP' ? '🇯🇵 日本' : wish.targetCountry} />
+            </View>
+          )}
+        </Card>
 
         {/* 描述區塊 */}
         {wish.description && (
-          <>
-            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
-              描述
-            </ThemedText>
-            <ThemedView style={styles.sectionContent}>
-              <ThemedText style={styles.descriptionText}>{wish.description}</ThemedText>
-            </ThemedView>
-            <ThemedView style={styles.divider} />
-          </>
+          <Card style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>描述</Text>
+            <Text style={styles.descriptionText}>{wish.description}</Text>
+          </Card>
         )}
 
         {/* 連結區塊 */}
         {wish.productUrl && (
-          <>
-            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
-              連結
-            </ThemedText>
-            <ThemedView style={styles.sectionContent}>
-              <TouchableOpacity
-                style={styles.linkButton}
-                onPress={() => openUrl(wish.productUrl!)}
-                activeOpacity={0.7}
-              >
-                <ThemedText type="link" style={styles.linkText}>
-                  {wish.productUrl}
-                </ThemedText>
-              </TouchableOpacity>
-            </ThemedView>
-            <ThemedView style={styles.divider} />
-          </>
+          <Card style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>連結</Text>
+            <TouchableOpacity
+              style={styles.linkButton}
+              onPress={() => openUrl(wish.productUrl!)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.linkText}>{wish.productUrl}</Text>
+            </TouchableOpacity>
+          </Card>
         )}
 
         {/* 其他資訊區塊 */}
         {(wish.budget || wish.targetCountry || wish.category || wish.deadline) && (
-          <>
-            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
-              其他資訊
-            </ThemedText>
-            <ThemedView style={styles.sectionContent}>
+          <Card style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>其他資訊</Text>
+            <View style={styles.infoContainer}>
               {wish.budget && (
-                <ThemedView style={styles.infoRow}>
-                  <ThemedText style={styles.infoLabel}>預算：</ThemedText>
-                  <ThemedText style={styles.infoValue}>NT$ {wish.budget}</ThemedText>
-                </ThemedView>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>預算：</Text>
+                  <Text style={styles.infoValue}>NT$ {wish.budget}</Text>
+                </View>
               )}
               {wish.targetCountry && (
-                <ThemedView style={styles.infoRow}>
-                  <ThemedText style={styles.infoLabel}>目標國家：</ThemedText>
-                  <ThemedText style={styles.infoValue}>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>目標國家：</Text>
+                  <Text style={styles.infoValue}>
                     {wish.targetCountry === 'JP' ? '🇯🇵 日本' : wish.targetCountry}
-                  </ThemedText>
-                </ThemedView>
+                  </Text>
+                </View>
               )}
               {wish.category && (
-                <ThemedView style={styles.infoRow}>
-                  <ThemedText style={styles.infoLabel}>分類：</ThemedText>
-                  <ThemedText style={styles.infoValue}>{wish.category}</ThemedText>
-                </ThemedView>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>分類：</Text>
+                  <Text style={styles.infoValue}>{wish.category}</Text>
+                </View>
               )}
               {wish.deadline && (
-                <ThemedView style={styles.infoRow}>
-                  <ThemedText style={styles.infoLabel}>截止日期：</ThemedText>
-                  <ThemedText style={styles.infoValue}>{wish.deadline}</ThemedText>
-                </ThemedView>
+                <View style={styles.infoRow}>
+                  <Text style={styles.infoLabel}>截止日期：</Text>
+                  <Text style={styles.infoValue}>{wish.deadline}</Text>
+                </View>
               )}
-            </ThemedView>
-            <ThemedView style={styles.divider} />
-          </>
+            </View>
+          </Card>
         )}
 
         {/* 我要回覆/報價按鈕 */}
-        <ThemedView style={styles.divider} />
         <TouchableOpacity
           style={styles.replyButton}
-          onPress={() => {
-            expoRouter.push(`/wish/${id}/reply` as any);
+          onPress={async () => {
+            const user = await getCurrentUser();
+            if (!user) {
+              const currentRoute = `/wish/${id}/reply`;
+              navigateToRoute(currentRoute, true);
+            } else {
+              expoRouter.push(`/wish/${id}/reply` as any);
+            }
           }}
         >
-          <ThemedText style={styles.replyButtonText}>我要回覆/報價</ThemedText>
+          <Text style={styles.replyButtonText}>我要回覆/報價</Text>
         </TouchableOpacity>
 
         {/* 最新回復區塊 */}
         {latestReply && (
-          <>
-            <ThemedView style={styles.divider} />
-            <ThemedText type="defaultSemiBold" style={styles.sectionTitle}>
-              最新回覆
-            </ThemedText>
-            <ThemedView style={styles.replyCard}>
-              <ThemedText style={styles.replyMessage}>{latestReply.message}</ThemedText>
-              <ThemedText style={styles.replyDate}>
-                {formatDate(latestReply.created_at)}
-              </ThemedText>
-            </ThemedView>
-          </>
+          <Card style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>最新回覆</Text>
+            <View style={styles.replyCard}>
+              <Text style={styles.replyMessage}>{latestReply.message}</Text>
+              <Text style={styles.replyDate}>{formatDate(latestReply.created_at)}</Text>
+            </View>
+          </Card>
         )}
 
         {/* 返回首頁連結 */}
         <Link href="/" style={styles.link}>
-          <ThemedText type="link">返回首頁</ThemedText>
+          <Text style={styles.linkText}>返回首頁</Text>
         </Link>
       </ScrollView>
-    </ThemedView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-    paddingTop: 60,
+    padding: spacing.lg,
+    paddingTop: spacing.md,
   },
-  content: {
+  loadingContainer: {
     flex: 1,
-    padding: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing['3xl'],
+  },
+  loadingText: {
+    fontSize: fontSize.base,
+    color: colors.textMuted,
+  },
+  errorContainer: {
+    flex: 1,
+    padding: spacing['2xl'],
     justifyContent: 'center',
     alignItems: 'center',
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 20,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    marginVertical: 20,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    marginBottom: 12,
-    opacity: 0.8,
-  },
-  sectionContent: {
-    marginBottom: 8,
-  },
-  descriptionText: {
-    fontSize: 16,
-    lineHeight: 24,
-    opacity: 0.8,
-  },
-  linkButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 8,
-    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-    marginBottom: 8,
-  },
-  linkText: {
-    fontSize: 14,
-    color: '#2563eb',
-  },
-  infoRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-    alignItems: 'center',
-  },
-  infoLabel: {
-    fontSize: 14,
-    opacity: 0.6,
-    marginRight: 8,
-    minWidth: 80,
-  },
-  infoValue: {
-    fontSize: 14,
-    opacity: 0.9,
-    flex: 1,
-  },
-  notFound: {
-    fontSize: 16,
-    marginBottom: 24,
-    opacity: 0.6,
-    textAlign: 'center',
+  errorTitle: {
+    fontSize: fontSize['2xl'],
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    marginBottom: spacing.lg,
   },
   errorText: {
-    fontSize: 16,
-    color: '#ef4444',
-    marginBottom: 20,
+    fontSize: fontSize.base,
+    color: colors.error,
+    marginBottom: spacing.lg,
+    textAlign: 'center',
+  },
+  notFound: {
+    fontSize: fontSize.base,
+    color: colors.textMuted,
+    marginBottom: spacing['2xl'],
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginBottom: 20,
-    alignSelf: 'center',
+    backgroundColor: colors.brandOrange,
+    paddingHorizontal: spacing['2xl'],
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    marginBottom: spacing.lg,
   },
   retryButtonText: {
     color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  loadingText: {
-    fontSize: 16,
-    opacity: 0.6,
-    marginBottom: 24,
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
   },
   link: {
-    marginTop: 20,
-    marginBottom: 40,
+    marginTop: spacing.md,
+  },
+  linkText: {
+    fontSize: fontSize.base,
+    color: colors.brandOrange,
+    textDecorationLine: 'underline',
+  },
+  titleCard: {
+    marginBottom: spacing.lg,
+  },
+  title: {
+    fontSize: fontSize['2xl'],
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  tagContainer: {
+    alignSelf: 'flex-start',
+  },
+  sectionCard: {
+    marginBottom: spacing.lg,
+  },
+  sectionTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+    marginBottom: spacing.md,
+  },
+  descriptionText: {
+    fontSize: fontSize.base,
+    color: colors.text,
+    lineHeight: 24,
+  },
+  linkButton: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  linkText: {
+    fontSize: fontSize.sm,
+    color: colors.brandOrange,
+  },
+  infoContainer: {
+    gap: spacing.md,
+  },
+  infoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  infoLabel: {
+    fontSize: fontSize.base,
+    color: colors.textMuted,
+    marginRight: spacing.md,
+    minWidth: 80,
+  },
+  infoValue: {
+    fontSize: fontSize.base,
+    color: colors.text,
+    flex: 1,
   },
   replyButton: {
-    backgroundColor: '#2563eb',
-    paddingVertical: 16,
-    borderRadius: 8,
+    backgroundColor: colors.brandOrange,
+    paddingVertical: spacing.lg,
+    borderRadius: radius.md,
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: spacing.lg,
   },
   replyButtonText: {
     color: '#ffffff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
   },
   replyCard: {
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-    padding: 16,
-    borderRadius: 8,
+    backgroundColor: colors.bg,
+    padding: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(0, 0, 0, 0.1)',
-    marginBottom: 8,
+    borderColor: colors.border,
   },
   replyMessage: {
-    fontSize: 16,
+    fontSize: fontSize.base,
+    color: colors.text,
     lineHeight: 24,
-    marginBottom: 12,
-    opacity: 0.9,
+    marginBottom: spacing.sm,
   },
   replyDate: {
-    fontSize: 12,
-    opacity: 0.5,
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
   },
 });

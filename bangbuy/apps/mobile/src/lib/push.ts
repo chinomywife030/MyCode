@@ -143,26 +143,42 @@ export async function registerPushToken(): Promise<{
     // 2. 嘗試獲取當前用戶（如果已登入）
     let userId: string | null = null;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) {
+        console.warn('[registerPushToken] Auth error:', userError);
+      }
       userId = user?.id || null;
+      if (userId) {
+        console.log(`[registerPushToken] User logged in: ${userId}`);
+      } else {
+        console.log('[registerPushToken] No user session, registering anonymously');
+      }
     } catch (authError) {
       // 未登入，允許匿名註冊
       console.log('[registerPushToken] No user session, registering anonymously');
     }
 
-    // 3. Upsert 到 Supabase（使用 fcm_token 作為唯一鍵）
+    // 3. 必須有 user_id 才能註冊（不允許匿名）
+    if (!userId) {
+      registrationInProgress = false;
+      return {
+        success: false,
+        error: '請先登入後再註冊推播通知',
+      };
+    }
+
+    // 4. Upsert 到 Supabase（使用 expo_push_token 作為唯一鍵）
     const { error } = await supabase
-      .from('device_tokens')
+      .from('user_push_tokens')
       .upsert(
         {
-          fcm_token: token,
+          expo_push_token: token,
           user_id: userId,
           platform: platform,
-          device_id: deviceId,
-          last_seen_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         },
         {
-          onConflict: 'fcm_token',
+          onConflict: 'expo_push_token',
         }
       );
 
@@ -191,30 +207,102 @@ export async function registerPushToken(): Promise<{
 /**
  * 處理推送通知點擊事件（深鏈接）
  */
-function handleNotificationResponse(response: Notifications.NotificationResponse) {
-  const notification = response.notification;
-  const data = notification.request.content.data;
+async function handleNotificationResponse(response: Notifications.NotificationResponse) {
+  try {
+    const notification = response.notification;
+    const data = notification.request.content.data;
 
-  console.log('[handleNotificationResponse] Notification clicked:', data);
+    console.log('[handleNotificationResponse] Notification clicked:', data);
 
-  // 處理深鏈接
-  if (data?.type === 'NEW_REPLY' && data?.wishId) {
-    // 導航到對應的 wish 詳情頁
-    router.push(`/wish/${data.wishId}`);
-  } else if (data?.url) {
-    // 如果有 url 字段，使用它（Expo Router 會自動處理）
-    router.push(data.url as any);
-  } else if (data?.wishId) {
-    // 備用：如果有 wishId，直接導航
-    router.push(`/wish/${data.wishId}`);
+    // 邊界情況：無 data 或 data 缺失
+    if (!data) {
+      console.warn('[handleNotificationResponse] No notification data, navigating to home');
+      router.push('/');
+      return;
+    }
+
+    // 優先處理聊天室通知（conversationId）
+    if (data.conversationId && typeof data.conversationId === 'string') {
+      const conversationId = data.conversationId.trim();
+      
+      // UUID 驗證：確保 conversationId 是合法的 UUID
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(conversationId)) {
+        console.error('[handleNotificationResponse] Invalid conversationId (not a valid UUID):', conversationId);
+        return;
+      }
+      
+      console.log('[handleNotificationResponse] Navigating to chat:', conversationId);
+      router.push(`/chat/${conversationId}`);
+      return;
+    }
+
+    // 處理 wishId（優先順序：wishId > url 解析）
+    let wishId: string | null = null;
+
+    if (data.wishId && typeof data.wishId === 'string') {
+      wishId = data.wishId.trim();
+    } else if (data.url && typeof data.url === 'string') {
+      // 從 url 中解析 wishId（例如：/wish/123）
+      const urlMatch = data.url.match(/\/wish\/([^/?]+)/);
+      if (urlMatch && urlMatch[1]) {
+        wishId = urlMatch[1].trim();
+      }
+    }
+
+    // 如果有 wishId，導航到對應的 wish 詳情頁（會自動處理登入檢查）
+    if (wishId) {
+      const { navigateToRoute } = await import('./navigation');
+      await navigateToRoute(`/wish/${wishId}`, true); // requireAuth = true
+    } else if (data.url && typeof data.url === 'string') {
+      // 如果有 url 但無法解析 wishId，直接使用 url
+      const { navigateToRoute } = await import('./navigation');
+      await navigateToRoute(data.url, true);
+    } else {
+      // 無有效路由信息，導航到首頁
+      console.warn('[handleNotificationResponse] No valid route found, navigating to home');
+      router.push('/');
+    }
+  } catch (error) {
+    console.error('[handleNotificationResponse] Exception:', error);
+    // 發生錯誤時，導航到首頁
+    router.push('/');
   }
 }
 
+// 防止重複註冊 notification handler
+let notificationHandlerRegistered = false;
+
 /**
- * 設定推送通知處理器
+ * 設定推送通知處理器（只註冊一次）
  */
 function setupNotificationHandlers() {
-  // 設定通知點擊處理器
+  // 避免重複註冊
+  if (notificationHandlerRegistered) {
+    console.log('[setupNotificationHandlers] Handler already registered, skipping');
+    return;
+  }
+
+  // 處理冷啟動時的初始通知（App 從關閉狀態被通知打開）
+  // 注意：getLastNotificationResponseAsync 在 iOS 上可能不可用
+  if (Platform.OS !== 'ios') {
+    Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (response) {
+          console.log('[setupNotificationHandlers] Handling initial notification response');
+          handleNotificationResponse(response);
+        }
+      })
+      .catch((error) => {
+        // 靜默處理錯誤，不影響其他功能
+        console.warn('[setupNotificationHandlers] Error getting last notification (non-critical):', error.message);
+      });
+  } else {
+    // iOS 上不支援 getLastNotificationResponseAsync，跳過
+    console.log('[setupNotificationHandlers] Skipping getLastNotificationResponseAsync on iOS (not supported)');
+  }
+
+  // 設定通知點擊處理器（前景和背景）
   Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
 
   // 設定通知接收處理器（App 在前台時）
@@ -225,6 +313,9 @@ function setupNotificationHandlers() {
       shouldSetBadge: true,
     }),
   });
+
+  notificationHandlerRegistered = true;
+  console.log('[setupNotificationHandlers] Notification handlers registered');
 }
 
 /**
@@ -232,6 +323,16 @@ function setupNotificationHandlers() {
  */
 export async function initializePushNotifications(): Promise<PushTokenStatus> {
   try {
+    // Web 平台不支持推送通知
+    if (Platform.OS === 'web') {
+      console.log('[initializePushNotifications] Web platform, push notifications not supported');
+      return {
+        granted: false,
+        token: null,
+        error: 'Web 平台不支持推送通知',
+      };
+    }
+
     // 設定通知處理器（深鏈接）
     setupNotificationHandlers();
 

@@ -191,8 +191,9 @@ export default function ImageCarousel({
     e.stopPropagation();
   }, []);
 
-  // 計算 aspect ratio class
-  const aspectClass = {
+  // 計算 aspect ratio class（如果 className 包含 h-full，則不使用 aspect ratio）
+  const hasFixedHeight = className.includes('h-full');
+  const aspectClass = hasFixedHeight ? '' : {
     'square': 'aspect-square',
     '4/3': 'aspect-[4/3]',
     '16/9': 'aspect-video',
@@ -201,7 +202,7 @@ export default function ImageCarousel({
   // 0 張圖：顯示 placeholder
   if (images.length === 0) {
     return (
-      <div className={`relative ${aspectClass} bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center ${className}`}>
+      <div className={`relative ${aspectClass} ${hasFixedHeight ? 'h-full' : ''} bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center ${className}`}>
         <span className="text-6xl opacity-30">📷</span>
       </div>
     );
@@ -210,7 +211,7 @@ export default function ImageCarousel({
   // 1 張圖：不顯示 dots 和箭頭
   if (images.length === 1) {
     return (
-      <div className={`relative ${aspectClass} overflow-hidden ${className}`}>
+      <div className={`relative ${aspectClass} ${hasFixedHeight ? 'h-full' : ''} overflow-hidden ${className}`}>
         <Image
           src={images[0]}
           alt={alt}
@@ -231,7 +232,7 @@ export default function ImageCarousel({
   // 2+ 張圖：可滑動 + dots + 箭頭
   return (
     <div 
-      className={`relative ${className}`}
+      className={`relative ${hasFixedHeight ? 'h-full' : ''} ${className}`}
       onClickCapture={handleClickCapture}
     >
       {/* 滾動容器 */}
@@ -241,6 +242,7 @@ export default function ImageCarousel({
           flex overflow-x-auto snap-x snap-mandatory
           scrollbar-hide select-none
           ${aspectClass}
+          ${hasFixedHeight ? 'h-full' : ''}
           ${isDesktop ? (isDragging ? 'cursor-grabbing' : 'cursor-grab') : ''}
         `}
         style={{
@@ -327,9 +329,9 @@ export default function ImageCarousel({
         </button>
       )}
 
-      {/* 頁面指示器 */}
-      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-1.5 pointer-events-none">
-        <div className="flex items-center gap-1 bg-black/30 backdrop-blur-sm rounded-full px-2 py-1">
+      {/* 頁面指示器 - 底部 dots */}
+      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-center gap-1.5 pointer-events-none z-20">
+        <div className="flex items-center gap-1.5 bg-black/40 backdrop-blur-sm rounded-full px-2.5 py-1.5">
           {images.map((_, index) => (
             <button
               key={index}
@@ -339,11 +341,11 @@ export default function ImageCarousel({
                 scrollToIndex(index);
               }}
               className={`
-                w-1.5 h-1.5 rounded-full transition-all duration-200
+                rounded-full transition-all duration-200
                 pointer-events-auto
                 ${index === currentIndex 
-                  ? 'bg-white w-3' 
-                  : 'bg-white/50 hover:bg-white/70'
+                  ? 'bg-white w-2 h-2' 
+                  : 'bg-white/60 hover:bg-white/80 w-1.5 h-1.5'
                 }
               `}
               aria-label={`跳到第 ${index + 1} 張圖片`}
@@ -352,9 +354,9 @@ export default function ImageCarousel({
         </div>
       </div>
 
-      {/* 計數器 */}
+      {/* 計數器 - 右上角 */}
       {showCounter && (
-        <div className="absolute top-3 right-3 bg-black/50 backdrop-blur-sm text-white text-xs font-medium px-2 py-1 rounded-full pointer-events-none">
+        <div className="absolute top-3 right-3 bg-black/60 backdrop-blur-sm text-white text-xs font-semibold px-2.5 py-1 rounded-full pointer-events-none z-20">
           {currentIndex + 1}/{images.length}
         </div>
       )}

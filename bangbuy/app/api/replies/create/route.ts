@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[POST /api/replies/create] Reply created: ${reply.id}`);
 
-    // 3. 發送推播通知給 wish owner（如果 owner 存在且不是回覆者本人）
+    // 3. 發送推播通知並寫入 in-app notification 給 wish owner（如果 owner 存在且不是回覆者本人）
     if (wish.buyer_id && wish.buyer_id !== userId) {
       try {
         // 準備推播內容
@@ -95,22 +95,54 @@ export async function POST(request: NextRequest) {
           ? `${replyPreview}...` 
           : replyPreview;
 
+        const notificationTitle = '有人回覆你的需求';
+        const notificationData = {
+          type: 'NEW_REPLY',
+          wishId: wishId,
+          url: `/wish/${wishId}`,
+        };
+
+        // 3a. 寫入 in-app notification
+        try {
+          const { error: notifError } = await supabase
+            .from('notifications')
+            .insert([
+              {
+                user_id: wish.buyer_id,
+                type: 'NEW_REPLY',
+                title: notificationTitle,
+                body: pushBody,
+                data: notificationData,
+                is_read: false,
+                dedupe_key: `NEW_REPLY_${wishId}_${reply.id}`, // 防止重複通知
+              },
+            ]);
+
+          if (notifError) {
+            console.error('[POST /api/replies/create] Failed to create notification:', notifError);
+            // 通知寫入失敗不影響推播，繼續執行
+          } else {
+            console.log(`[POST /api/replies/create] In-app notification created for user ${wish.buyer_id}`);
+          }
+        } catch (notifError: any) {
+          console.error('[POST /api/replies/create] Notification insert exception:', notifError);
+          // 通知寫入失敗不影響推播，繼續執行
+        }
+
+        // 3b. 發送推播通知
         const pushResult = await sendToUser(wish.buyer_id, {
-          title: '有人回覆你的需求',
+          title: notificationTitle,
           body: pushBody,
-          data: {
-            type: 'NEW_REPLY',
-            wishId: wishId,
-            // 深鏈接：使用 Expo Router 的路徑格式
-            // App 會自動處理 mobile://wish/[id] 格式的深鏈接
-            url: `/wish/${wishId}`,
-          },
+          data: notificationData,
         });
 
         if (pushResult.success) {
-          console.log(`[POST /api/replies/create] Push sent to ${wish.buyer_id}: ${pushResult.sent} devices`);
+          console.log(`[POST /api/replies/create] Push sent to ${wish.buyer_id}: ${pushResult.sent} devices (tokens found: ${pushResult.tokensFound}, tokens used: ${pushResult.tokensUsed})`);
         } else {
-          console.warn(`[POST /api/replies/create] Push failed: ${pushResult.errors} errors`);
+          console.warn(`[POST /api/replies/create] Push failed for user ${wish.buyer_id}: ${pushResult.errors} errors. Tokens found: ${pushResult.tokensFound}, tokens used: ${pushResult.tokensUsed}`);
+          if (pushResult.tokensFound === 0) {
+            console.warn(`[POST /api/replies/create] ⚠️ No device tokens found for user ${wish.buyer_id}. User may not have registered push token.`);
+          }
           // 推播失敗不影響回覆建立，只記錄警告
         }
       } catch (pushError: any) {

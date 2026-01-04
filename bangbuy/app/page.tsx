@@ -476,7 +476,7 @@ function HomeContent() {
 
   // ========== UI 渲染（統一風格，橘藍配色）==========
   return (
-    <div className="min-h-screen bg-gray-50 pb-20 md:pb-6">
+    <div className="min-h-screen pb-20 md:pb-6" style={{ backgroundColor: '#F6F7FB' }}>
       {/* 🎯 產品導覽（半透明遮罩 + 高亮 + 箭頭）*/}
       <ProductTour
         isOpen={showTour}
@@ -571,10 +571,10 @@ function HomeContent() {
 
       {/* 🔍 搜尋/篩選區塊 */}
       <div className="sticky top-16 z-40 bg-white/95 backdrop-blur-sm border-b border-gray-100">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-3">
+        <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-4">
           {/* 搜尋框 + 漏斗按鈕 */}
-          <div className="flex items-center gap-2">
-            <div className="flex-1 max-w-lg" data-tour="search-bar">
+          <div className="flex items-center gap-3">
+            <div className="flex-1" data-tour="search-bar">
               <SearchBar
                 value={search}
                 onChange={setSearch}
@@ -588,15 +588,16 @@ function HomeContent() {
               data-tour="filter-btn"
               onClick={() => setShowFilter(!showFilter)}
               className={`
-                shrink-0 h-10 px-3 rounded-xl
+                shrink-0 h-10 px-4 rounded-xl
                 flex items-center gap-2
                 transition-all duration-200
                 focus:outline-none focus:ring-2 focus:ring-offset-1
+                bg-white border border-gray-200 text-gray-700 hover:bg-gray-50
                 ${showFilter || country !== 'ALL'
                   ? mode === 'requester'
-                    ? 'bg-blue-500 text-white focus:ring-blue-400'
-                    : 'bg-orange-500 text-white focus:ring-orange-400'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-300'
+                    ? 'border-blue-500 text-blue-600 focus:ring-blue-400'
+                    : 'border-orange-500 text-orange-600 focus:ring-orange-400'
+                  : 'focus:ring-gray-300'
                 }
               `}
             >
@@ -614,11 +615,11 @@ function HomeContent() {
                   d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" 
                 />
               </svg>
-              <span className="hidden sm:inline text-sm font-medium">篩選</span>
+              <span className="text-sm font-medium">篩選</span>
               {country !== 'ALL' && (
                 <span className={`
                   w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center
-                  ${mode === 'requester' ? 'bg-white text-blue-600' : 'bg-white text-orange-600'}
+                  ${mode === 'requester' ? 'bg-blue-500 text-white' : 'bg-orange-500 text-white'}
                 `}>
                   1
                 </span>
@@ -838,7 +839,7 @@ function HomeContent() {
       </div>
 
       {/* Main Feed Container - 增加上下間距，營造呼吸空間 */}
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+      <div className="max-w-[1280px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
         
         {/* Error Message - 統一風格 */}
         {error && (
@@ -865,10 +866,10 @@ function HomeContent() {
 
         {/* Section Header - 降低視覺重量 */}
         <div className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-800 mb-1.5">
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
             {mode === 'requester' ? '最新行程' : '熱門需求'}
           </h2>
-          <p className="text-sm text-gray-500 font-light">
+          <p className="text-sm text-gray-500 font-normal">
             {mode === 'requester' ? '即將出發的代購行程' : '可接單的代購需求'}
           </p>
         </div>
@@ -1108,7 +1109,7 @@ function HomeContent() {
                   actionHref="/create"
                 />
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-7">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {wishes.map((wish, index) => {
                     // 🎨 純 UI：模擬狀態（之後可從真實資料讀取）
                     const mockStatus = wish.status || 'pending';
@@ -1131,23 +1132,26 @@ function HomeContent() {
                     <>
                       <div 
                         key={wish.id} 
-                        className="group bg-white rounded-2xl shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden h-full border border-gray-100 hover:border-orange-200"
+                        className="group bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden h-full border border-gray-200"
                       >
                       {/* Card Image - 使用 ImageCarousel + next/image 優化 */}
-                      <div className="relative">
+                      <div className="relative" style={{ height: '240px' }}>
                         <ImageCarousel 
                           images={wish.images || []} 
                           alt={wish.title}
                           aspectRatio="4/3"
                           showCounter={wish.images?.length > 1}
                           priority={index === 0}
+                          className="h-full"
                         />
                         {/* 收藏按鈕暫時停用（MVP 先不上） */}
                         {/* 國家標籤 - 圖片左上角 */}
-                        <div className="absolute top-3 left-3 z-10 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-orange-700 text-xs font-bold rounded-full shadow-md flex items-center gap-1.5">
-                          <span className="text-base">{getFlag(wish.target_country)}</span>
-                          <span>{wish.target_country}</span>
-                        </div>
+                        {wish.target_country && (
+                          <div className="absolute top-3 left-3 z-10 px-3 py-1.5 bg-white/95 backdrop-blur-sm text-orange-700 text-xs font-bold rounded-full shadow-md flex items-center gap-1.5">
+                            <span className="text-base">{getFlag(wish.target_country)}</span>
+                            <span>{wish.target_country}</span>
+                          </div>
+                        )}
                       </div>
 
                       {/* 文字區塊用 Link 包起來 */}
@@ -1155,7 +1159,7 @@ function HomeContent() {
                         {/* Card Header - 次要資訊灰階化 */}
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                            <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-medium shadow-sm shrink-0">
+                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-medium shadow-sm shrink-0">
                               {wish.buyer?.avatar_url ? (
                                 <img 
                                   src={`${wish.buyer.avatar_url}?v=${wish.buyer.avatar_url.split('/').pop() || Date.now()}`} 
@@ -1163,48 +1167,48 @@ function HomeContent() {
                                   alt=""
                                 />
                               ) : (
-                                <span className="text-xs">{wish.buyer?.name?.[0]}</span>
+                                <span className="text-sm">{wish.buyer?.name?.[0] || 'U'}</span>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <p className="text-xs font-medium text-gray-700 truncate">{wish.buyer?.name || '使用者'}</p>
+                                  <p className="text-sm font-medium text-gray-700 truncate">{wish.buyer?.name || '使用者'}</p>
                                   {wish.buyer?.is_supporter && (
                                     <SupporterBadge size="small" />
                                   )}
                                 </div>
                                 {/* 🔥 評價系統暫時關閉（Beta 階段） */}
                               </div>
-                              <p className="text-[10px] text-gray-500 font-light">需要幫助</p>
+                              <p className="text-xs text-gray-500 font-normal">需要幫助</p>
                             </div>
                           </div>
                           {/* 狀態標籤 - 降低視覺重量 */}
-                          <span className={`px-2 py-0.5 text-[10px] font-medium rounded border shrink-0 ${getStatusStyle(mockStatus)}`}>
+                          <span className={`px-2.5 py-1 text-xs font-medium rounded-lg border shrink-0 ${getStatusStyle(mockStatus)}`}>
                             {getStatusText(mockStatus)}
                           </span>
                         </div>
 
                         {/* Card Title - 主要焦點 */}
-                        <h3 className="text-base font-bold text-gray-900 mb-3 line-clamp-2 leading-snug group-hover:text-orange-600 transition-colors">
+                        <h3 className="text-base font-bold text-gray-900 mb-4 line-clamp-2 leading-snug group-hover:text-orange-600 transition-colors" style={{ minHeight: '48px' }}>
                           {wish.title}
                         </h3>
 
                         {/* 價格 */}
                         <div className="flex items-baseline gap-1.5 pt-3 border-t border-gray-100">
-                          <span className="text-xs font-medium text-gray-500">NT$</span>
+                          <span className="text-sm font-medium text-gray-500">NT$</span>
                           <span className="text-2xl font-bold text-orange-600">
-                            {Number(wish.budget).toLocaleString()}
+                            {Number(wish.budget || 0).toLocaleString()}
                           </span>
                         </div>
                       </Link>
                       
                       {/* 🎯 雙 CTA 按鈕區 - 放在 Link 外面 */}
-                      <div className="px-5 pb-5 flex flex-col gap-2">
+                      <div className="px-5 pb-5 flex flex-col gap-3">
                         {/* 主按鈕：我要接單報價 - 導向詳情頁 */}
                         <Link
                           href={`/wish/${wish.id}`}
-                          className="w-full flex items-center justify-center gap-2 py-3 font-bold rounded-xl transition-all duration-200 shadow-md hover:shadow-lg text-sm bg-orange-500 hover:bg-orange-600 text-white active:scale-95"
+                          className="w-full flex items-center justify-center gap-2 py-3 font-bold rounded-xl transition-all duration-200 shadow-sm hover:shadow-md text-sm bg-orange-500 hover:bg-orange-600 text-white active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
@@ -1281,9 +1285,10 @@ function HomeContent() {
                           className={`
                             w-full flex items-center justify-center gap-2 py-3 font-semibold rounded-xl 
                             transition-all duration-200 text-sm border-2
+                            focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2
                             ${chatLoadingId === `wish:${wish.id}`
                               ? 'bg-gray-100 text-gray-400 border-gray-300 cursor-not-allowed'
-                              : 'bg-white hover:bg-orange-50 text-orange-600 border-orange-500 active:scale-95'
+                              : 'bg-white hover:bg-orange-50 text-orange-600 border-orange-500 active:scale-[0.98]'
                             }
                           `}
                         >
