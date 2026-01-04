@@ -192,9 +192,8 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
     if (authError) {
       console.error('[core/sendMessage] Failed to get current user:', {
         message: authError.message,
-        details: authError.details,
-        hint: authError.hint,
         code: authError.code,
+        status: (authError as any).status,
         error: authError,
       });
       return { success: false, error: '未登入，無法發送訊息' };

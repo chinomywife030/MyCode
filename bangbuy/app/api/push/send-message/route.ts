@@ -212,13 +212,13 @@ export async function POST(request: NextRequest) {
 
     // 5. 準備推播內容
     const title = 'BangBuy';
-    const body = `${senderName}: ${message.content.substring(0, 40)}${message.content.length > 40 ? '...' : ''}`;
+    const pushBody = `${senderName}: ${message.content.substring(0, 40)}${message.content.length > 40 ? '...' : ''}`;
     const data = { conversationId };
 
     console.log(`[POST /api/push/send-message] Sending to ${pushTokens.length} tokens for recipient: ${recipientId}`);
 
     // 6. 發送推播
-    const pushResult = await sendExpoPushNotification(pushTokens, title, body, data);
+    const pushResult = await sendExpoPushNotification(pushTokens, title, pushBody, data);
 
     // 7. 處理無效 token
     if (pushResult.errors && pushResult.errors.length > 0) {
