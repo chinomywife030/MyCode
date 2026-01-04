@@ -1,16 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 import { getToken } from '../tokenStore';
 
 export const runtime = 'nodejs';
 
+// Supabase Admin Client
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !serviceKey) {
+    return null;
+  }
+  
+  return createClient(url, serviceKey);
+}
+
 /**
- * 發送 Expo Push Notification
+ * 發送 Expo Push Notification（支援多 token）
  */
 async function sendExpoPushNotification(
-  token: string,
+  tokens: string[],
   data?: Record<string, any>
 ): Promise<any> {
   try {
+    // 構建多 token 的 payload
+    const messages = tokens.map((token) => ({
+      to: token,
+      sound: 'default',
+      title: 'BangBuy',
+      body: 'Push works 🎉',
+      data: data || {},
+    }));
+
     const response = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: {
@@ -18,15 +40,7 @@ async function sendExpoPushNotification(
         'Accept': 'application/json',
         'Accept-Encoding': 'gzip, deflate',
       },
-      body: JSON.stringify([
-        {
-          to: token,
-          sound: 'default',
-          title: 'BangBuy',
-          body: 'Push works 🎉',
-          data: data || {},
-        },
-      ]),
+      body: JSON.stringify(messages),
     });
 
     if (!response.ok) {
@@ -63,25 +77,17 @@ export async function GET() {
  * 支援 query 參數或 body：
  * - ?type=chat&conversationId=abc
  * - ?type=wish&wishId=w1
- * - body: { type: "chat", conversationId: "abc" }
+ * - ?toUserId=xxx (從 DB 查詢該 user 的所有 tokens)
+ * - body: { type: "chat", conversationId: "abc", toUserId: "xxx" }
  */
 export async function POST(request: NextRequest) {
   try {
-    // 從暫存位置取得 token
-    const token = getToken();
-
-    if (!token) {
-      return NextResponse.json(
-        { ok: false, error: '沒有暫存的 token，請先呼叫 /api/push/register' },
-        { status: 404 }
-      );
-    }
-
     // 解析 query 參數
     const { searchParams } = new URL(request.url);
     const typeFromQuery = searchParams.get('type');
     const conversationIdFromQuery = searchParams.get('conversationId');
     const wishIdFromQuery = searchParams.get('wishId');
+    const toUserIdFromQuery = searchParams.get('toUserId');
 
     // 解析 body（如果有的話）
     let bodyData: any = {};
@@ -96,6 +102,7 @@ export async function POST(request: NextRequest) {
     const type = bodyData.type || typeFromQuery;
     const conversationId = bodyData.conversationId || conversationIdFromQuery;
     const wishId = bodyData.wishId || wishIdFromQuery;
+    const toUserId = bodyData.toUserId || toUserIdFromQuery;
 
     let pushData: Record<string, any> = {};
 
@@ -105,18 +112,69 @@ export async function POST(request: NextRequest) {
       pushData = { type: 'wish', wishId };
     }
 
-    console.log('[push/send-test] POST sending to token=', token.substring(0, 20) + '...', 'data=', pushData);
+    // 決定要發送的 tokens
+    let tokens: string[] = [];
+    let tokenSource = 'memory';
+
+    if (toUserId) {
+      // 從 Supabase 查詢該 user 的所有 tokens
+      const supabase = getSupabaseAdmin();
+      if (supabase) {
+        const { data: tokenRows, error } = await supabase
+          .from('push_tokens')
+          .select('token')
+          .eq('user_id', toUserId);
+
+        if (error) {
+          console.error('[push/send-test] DB query error:', error);
+          return NextResponse.json(
+            { ok: false, error: `查詢 tokens 失敗：${error.message}` },
+            { status: 500 }
+          );
+        }
+
+        if (!tokenRows || tokenRows.length === 0) {
+          return NextResponse.json(
+            { ok: false, error: `找不到 user ${toUserId} 的 push tokens` },
+            { status: 404 }
+          );
+        }
+
+        tokens = tokenRows.map((row) => row.token);
+        tokenSource = 'supabase';
+        console.log(`[push/send-test] Found ${tokens.length} tokens for user ${toUserId}`);
+      } else {
+        return NextResponse.json(
+          { ok: false, error: 'Supabase 未配置，無法查詢 tokens' },
+          { status: 500 }
+        );
+      }
+    } else {
+      // 使用記憶體暫存的 token（向後兼容）
+      const memoryToken = getToken();
+      if (!memoryToken) {
+        return NextResponse.json(
+          { ok: false, error: '沒有暫存的 token，請先呼叫 /api/push/register 或提供 toUserId' },
+          { status: 404 }
+        );
+      }
+      tokens = [memoryToken];
+    }
+
+    console.log('[push/send-test] POST sending to', tokens.length, 'tokens, source:', tokenSource, 'data:', pushData);
 
     // 呼叫 Expo Push API
-    const expoResponse = await sendExpoPushNotification(token, pushData);
+    const expoResponse = await sendExpoPushNotification(tokens, pushData);
 
     // 印出 Expo API 的 response
     console.log('[push/send-test] POST Expo API response:', JSON.stringify(expoResponse, null, 2));
 
     return NextResponse.json({
       ok: true,
-      expoResponse,
+      sentTo: tokens.length,
+      tokenSource,
       pushData,
+      expoResponse,
     });
   } catch (error: any) {
     console.error('[push/send-test] POST Error:', error);

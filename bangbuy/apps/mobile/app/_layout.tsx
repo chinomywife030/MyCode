@@ -10,7 +10,7 @@ import { initializePushNotifications } from '@/src/lib/push';
 import { initializeCore } from '@/src/lib/core';
 import { routeFromNotificationResponse } from '@/src/notifications/notificationRouter';
 import { initializePushService } from '@/src/lib/pushService';
-import { registerForPushNotificationsAsync } from '@/src/lib/pushToken';
+import { registerPushNotificationsComplete } from '@/src/lib/pushToken';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -40,12 +40,12 @@ export default function RootLayout() {
     }
   }, []);
 
-  // 最小可用的推送通知 Token 註冊（僅用於測試）
+  // 推送通知 Token 註冊（取得 token 並註冊到 Server）
   useEffect(() => {
-    registerForPushNotificationsAsync()
+    registerPushNotificationsComplete()
       .then((token) => {
         if (token) {
-          console.log('Expo Push Token:', token);
+          console.log('[RootLayout] Push token registered:', token.substring(0, 30) + '...');
         } else {
           console.log('[RootLayout] Failed to get Expo Push Token');
         }
