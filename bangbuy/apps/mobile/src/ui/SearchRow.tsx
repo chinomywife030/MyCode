@@ -1,4 +1,5 @@
 import { StyleSheet, View, TextInput, TouchableOpacity, Text } from 'react-native';
+import { memo, useCallback } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize } from '@/src/theme/tokens';
 
@@ -11,13 +12,30 @@ interface SearchRowProps {
 
 /**
  * 搜尋框 + 篩選按鈕
+ * 包含清除按鈕（當有輸入時顯示）
+ * 使用 memo 防止不必要的重新渲染
  */
-export function SearchRow({
+export const SearchRow = memo(function SearchRow({
   placeholder = '搜尋需求...',
   value,
   onChangeText,
   onFilterPress,
 }: SearchRowProps) {
+  const hasValue = value && value.length > 0;
+
+  const handleClear = useCallback(() => {
+    if (onChangeText) {
+      onChangeText('');
+    }
+  }, [onChangeText]);
+
+  // 使用 useCallback 包装 onChangeText 以确保引用稳定
+  const handleChangeText = useCallback((text: string) => {
+    if (onChangeText) {
+      onChangeText(text);
+    }
+  }, [onChangeText]);
+
   return (
     <View style={styles.container}>
       <View style={styles.searchInputContainer}>
@@ -27,11 +45,22 @@ export function SearchRow({
           placeholder={placeholder}
           placeholderTextColor={colors.textMuted}
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={handleChangeText}
           editable={true}
           autoCorrect={false}
           autoCapitalize="none"
+          returnKeyType="search"
         />
+        {hasValue && (
+          <TouchableOpacity
+            onPress={handleClear}
+            style={styles.clearButton}
+            activeOpacity={0.7}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close-circle" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
       </View>
       <TouchableOpacity style={styles.filterButton} onPress={onFilterPress} activeOpacity={0.7}>
         <Ionicons name="options-outline" size={18} color={colors.text} />
@@ -39,7 +68,7 @@ export function SearchRow({
       </TouchableOpacity>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {
@@ -66,6 +95,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     color: colors.text,
     paddingVertical: spacing.md,
+    paddingRight: spacing.xs, // 為清除按鈕留空間
+  },
+  clearButton: {
+    padding: spacing.xs,
+    marginLeft: spacing.xs,
   },
   filterButton: {
     minWidth: 80,

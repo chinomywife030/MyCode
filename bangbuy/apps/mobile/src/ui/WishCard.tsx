@@ -1,7 +1,9 @@
 import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
-import { Image } from 'expo-image';
+import { Image as ExpoImage } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useState } from 'react';
 import { colors, spacing, radius, fontSize, fontWeight, shadows } from '@/src/theme/tokens';
-import { PeekImageCarousel } from '@/src/components/PeekImageCarousel';
+import { CountryChip } from '@/src/components/CountryChip';
 
 interface WishCardProps {
   id: string;
@@ -15,18 +17,16 @@ interface WishCardProps {
   };
   status?: string;
   onPress: () => void;
-  onMessagePress?: () => void;
+  onMessagePress: () => void;
 }
 
 /**
- * Wish 卡片：符合 Marketplace Feed 样式
- * - 图片轮播（固定高度 240px）
- * - 左上角国家 badge
- * - 用户信息（头像、名称、副标）
- * - 状态 badge
- * - 标题（最多2行）
- * - 价格显示
- * - 两个 CTA 按钮
+ * Request Card - Final Design Spec
+ * 
+ * Structure (Top to Bottom):
+ * A. Image Area (1:1 or 4:3): Country Chip (top-left), Heart Icon (top-right)
+ * B. Text Content: Title (2 lines), Sub-info (UserName · Status), Price (Orange)
+ * C. CTA Button: Full width, 44-48px height, Orange background, Dynamic text
  */
 export function WishCard({ 
   id, 
@@ -36,301 +36,200 @@ export function WishCard({
   budget,
   buyer,
   status,
-  onPress, 
-  onMessagePress 
+  isSellingProduct = false, // ✅ 默认为 Buying Request (Wish)
+  onPress,
+  onMessagePress
 }: WishCardProps) {
+  const [isLiked, setIsLiked] = useState(false);
 
-  const getStatusText = (status?: string) => {
-    switch (status) {
-      case 'in_progress': return '進行中';
-      case 'done': return '已完成';
-      default: return '待處理';
-    }
+  const handleLikePress = (e: any) => {
+    e.stopPropagation?.();
+    setIsLiked(!isLiked);
+    // TODO: 实现收藏功能
   };
 
-  const getStatusStyle = (status?: string) => {
-    switch (status) {
-      case 'in_progress': return { backgroundColor: '#DBEAFE', borderColor: '#BFDBFE', color: '#1E40AF' };
-      case 'done': return { backgroundColor: '#FED7AA', borderColor: '#FDBA74', color: '#9A3412' };
-      default: return { backgroundColor: '#F3F4F6', borderColor: '#E5E7EB', color: '#4B5563' };
-    }
+  const handleButtonPress = (e: any) => {
+    e.stopPropagation?.();
+    onMessagePress();
   };
 
-  const statusStyle = getStatusStyle(status);
+  // 格式化状态文本
+  const statusText = status === 'open' ? '需求中' : status || '需求中';
+  const userName = buyer?.name || '使用者';
+  const subInfo = `${userName} · ${statusText}`;
+
+  // 格式化价格
+  const priceText = budget && budget > 0 
+    ? `預估 NT$ ${budget.toLocaleString()}` 
+    : '預估 NT$ 0';
+
+  // 第一张图片或占位符
+  const firstImage = images?.[0];
+
+  // ========== DEBUG 標記：確認 WishCard 為最外層 ==========
+  console.log('[WishCard] Rendering with new UI structure (no wrapper)', { id, title });
 
   return (
-    <TouchableOpacity 
-      style={styles.card} 
-      onPress={onPress} 
-      activeOpacity={0.95}
-    >
-      {/* 图片区域 - Peek Carousel，固定 4:3 比例 */}
-      <View style={styles.imageContainer} pointerEvents="box-none">
-        {images?.length ? (
-          <PeekImageCarousel images={images} aspectRatio={4/3} peek={32} gap={10} />
+    <View style={styles.card}>
+      {/* A. Image Area (Hero) - 1:1 Square */}
+      <TouchableOpacity 
+        style={styles.imageContainer}
+        onPress={onPress}
+        activeOpacity={0.9}
+      >
+        {firstImage ? (
+          <ExpoImage
+            source={{ uri: firstImage }}
+            style={styles.image}
+            contentFit="cover"
+            transition={200}
+          />
         ) : (
-          <View style={{ width: "100%", aspectRatio: 4/3, borderRadius: 16, backgroundColor: "#F2F4F7" }} />
+          <View style={styles.imagePlaceholder}>
+            <Ionicons name="image-outline" size={32} color={colors.textLight} />
+          </View>
         )}
 
-        {/* 左上角国家 badge */}
+        {/* Top-Left: Country Chip */}
         {country && (
-          <View style={styles.countryBadge} pointerEvents="none">
-            <Text style={styles.countryEmoji}>
-              {country === 'JP' ? '🇯🇵' : country === 'KR' ? '🇰🇷' : '🌍'}
-            </Text>
-            <Text style={styles.countryText}>{country}</Text>
+          <View style={styles.countryChipContainer}>
+            <CountryChip countryCode={country} size="sm" />
           </View>
         )}
-      </View>
 
-      {/* 内容区域 */}
+        {/* Top-Right: Heart Icon */}
+        <TouchableOpacity
+          style={styles.heartButton}
+          onPress={handleLikePress}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={isLiked ? 'heart' : 'heart-outline'}
+            size={20}
+            color={isLiked ? '#EF4444' : '#FFFFFF'}
+          />
+        </TouchableOpacity>
+      </TouchableOpacity>
+
+      {/* B. Text Content (Padding Area) */}
       <View style={styles.content}>
-        {/* 用户信息行 */}
-        <View style={styles.userRow}>
-          <View style={styles.userInfo}>
-            <View style={styles.avatarContainer}>
-              {buyer?.avatarUrl ? (
-                <Image
-                  source={{ uri: buyer.avatarUrl }}
-                  style={styles.avatar}
-                  contentFit="cover"
-                />
-              ) : (
-                <View style={styles.avatarPlaceholder}>
-                  <Text style={styles.avatarText}>
-                    {buyer?.name?.[0] || 'U'}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.userTextContainer}>
-              <Text style={styles.userName} numberOfLines={1}>
-                {buyer?.name || '使用者'}
-              </Text>
-              <Text style={styles.userSubtitle}>需要幫助</Text>
-            </View>
-          </View>
-          {/* 状态 badge */}
-          <View style={[styles.statusBadge, { backgroundColor: statusStyle.backgroundColor, borderColor: statusStyle.borderColor }]}>
-            <Text style={[styles.statusText, { color: statusStyle.color }]}>
-              {getStatusText(status)}
-            </Text>
-          </View>
-        </View>
-
-        {/* 标题 - 最多2行 */}
+        {/* Title: Bold, Black, Max 2 lines */}
         <Text style={styles.title} numberOfLines={2}>
           {title}
         </Text>
 
-        {/* 价格 */}
-        <View style={styles.priceRow}>
-          <Text style={styles.priceLabel}>NT$</Text>
-          <Text style={styles.priceValue}>
-            {budget ? budget.toLocaleString() : '0'}
-          </Text>
-        </View>
+        {/* Sub-info: Small, Grey text - Format: {UserName} · {Status} */}
+        <Text style={styles.subInfo} numberOfLines={1}>
+          {subInfo}
+        </Text>
 
-        {/* CTA 按钮区域 */}
-        <View style={styles.ctaContainer}>
-          {/* Primary 按钮：我要接单报价 */}
-          <TouchableOpacity
-            style={styles.primaryButton}
-            onPress={(e) => {
-              e.stopPropagation?.();
-              onPress();
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.primaryButtonText}>我要接單報價</Text>
-          </TouchableOpacity>
-
-          {/* Secondary 按钮：先私讯询问 */}
-          {onMessagePress && (
-            <TouchableOpacity
-              style={styles.secondaryButton}
-              onPress={(e) => {
-                e.stopPropagation?.();
-                onMessagePress();
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.secondaryButtonText}>先私訊詢問</Text>
-            </TouchableOpacity>
-          )}
-        </View>
+        {/* Price: Distinct Orange color - Format: 預估 NT$ {price} */}
+        <Text style={styles.price}>
+          {priceText}
+        </Text>
       </View>
-    </TouchableOpacity>
+
+      {/* C. CTA Button (Bottom Anchor) */}
+      <TouchableOpacity
+        style={styles.ctaButton}
+        onPress={handleButtonPress}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.ctaButtonText}>
+          {isSellingProduct ? '私訊代購' : '聯絡委託人'}
+        </Text>
+      </TouchableOpacity>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    width: '100%',
     backgroundColor: '#FFFFFF',
-    borderRadius: 16, // rounded-2xl
+    borderRadius: 12,
     overflow: 'hidden',
-    marginBottom: spacing.lg,
     borderWidth: 1,
-    borderColor: '#E5E7EB', // 淡边框
-    ...shadows.sm,
+    borderColor: '#F0F0F0',
+    // ✅ 新 UI 結構：卡片陰影（確保為最外層）
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
+  // A. Image Area
   imageContainer: {
     width: '100%',
+    aspectRatio: 1, // 1:1 Square
     position: 'relative',
     backgroundColor: '#F3F4F6',
+    overflow: 'hidden',
+  },
+  image: {
+    width: '100%',
+    height: '100%',
   },
   imagePlaceholder: {
     width: '100%',
-    aspectRatio: 4 / 3,
+    height: '100%',
     backgroundColor: '#F3F4F6',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 16,
   },
-  placeholderText: {
-    fontSize: 48,
-    opacity: 0.3,
-  },
-  countryBadge: {
+  countryChipContainer: {
     position: 'absolute',
-    top: 12,
-    left: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20, // 胶囊样式
+    top: 8,
+    left: 8,
     zIndex: 10,
-    ...shadows.sm,
   },
-  countryEmoji: {
-    fontSize: 16,
-  },
-  countryText: {
-    fontSize: 11,
-    fontWeight: fontWeight.bold,
-    color: '#EA580C', // 橘色
-  },
-  content: {
-    padding: spacing.lg,
-  },
-  userRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  heartButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  userInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    marginRight: spacing.sm,
-  },
-  avatarContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: spacing.sm,
-    overflow: 'hidden',
-    backgroundColor: '#E5E7EB',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
-  },
-  avatarPlaceholder: {
-    width: '100%',
-    height: '100%',
-    backgroundColor: '#E5E7EB',
     justifyContent: 'center',
-    alignItems: 'center',
+    zIndex: 10,
+    // No background or semi-transparent
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
-  avatarText: {
-    fontSize: 14,
-    fontWeight: fontWeight.medium,
-    color: '#6B7280',
-  },
-  userTextContainer: {
-    flex: 1,
-  },
-  userName: {
-    fontSize: 14,
-    fontWeight: fontWeight.medium,
-    color: '#374151',
-    marginBottom: 2,
-  },
-  userSubtitle: {
-    fontSize: 12,
-    color: '#6B7280',
-    fontWeight: fontWeight.normal,
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: fontWeight.medium,
+  // B. Text Content
+  content: {
+    padding: spacing.md,
+    paddingBottom: spacing.sm,
   },
   title: {
-    fontSize: 16,
+    fontSize: fontSize.base,
     fontWeight: fontWeight.bold,
-    color: '#111827',
-    marginBottom: spacing.md,
-    lineHeight: 22,
-    minHeight: 44, // 确保2行高度
+    color: '#000000', // Black
+    marginBottom: spacing.xs,
+    lineHeight: 20,
+    minHeight: 40, // Ensure 2 lines height
   },
-  priceRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 4,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: '#F3F4F6',
-    marginBottom: spacing.md,
+  subInfo: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted, // Grey
+    marginBottom: spacing.xs,
   },
-  priceLabel: {
-    fontSize: 14,
-    fontWeight: fontWeight.medium,
-    color: '#6B7280',
-  },
-  priceValue: {
-    fontSize: 24,
-    fontWeight: fontWeight.bold,
-    color: '#EA580C', // 橘色
-  },
-  ctaContainer: {
-    gap: spacing.sm,
-  },
-  primaryButton: {
-    backgroundColor: '#EA580C', // 橘色
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryButtonText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: fontWeight.bold,
-  },
-  secondaryButton: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 2,
-    borderColor: '#EA580C',
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryButtonText: {
-    color: '#EA580C',
-    fontSize: 14,
+  price: {
+    fontSize: fontSize.base,
     fontWeight: fontWeight.semibold,
+    color: colors.brandOrange, // Distinct Orange
+  },
+  // C. CTA Button
+  ctaButton: {
+    width: '100%',
+    height: 44, // Fixed 44px (Touch target friendly)
+    backgroundColor: colors.brandOrange, // Brand Orange (Solid)
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xs,
+  },
+  ctaButtonText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.bold,
+    color: '#FFFFFF', // White
   },
 });

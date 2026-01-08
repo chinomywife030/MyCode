@@ -364,6 +364,11 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
 
 /**
  * 取得或建立對話
+ * 
+ * 嚴格的「一對一」規則：
+ * - 只使用 User A + User B 作為唯一鍵
+ * - 不使用 sourceType/sourceId 創建獨立聊天室
+ * - 同兩個用戶之間永遠只有一個對話
  */
 export async function getOrCreateConversation(
   params: GetOrCreateConversationParams
@@ -371,35 +376,100 @@ export async function getOrCreateConversation(
   const supabase = getSupabaseClient();
   const { targetUserId, sourceType = 'direct', sourceId, sourceTitle } = params;
 
-  try {
-    // 實際 RPC 使用 p_target（不是 p_target_user_id）
-    const { data, error } = await supabase.rpc('get_or_create_conversation', {
-      p_target: targetUserId,
-      p_source_type: sourceType,
-      p_source_id: sourceId || null,
-      p_source_title: sourceTitle || null,
-    });
+  // 1. 獲取當前用戶
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    console.error('[core/getOrCreateConversation] Auth error:', authError);
+    return { success: false, error: '未登入，無法建立對話' };
+  }
+  const currentUserId = user.id;
 
-    if (error) {
-      console.error('[core/getOrCreateConversation] Error:', error);
-      return { success: false, error: error.message || '建立對話失敗' };
+  // 2. 驗證
+  if (!targetUserId) {
+    return { success: false, error: '目標用戶 ID 不能為空' };
+  }
+  if (targetUserId === currentUserId) {
+    return { success: false, error: '無法與自己建立對話' };
+  }
+
+  // 3. 計算穩定的 user pair（確保順序一致）
+  const lowId = currentUserId < targetUserId ? currentUserId : targetUserId;
+  const highId = currentUserId < targetUserId ? targetUserId : currentUserId;
+
+  try {
+    // 4. 查找現有對話（只看 user pair，忽略 source_type/source_id）
+    const { data: existingConv, error: findError } = await supabase
+      .from('conversations')
+      .select('id')
+      .or(`and(user1_id.eq.${currentUserId},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${currentUserId})`)
+      .limit(1)
+      .maybeSingle();
+
+    if (findError) {
+      console.error('[core/getOrCreateConversation] Find error:', findError);
+      // 不拋錯，繼續嘗試創建
     }
 
-    // RPC 返回的是 table format
-    const result = Array.isArray(data) ? data[0] : data;
-
-    if (result?.error_code) {
+    // 5. 如果找到現有對話，直接返回
+    if (existingConv?.id) {
+      console.log('[core/getOrCreateConversation] Found existing conversation:', existingConv.id);
       return {
-        success: false,
-        error: result.error_message || '建立對話失敗',
-        errorCode: result.error_code,
+        success: true,
+        conversationId: existingConv.id,
+        isNew: false,
       };
     }
 
+    // 6. 創建新對話
+    console.log('[core/getOrCreateConversation] Creating new conversation...');
+    const { data: newConv, error: insertError } = await supabase
+      .from('conversations')
+      .insert({
+        user1_id: currentUserId,
+        user2_id: targetUserId,
+        user_low_id: lowId,
+        user_high_id: highId,
+        source_type: sourceType || 'direct',
+        source_id: sourceId || null,
+        source_title: sourceTitle || null,
+        last_message_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (insertError) {
+      // 如果是唯一約束衝突（對話已存在），重新查詢
+      if (insertError.code === '23505') {
+        console.log('[core/getOrCreateConversation] Conflict, re-fetching...');
+        const { data: refetchedConv } = await supabase
+          .from('conversations')
+          .select('id')
+          .or(`and(user1_id.eq.${currentUserId},user2_id.eq.${targetUserId}),and(user1_id.eq.${targetUserId},user2_id.eq.${currentUserId})`)
+          .limit(1)
+          .single();
+
+        if (refetchedConv?.id) {
+          return {
+            success: true,
+            conversationId: refetchedConv.id,
+            isNew: false,
+          };
+        }
+      }
+      
+      console.error('[core/getOrCreateConversation] Insert error:', insertError);
+      return { success: false, error: insertError.message || '建立對話失敗' };
+    }
+
+    if (!newConv?.id) {
+      return { success: false, error: '建立對話失敗：未返回對話 ID' };
+    }
+
+    console.log('[core/getOrCreateConversation] Created new conversation:', newConv.id);
     return {
       success: true,
-      conversationId: result?.conversation_id,
-      isNew: result?.is_new || false,
+      conversationId: newConv.id,
+      isNew: true,
     };
   } catch (error: any) {
     console.error('[core/getOrCreateConversation] Exception:', error);

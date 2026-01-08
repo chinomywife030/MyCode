@@ -12,29 +12,92 @@ import type { Wish, CreateWishParams, CreateWishResult, WishStatus } from '../ty
 // ============================================
 
 /**
- * 獲取需求列表
+ * 獲取需求列表（支援搜索和篩選）
  */
 export async function getWishes(options?: {
-  status?: WishStatus;
+  status?: WishStatus | 'all';
   limit?: number;
   keyword?: string;
+  country?: string;
+  category?: string;
+  sortBy?: 'newest' | 'price_low' | 'price_high';
+  minPrice?: number;
+  maxPrice?: number;
+  isUrgent?: boolean;
 }): Promise<Wish[]> {
   const supabase = getSupabaseClient();
-  const { status = 'open', limit = 50, keyword } = options || {};
+  const {
+    status,
+    limit = 50,
+    keyword,
+    country,
+    category,
+    sortBy = 'newest',
+    minPrice,
+    maxPrice,
+    isUrgent,
+  } = options || {};
 
   try {
     let query = supabase
       .from('wish_requests')
       .select(`
-        id, title, target_country, images, created_at, status, buyer_id,
-        budget, price, commission,
+        id, title, description, target_country, images, created_at, status, buyer_id,
+        budget, price, commission, category, is_urgent,
         profiles:buyer_id (name, avatar_url)
       `)
-      .order('created_at', { ascending: false })
       .limit(limit);
 
-    if (status) {
+    // 狀態篩選（預設為 'open'，除非明確指定 'all' 或其他狀態）
+    if (status && status !== 'all') {
       query = query.eq('status', status);
+    } else if (!status) {
+      // 如果沒有指定 status，預設只顯示 'open'
+      query = query.eq('status', 'open');
+    }
+
+    // 國家篩選
+    if (country) {
+      query = query.eq('target_country', country);
+    }
+
+    // 分類篩選
+    if (category) {
+      query = query.eq('category', category);
+    }
+
+    // 搜索（使用 ilike 在 title 和 description 上）
+    if (keyword && keyword.trim()) {
+      query = query.or(`title.ilike.%${keyword}%,description.ilike.%${keyword}%`);
+    }
+
+    // 價格範圍篩選
+    if (minPrice !== undefined && minPrice > 0) {
+      // 使用 budget 或 price + commission 的總和進行篩選
+      // 注意：這裡假設 budget 是總價，如果沒有 budget 則需要計算 price + commission
+      query = query.gte('budget', minPrice);
+    }
+    if (maxPrice !== undefined && maxPrice > 0) {
+      query = query.lte('budget', maxPrice);
+    }
+
+    // 緊急狀態篩選
+    if (isUrgent === true) {
+      query = query.eq('is_urgent', true);
+    }
+
+    // 排序
+    switch (sortBy) {
+      case 'price_low':
+        query = query.order('budget', { ascending: true });
+        break;
+      case 'price_high':
+        query = query.order('budget', { ascending: false });
+        break;
+      case 'newest':
+      default:
+        query = query.order('created_at', { ascending: false });
+        break;
     }
 
     const { data, error } = await query;
@@ -44,13 +107,15 @@ export async function getWishes(options?: {
       throw new Error(`載入失敗：${error.message || '無法連接到伺服器'}`);
     }
 
-    let wishes: Wish[] = (data || []).map((item: any) => {
+    const wishes: Wish[] = (data || []).map((item: any) => {
       // 處理 profiles join：可能為單一對象或數組（一對一關係通常是單一對象）
       const profiles = Array.isArray(item.profiles) ? item.profiles[0] : item.profiles;
       return {
         id: item.id,
         title: item.title || '',
+        description: item.description || undefined,
         targetCountry: item.target_country || undefined,
+        category: item.category || undefined,
         images: Array.isArray(item.images) ? item.images : undefined,
         status: item.status || undefined,
         buyerId: item.buyer_id || undefined,
@@ -64,14 +129,6 @@ export async function getWishes(options?: {
         } : undefined,
       };
     });
-
-    // Client-side 關鍵字過濾
-    if (keyword && keyword.trim()) {
-      const lowerKeyword = keyword.toLowerCase();
-      wishes = wishes.filter((wish) =>
-        wish.title.toLowerCase().includes(lowerKeyword)
-      );
-    }
 
     return wishes;
   } catch (error) {
@@ -168,19 +225,28 @@ export async function createWish(params: CreateWishParams): Promise<CreateWishRe
     // 計算預估總價
     const estimatedTotal = (params.price || 0) + (params.commission || 0);
 
+    // 確定 budget 值：優先使用 estimatedTotal，否則使用 params.budget，最後默認為 0（不能為 null）
+    let finalBudget = 0;
+    if (estimatedTotal > 0) {
+      finalBudget = estimatedTotal;
+    } else if (params.budget !== undefined && params.budget !== null && params.budget > 0) {
+      finalBudget = params.budget;
+    }
+
     // 創建 wish
     const { data, error } = await supabase
       .from('wish_requests')
       .insert([{
         title: params.title.trim(),
         description: params.description?.trim() || null,
-        budget: estimatedTotal > 0 ? estimatedTotal : params.budget || null,
+        budget: finalBudget, // ✅ 確保 budget 永遠不是 null
         price: params.price || null,
         commission: params.commission || null,
         product_url: params.productUrl?.trim() || null,
         target_country: params.targetCountry || 'JP',
         category: params.category || 'other',
         deadline: params.deadline || null,
+        images: [], // ✅ 默认空数组（Quick Wish 功能需要）
         buyer_id: user.id,
         status: 'open',
       }])

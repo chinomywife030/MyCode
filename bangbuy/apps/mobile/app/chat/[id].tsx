@@ -1,14 +1,16 @@
-import { StyleSheet, View, Text, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Alert } from 'react-native';
-import { useEffect, useState, useRef } from 'react';
-import { useLocalSearchParams, router } from 'expo-router';
-import { Image } from 'expo-image';
-import { Ionicons } from '@expo/vector-icons';
+import { StyleSheet, View, Text, FlatList, KeyboardAvoidingView, Platform, Alert, SafeAreaView, TouchableOpacity } from 'react-native';
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { Screen, TopBar } from '@/src/ui';
-import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/tokens';
-import { getMessages, sendMessage, markAsRead, getConversations, type Message } from '@/src/lib/messaging';
+import { Screen } from '@/src/ui';
+import { colors, spacing } from '@/src/theme/tokens';
+import { getMessages, sendMessage, markAsRead, type Message } from '@/src/lib/messaging';
 import { getCurrentUser } from '@/src/lib/auth';
 import { supabase } from '@/src/lib/supabase';
+import { ChatHeader } from '@/src/components/chat/ChatHeader';
+import { SystemNoticeCard } from '@/src/components/chat/SystemNoticeCard';
+import { MessageBubble } from '@/src/components/chat/MessageBubble';
+import { ChatInputBar } from '@/src/components/chat/ChatInputBar';
 
 /**
  * 檢查字串是否為合法的 UUID 格式
@@ -32,6 +34,8 @@ export default function ChatScreen() {
   const [user, setUser] = useState<any>(null);
   const [otherUser, setOtherUser] = useState<{ id: string; name: string; avatar?: string } | null>(null);
   const flatListRef = useRef<FlatList>(null);
+  const [isNearBottom, setIsNearBottom] = useState(true);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
 
   useEffect(() => {
     if (conversationId) {
@@ -47,14 +51,25 @@ export default function ChatScreen() {
     }
   }, [conversationId]);
 
+  // 智能滚动：只在用户接近底部时自动滚动
   useEffect(() => {
-    if (messages.length > 0 && flatListRef.current) {
-      // 滾動到底部
+    if (messages.length > 0 && flatListRef.current && shouldAutoScroll) {
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 100);
     }
-  }, [messages]);
+  }, [messages.length, shouldAutoScroll]);
+
+  // 进入聊天室时滚动到底部
+  useEffect(() => {
+    if (messages.length > 0 && !loading && flatListRef.current) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+        setIsNearBottom(true);
+        setShouldAutoScroll(true);
+      }, 300);
+    }
+  }, [loading]);
 
   const loadUser = async () => {
     const currentUser = await getCurrentUser();
@@ -133,7 +148,6 @@ export default function ChatScreen() {
       });
 
       if (!result.success) {
-        // 【必做 1：顯示完整錯誤訊息】
         const errorMsg = result.error || '無法發送訊息';
         console.error('[ChatScreen] handleSend failed:', {
           error: result.error,
@@ -145,9 +159,12 @@ export default function ChatScreen() {
       } else {
         // 重新載入訊息列表
         await fetchMessages();
+        // 發送成功後自動滾動到底部
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 200);
       }
     } catch (err: any) {
-      // 【必做 1：顯示完整錯誤訊息】
       console.error('[ChatScreen] handleSend exception:', {
         message: err.message,
         stack: err.stack,
@@ -160,7 +177,25 @@ export default function ChatScreen() {
     }
   };
 
-  const formatTime = (timeString: string) => {
+  // 檢查是否接近底部
+  const handleScroll = useCallback((event: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
+    const paddingToBottom = 120;
+    const isNear = layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom;
+    setIsNearBottom(isNear);
+    setShouldAutoScroll(isNear);
+  }, []);
+
+  // 當列表內容大小改變時，如果接近底部則自動滾動
+  const handleContentSizeChange = useCallback(() => {
+    if (isNearBottom && flatListRef.current) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [isNearBottom]);
+
+  const formatTime = useCallback((timeString: string) => {
     try {
       const date = new Date(timeString);
       const now = new Date();
@@ -174,41 +209,52 @@ export default function ChatScreen() {
     } catch {
       return '';
     }
-  };
+  }, []);
 
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isMe = item.senderId === user?.id;
+  // 判斷是否顯示時間（不同人、間隔較久、或第一則）
+  const shouldShowTime = useCallback((current: Message, index: number, prev?: Message) => {
+    if (index === 0) return true;
+    if (!prev) return true;
     
+    // 不同人
+    if (current.senderId !== prev.senderId) return true;
+    
+    // 間隔超過 5 分鐘
+    const currentTime = new Date(current.createdAt).getTime();
+    const prevTime = new Date(prev.createdAt).getTime();
+    const diffMins = (currentTime - prevTime) / 60000;
+    if (diffMins > 5) return true;
+    
+    return false;
+  }, []);
+
+  const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
+    const isMine = item.senderId === user?.id;
+    const prevMessage = index > 0 ? messages[index - 1] : undefined;
+    const showTime = shouldShowTime(item, index, prevMessage);
+    
+    // 計算間距：同一人連續訊息間距較小
+    const isSameSender = prevMessage && prevMessage.senderId === item.senderId;
+    const marginTop = isSameSender ? 4 : 12;
+
     return (
-      <View style={[styles.messageRow, isMe && styles.messageRowMe]}>
-        {!isMe && (
-          <View style={styles.avatarContainer}>
-            {item.senderAvatar ? (
-              <Image source={{ uri: item.senderAvatar }} style={styles.avatar} contentFit="cover" />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarText}>
-                  {item.senderName?.charAt(0).toUpperCase() || '?'}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
-        <View style={[styles.messageBubble, isMe ? styles.messageBubbleMe : styles.messageBubbleOther]}>
-          {!isMe && <Text style={styles.senderName}>{item.senderName || '匿名用戶'}</Text>}
-          <Text style={[styles.messageText, isMe && styles.messageTextMe]}>{item.content}</Text>
-          <Text style={[styles.messageTime, isMe && styles.messageTimeMe]}>
-            {formatTime(item.createdAt)}
-          </Text>
-        </View>
+      <View style={[styles.messageWrapper, { marginTop }]}>
+        <MessageBubble
+          message={item}
+          isMine={isMine}
+          showTime={showTime}
+          formatTime={formatTime}
+        />
       </View>
     );
-  };
+  }, [user?.id, messages, shouldShowTime, formatTime]);
 
   if (loading && messages.length === 0) {
     return (
-      <Screen>
-        <TopBar title="聊天" showBackButton />
+      <Screen style={styles.screen}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <ChatHeader otherUserName="聊天" />
+        </SafeAreaView>
         <View style={styles.centerContainer}>
           <Text style={styles.loadingText}>載入中...</Text>
         </View>
@@ -218,8 +264,10 @@ export default function ChatScreen() {
 
   if (error && messages.length === 0) {
     return (
-      <Screen>
-        <TopBar title="聊天" showBackButton />
+      <Screen style={styles.screen}>
+        <SafeAreaView style={styles.safeArea} edges={['top']}>
+          <ChatHeader otherUserName="聊天" />
+        </SafeAreaView>
         <View style={styles.centerContainer}>
           <Text style={styles.errorText}>⚠️ {error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchMessages}>
@@ -231,15 +279,18 @@ export default function ChatScreen() {
   }
 
   return (
-    <Screen>
-      <TopBar
-        title={otherUser?.name || '聊天'}
-        showBackButton
-      />
+    <Screen style={styles.screen}>
+      <SafeAreaView style={styles.safeArea} edges={['top']}>
+        <ChatHeader
+          otherUserName={otherUser?.name || '對方'}
+          otherUserAvatar={otherUser?.avatar}
+        />
+      </SafeAreaView>
+      
       <KeyboardAvoidingView
         style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
         <FlatList
           ref={flatListRef}
@@ -248,43 +299,37 @@ export default function ChatScreen() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.messagesList}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => {
-            flatListRef.current?.scrollToEnd({ animated: true });
-          }}
+          onScroll={handleScroll}
+          scrollEventThrottle={400}
+          onContentSizeChange={handleContentSizeChange}
+          ListHeaderComponent={<SystemNoticeCard />}
         />
 
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="輸入訊息..."
-            placeholderTextColor={colors.textMuted}
+        <SafeAreaView edges={['bottom']}>
+          <ChatInputBar
             value={inputText}
             onChangeText={setInputText}
-            multiline
-            maxLength={1000}
-            editable={!sending}
+            onSend={handleSend}
+            disabled={!conversationId}
+            sending={sending}
           />
-          <TouchableOpacity
-            style={[styles.sendButton, (!inputText.trim() || sending) && styles.sendButtonDisabled]}
-            onPress={handleSend}
-            disabled={!inputText.trim() || sending}
-            activeOpacity={0.7}
-          >
-            {sending ? (
-              <Text style={styles.sendButtonText}>發送中...</Text>
-            ) : (
-              <Ionicons name="send" size={20} color="#ffffff" />
-            )}
-          </TouchableOpacity>
-        </View>
+        </SafeAreaView>
       </KeyboardAvoidingView>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  safeArea: {
+    backgroundColor: '#ffffff',
+  },
   container: {
     flex: 1,
+    backgroundColor: '#F9FAFB',
   },
   centerContainer: {
     flex: 1,
@@ -293,11 +338,11 @@ const styles = StyleSheet.create({
     padding: spacing['2xl'],
   },
   loadingText: {
-    fontSize: fontSize.base,
+    fontSize: 16,
     color: colors.textMuted,
   },
   errorText: {
-    fontSize: fontSize.base,
+    fontSize: 16,
     color: colors.error,
     marginBottom: spacing.lg,
     textAlign: 'center',
@@ -306,118 +351,20 @@ const styles = StyleSheet.create({
     backgroundColor: colors.brandOrange,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
-    borderRadius: radius.md,
+    borderRadius: 8,
   },
   retryButtonText: {
     color: '#ffffff',
-    fontSize: fontSize.base,
-    fontWeight: fontWeight.semibold,
+    fontSize: 16,
+    fontWeight: '600',
   },
   messagesList: {
-    padding: spacing.md,
-    paddingBottom: spacing.lg,
-  },
-  messageRow: {
-    flexDirection: 'row',
-    marginBottom: spacing.md,
-    alignItems: 'flex-end',
-  },
-  messageRowMe: {
-    justifyContent: 'flex-end',
-  },
-  avatarContainer: {
-    marginRight: spacing.sm,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  avatarPlaceholder: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: colors.brandBlue,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: '#ffffff',
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.bold,
-  },
-  messageBubble: {
-    maxWidth: '75%',
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.md,
-    backgroundColor: colors.borderLight,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xl,
   },
-  messageBubbleMe: {
-    backgroundColor: colors.brandOrange,
-  },
-  messageBubbleOther: {
-    backgroundColor: colors.bgCard,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  senderName: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    marginBottom: spacing.xs,
-    fontWeight: fontWeight.medium,
-  },
-  messageText: {
-    fontSize: fontSize.base,
-    color: colors.text,
-    lineHeight: 20,
-  },
-  messageTextMe: {
-    color: '#ffffff',
-  },
-  messageTime: {
-    fontSize: fontSize.xs,
-    color: colors.textMuted,
-    marginTop: spacing.xs,
-  },
-  messageTimeMe: {
-    color: 'rgba(255, 255, 255, 0.8)',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.bgCard,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    alignItems: 'flex-end',
-  },
-  input: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 100,
-    backgroundColor: colors.bg,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: fontSize.base,
-    color: colors.text,
-    marginRight: spacing.sm,
-  },
-  sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.brandOrange,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  sendButtonDisabled: {
-    opacity: 0.5,
-  },
-  sendButtonText: {
-    color: '#ffffff',
-    fontSize: fontSize.sm,
+  messageWrapper: {
+    width: '100%',
   },
 });
 

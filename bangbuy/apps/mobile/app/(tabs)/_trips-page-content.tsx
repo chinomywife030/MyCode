@@ -1,19 +1,28 @@
 import { StyleSheet, FlatList, RefreshControl, View, Text, TouchableOpacity, Alert } from 'react-native';
-import { useEffect, useState } from 'react';
-import { router } from 'expo-router';
+import { useEffect, useState, useCallback } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
-import { getTrips, formatDateRange, type Trip } from '@/src/lib/trips';
+import { getTrips, getMoments, formatDateRange, type Trip, type TravelMoment } from '@/src/lib/trips';
 import { getCurrentUser } from '@/src/lib/auth';
 import { startChat } from '@/src/lib/chat';
 import { Screen, TopBar, HeroBanner, SearchRow, TripCard, StateView, FilterModal, type FilterOptions } from '@/src/ui';
+import { MomentCard } from '@/src/components/MomentCard';
 import { colors, spacing, fontSize, fontWeight } from '@/src/theme/tokens';
+
+// ============================================
+// Feed Item Union Type
+// ============================================
+
+type FeedItem = 
+  | (Trip & { type: 'trip' })
+  | (TravelMoment & { type: 'moment' });
 
 /**
  * 行程頁面內容組件
- * 原本的 TripsScreen 組件
+ * 混合 Feed：顯示 Trip Plans 和 Travel Moments
  */
 export function TripsPageContent() {
-  const [trips, setTrips] = useState<Trip[]>([]);
+  const [feedItems, setFeedItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,8 +40,36 @@ export function TripsPageContent() {
         setLoading(true);
       }
       setError(null);
-      const data = await getTrips();
-      setTrips(data);
+
+      // 並行獲取 trips 和 moments
+      const [tripsData, momentsData] = await Promise.all([
+        getTrips(),
+        getMoments(),
+      ]);
+
+      // 轉換並添加 type 標記
+      const tripsWithType: FeedItem[] = tripsData.map((trip) => ({
+        ...trip,
+        type: 'trip' as const,
+      }));
+
+      const momentsWithType: FeedItem[] = momentsData.map((moment) => ({
+        ...moment,
+        type: 'moment' as const,
+      }));
+
+      // 合併並按 created_at 降序排序（最新的在前）
+      const merged = [...tripsWithType, ...momentsWithType].sort((a, b) => {
+        const aTime = a.type === 'trip' 
+          ? (a.createdAt ? new Date(a.createdAt).getTime() : 0)
+          : new Date(a.created_at).getTime();
+        const bTime = b.type === 'trip'
+          ? (b.createdAt ? new Date(b.createdAt).getTime() : 0)
+          : new Date(b.created_at).getTime();
+        return bTime - aTime; // 降序
+      });
+
+      setFeedItems(merged);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '載入失敗：發生未知錯誤';
       setError(errorMessage);
@@ -47,6 +84,16 @@ export function TripsPageContent() {
     fetchTrips();
     loadCurrentUser();
   }, []);
+
+  // 當頁面獲得焦點時，刷新列表（從 Create Trip 返回時）
+  useFocusEffect(
+    useCallback(() => {
+      // 如果已經有 user，刷新列表以確保顯示最新資料
+      if (user?.id) {
+        fetchTrips(true);
+      }
+    }, [user?.id])
+  );
 
   const loadCurrentUser = async () => {
     const currentUser = await getCurrentUser();
@@ -91,23 +138,34 @@ export function TripsPageContent() {
     }
   };
 
-  // 過濾行程（根據搜尋關鍵字和篩選條件）
-  const filteredTrips = trips.filter((trip) => {
+  // 過濾 Feed Items（根據搜尋關鍵字和篩選條件）
+  const filteredItems = feedItems.filter((item) => {
     // 搜尋關鍵字過濾
     if (searchQuery.trim()) {
       const lowerQuery = searchQuery.toLowerCase();
-      const matchesSearch =
-        trip.destination.toLowerCase().includes(lowerQuery) ||
-        (trip.description && trip.description.toLowerCase().includes(lowerQuery)) ||
-        (trip.owner?.name && trip.owner.name.toLowerCase().includes(lowerQuery));
-      if (!matchesSearch) {
-        return false;
+      
+      if (item.type === 'trip') {
+        const matchesSearch =
+          item.destination.toLowerCase().includes(lowerQuery) ||
+          (item.description && item.description.toLowerCase().includes(lowerQuery)) ||
+          (item.owner?.name && item.owner.name.toLowerCase().includes(lowerQuery));
+        if (!matchesSearch) {
+          return false;
+        }
+      } else if (item.type === 'moment') {
+        const matchesSearch =
+          (item.description && item.description.toLowerCase().includes(lowerQuery)) ||
+          (item.location && item.location.toLowerCase().includes(lowerQuery)) ||
+          (item.profiles?.name && item.profiles.name.toLowerCase().includes(lowerQuery));
+        if (!matchesSearch) {
+          return false;
+        }
       }
     }
 
     // 國家篩選（如果 trip 有 destination 國家資訊）
     // 注意：目前 Trip 類型可能沒有 country 欄位，這裡先做 placeholder
-    // if (filters.country && trip.country !== filters.country) {
+    // if (filters.country && item.type === 'trip' && item.country !== filters.country) {
     //   return false;
     // }
 
@@ -144,27 +202,76 @@ export function TripsPageContent() {
     }
   };
 
-  const renderItem = ({ item }: { item: Trip }) => (
-    <TripCard
-      id={item.id}
-      destination={item.destination}
-      description={item.description}
-      dateRange={formatDateRange(item.startDate, item.endDate)}
-      ownerName={item.owner?.name}
-      ownerAvatar={item.owner?.avatarUrl}
-      onPress={() => handleTripPress(item.id)}
-      onMessagePress={() => handleMessagePress(item)}
-    />
-  );
+  const handleMomentChatPress = async (moment: TravelMoment) => {
+    if (messageLoading) return;
+
+    try {
+      setMessageLoading(moment.id);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      console.log('Navigate to chat', { momentId: moment.id, userId: moment.user_id });
+
+      // 使用 startChat 開啟對話
+      const result = await startChat(
+        moment.user_id,
+        'direct', // 直接對話
+        undefined,
+        moment.description || '旅行時刻'
+      );
+
+      if (!result.success) {
+        Alert.alert('錯誤', result.error || '無法開啟對話');
+      }
+    } catch (error: any) {
+      console.error('[TripsPageContent] handleMomentChatPress error:', error);
+      Alert.alert('錯誤', error.message || '開啟對話失敗');
+    } finally {
+      setMessageLoading(null);
+    }
+  };
+
+  const renderItem = ({ item }: { item: FeedItem }) => {
+    if (item.type === 'trip') {
+      return (
+        <TripCard
+          id={item.id}
+          destination={item.destination}
+          description={item.description}
+          dateRange={formatDateRange(item.startDate, item.endDate)}
+          ownerName={item.owner?.name}
+          ownerAvatar={item.owner?.avatarUrl}
+          onPress={() => handleTripPress(item.id)}
+          onMessagePress={() => handleMessagePress(item)}
+        />
+      );
+    } else {
+      // item.type === 'moment'
+      return (
+        <MomentCard
+          id={item.id}
+          description={item.description}
+          images={item.images}
+          location={item.location}
+          createdAt={item.created_at}
+          user={item.profiles ? {
+            id: item.profiles.id,
+            name: item.profiles.name,
+            avatarUrl: item.profiles.avatar_url,
+          } : undefined}
+          onChatPress={() => handleMomentChatPress(item)}
+        />
+      );
+    }
+  };
 
   const renderEmpty = () => {
     if (loading) {
-      return <StateView type="loading" message="載入行程中..." />;
+      return <StateView type="loading" message="載入中..." />;
     }
     if (error) {
       return <StateView type="error" message={error} onRetry={handleRetry} />;
     }
-    return <StateView type="empty" message="目前沒有行程" />;
+    return <StateView type="empty" message="目前沒有內容" />;
   };
 
   const renderHeader = () => (
@@ -173,7 +280,7 @@ export function TripsPageContent() {
         title="開始接單賺錢"
         subtitle="發布你的行程，讓需要的人直接私訊你"
         buttonText="發布行程"
-        onButtonPress={() => router.push('/create?type=trip')}
+        onButtonPress={() => router.push('/trip/create')}
         variant="blue"
       />
 
@@ -187,8 +294,8 @@ export function TripsPageContent() {
       <Text style={styles.hintText}>行程越清楚（城市/日期/可幫買品類）越容易成交</Text>
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>最新行程</Text>
-        <Text style={styles.sectionSubtitle}>即將出發的代購行程</Text>
+        <Text style={styles.sectionTitle}>動態 Feed</Text>
+        <Text style={styles.sectionSubtitle}>行程計劃與旅行時刻</Text>
       </View>
     </>
   );
@@ -202,11 +309,11 @@ export function TripsPageContent() {
       />
       
       <FlatList
-        data={filteredTrips}
+        data={filteredItems}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
         ListHeaderComponent={renderHeader}
-        contentContainerStyle={filteredTrips.length === 0 ? styles.emptyList : styles.list}
+        contentContainerStyle={filteredItems.length === 0 ? styles.emptyList : styles.list}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />

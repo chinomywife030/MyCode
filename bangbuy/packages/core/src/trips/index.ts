@@ -12,17 +12,18 @@ import type { Trip, CreateTripParams, CreateTripResult } from '../types';
 // ============================================
 
 /**
- * 獲取行程列表
+ * 獲取行程列表（支援搜索和篩選）
  */
 export async function getTrips(options?: {
   limit?: number;
   keyword?: string;
+  sortBy?: 'newest' | 'date_asc' | 'date_desc';
 }): Promise<Trip[]> {
   const supabase = getSupabaseClient();
-  const { limit = 50, keyword } = options || {};
+  const { limit = 50, keyword, sortBy = 'newest' } = options || {};
 
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('trips')
       .select(`
         id,
@@ -39,15 +40,35 @@ export async function getTrips(options?: {
           is_supporter
         )
       `)
-      .order('created_at', { ascending: false })
       .limit(limit);
+
+    // 搜索（使用 ilike 在 destination 和 description 上）
+    if (keyword && keyword.trim()) {
+      query = query.or(`destination.ilike.%${keyword}%,description.ilike.%${keyword}%`);
+    }
+
+    // 排序
+    switch (sortBy) {
+      case 'date_asc':
+        query = query.order('start_date', { ascending: true });
+        break;
+      case 'date_desc':
+        query = query.order('start_date', { ascending: false });
+        break;
+      case 'newest':
+      default:
+        query = query.order('created_at', { ascending: false });
+        break;
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('[core/getTrips] Error:', error);
       throw new Error(`載入失敗：${error.message || '無法連接到伺服器'}`);
     }
 
-    let trips: Trip[] = (data || []).map((item: any) => ({
+    const trips: Trip[] = (data || []).map((item: any) => ({
       id: item.id,
       shopperId: item.shopper_id,
       destination: item.destination || '',
@@ -62,16 +83,6 @@ export async function getTrips(options?: {
         isSupporter: item.profiles.is_supporter || false,
       } : undefined,
     }));
-
-    // Client-side 關鍵字過濾
-    if (keyword && keyword.trim()) {
-      const lowerKeyword = keyword.toLowerCase();
-      trips = trips.filter((trip) =>
-        trip.destination.toLowerCase().includes(lowerKeyword) ||
-        (trip.description && trip.description.toLowerCase().includes(lowerKeyword)) ||
-        (trip.owner?.name && trip.owner.name.toLowerCase().includes(lowerKeyword))
-      );
-    }
 
     return trips;
   } catch (error) {
@@ -156,6 +167,29 @@ export async function createTrip(params: CreateTripParams): Promise<CreateTripRe
   const supabase = getSupabaseClient();
 
   try {
+    // 驗證必填欄位
+    if (!params.destination || !params.destination.trim()) {
+      return { success: false, error: '目的地為必填欄位' };
+    }
+
+    if (!params.startDate) {
+      return { success: false, error: '開始日期為必填欄位' };
+    }
+
+    // 確保日期格式為 YYYY-MM-DD（移除時間部分，如果有的話）
+    const formatDate = (dateStr: string | undefined): string | null => {
+      if (!dateStr) return null;
+      // 如果已經是 YYYY-MM-DD 格式，直接返回
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        return dateStr;
+      }
+      // 如果是 ISO datetime，提取日期部分
+      return dateStr.split('T')[0];
+    };
+
+    const startDateFormatted = formatDate(params.startDate);
+    const endDateFormatted = formatDate(params.endDate);
+
     // 獲取當前用戶
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
@@ -180,14 +214,16 @@ export async function createTrip(params: CreateTripParams): Promise<CreateTripRe
     }, { onConflict: 'id' });
 
     // 創建 trip
+    // date 欄位必須有值，使用 start_date（開始日期）
     const { data, error } = await supabase
       .from('trips')
       .insert([{
         destination: params.destination.trim(),
+        date: startDateFormatted, // date NOT NULL，使用 start_date
+        start_date: startDateFormatted, // 同步寫入 start_date
+        end_date: endDateFormatted, // 同步寫入 end_date（可能為 null）
         description: params.description?.trim() || null,
-        start_date: params.startDate || null,
-        end_date: params.endDate || null,
-        shopper_id: user.id,
+        shopper_id: user.id, // 使用目前登入的 user.id
         shopper_name: shopperName,
       }])
       .select()

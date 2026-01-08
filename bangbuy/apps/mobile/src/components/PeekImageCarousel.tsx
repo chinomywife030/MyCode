@@ -31,7 +31,7 @@ export function PeekImageCarousel({
   const snapInterval = itemWidth + gap;
 
   return (
-    <View onLayout={onLayout} style={[styles.ratioBox, { aspectRatio }]}>
+    <View onLayout={onLayout} style={styles.ratioBox}>
       {containerWidth > 0 ? (
         <FlatList
           data={data}
@@ -44,7 +44,7 @@ export function PeekImageCarousel({
           decelerationRate="fast"
           disableIntervalMomentum
           renderItem={({ item }) => (
-            <View style={{ width: itemWidth }}>
+            <View style={{ width: itemWidth, height: '100%' }}>
               <Image
                 source={{ uri: item }}
                 style={styles.image}
@@ -64,6 +64,7 @@ export function PeekImageCarousel({
 const styles = StyleSheet.create({
   ratioBox: {
     width: "100%",
+    height: "100%", // ✅ 确保容器占据父容器的全部高度
     borderRadius: 16,
     overflow: "hidden",
     backgroundColor: "#F2F4F7",

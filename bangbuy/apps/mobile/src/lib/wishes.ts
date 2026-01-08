@@ -25,10 +25,21 @@ export type { Wish, CreateWishParams, CreateWishResult, WishStatus };
 
 /**
  * 從 Supabase 獲取所有 wishes（列表頁用）
+ * 支援搜索和篩選
  */
-export async function getWishes(keyword?: string): Promise<Wish[]> {
+export async function getWishes(options?: {
+  keyword?: string;
+  country?: string;
+  category?: string;
+  status?: WishStatus;
+  sortBy?: 'newest' | 'price_low' | 'price_high';
+  minPrice?: number;
+  maxPrice?: number;
+  isUrgent?: boolean;
+  limit?: number;
+}): Promise<Wish[]> {
   ensureCoreInitialized();
-  return coreGetWishes({ keyword });
+  return coreGetWishes(options);
 }
 
 /**

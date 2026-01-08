@@ -6,6 +6,11 @@ import { HapticTab } from '@/components/haptic-tab';
 import { colors } from '@/src/theme/tokens';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
+// 简单的 TabBarIcon 包装器
+function TabBarIcon({ name, color, size = 24 }: { name: keyof typeof Ionicons.glyphMap; color: string; size?: number }) {
+  return <Ionicons name={name} size={size} color={color} />;
+}
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
@@ -25,55 +30,48 @@ export default function TabLayout() {
           borderTopColor: colorScheme === 'dark' ? '#374151' : colors.border,
         },
       }}>
+      {/* 1. Home Tab */}
       <Tabs.Screen
         name="index"
         options={{
           title: '首頁',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size || 24} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
         }}
       />
+
+      {/* 2. Notifications Tab */}
       <Tabs.Screen
         name="notifications"
         options={{
           title: '通知',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="notifications-outline" size={size || 24} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <TabBarIcon name="notifications-outline" color={color} />,
         }}
       />
+
+      {/* 3. Messages Tab */}
       <Tabs.Screen
         name="messages"
         options={{
           title: '訊息',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="chatbubbles-outline" size={size || 24} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <TabBarIcon name="chatbubbles-outline" color={color} />,
         }}
       />
+
+      {/* 4. Profile Tab */}
       <Tabs.Screen
         name="profile"
         options={{
           title: '我的',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size || 24} color={color} />
-          ),
+          tabBarIcon: ({ color }) => <TabBarIcon name="person-outline" color={color} />,
         }}
       />
-      {/* 保留 wishes 和 trips 作為隱藏路由（不顯示在 tab bar） */}
-      <Tabs.Screen
-        name="wishes"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="trips"
-        options={{
-          href: null,
-        }}
-      />
+
+      {/* 🔴 CRITICAL: Explicitly HIDE everything else that might exist in the folder */}
+      <Tabs.Screen name="_trips-page-content" options={{ href: null }} />
+      <Tabs.Screen name="_wishes-page-content" options={{ href: null }} />
+      <Tabs.Screen name="create" options={{ href: null }} />
+      <Tabs.Screen name="trips" options={{ href: null }} />
+      <Tabs.Screen name="wishes" options={{ href: null }} />
     </Tabs>
   );
 }

@@ -16,7 +16,7 @@ import {
   TextInput,
   TouchableOpacity,
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, Card, Button, Input } from '@/src/ui';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/tokens';
@@ -26,12 +26,19 @@ import { uploadMultipleImages } from '@/src/lib/supabaseUpload';
 import { ImagePickerPreview } from '@/src/components/ImagePickerPreview';
 import { CountryPickerField } from '@/src/components/CountryPickerField';
 import { CategoryChips } from '@/src/components/CategoryChips';
-import { DatePickerField } from '@/src/components/DatePickerField';
+import { DateField } from '@/src/components/DateField';
 import { TagsInput } from '@/src/components/TagsInput';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 
 export default function CreateWishScreen() {
+  const params = useLocalSearchParams<{
+    prefill_title?: string;
+    prefill_country?: string;
+    prefill_city?: string;
+    prefill_image?: string;
+  }>();
+
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -50,7 +57,7 @@ export default function CreateWishScreen() {
   const [budgetCapNT, setBudgetCapNT] = useState('');
 
   // 表單狀態 - 期限與備註
-  const [dueDate, setDueDate] = useState<string | undefined>(undefined);
+  const [dueDate, setDueDate] = useState<Date | null>(null);
   const [isUrgent, setIsUrgent] = useState(false);
   const [notes, setNotes] = useState('');
   const [tags, setTags] = useState<string[]>([]);
@@ -61,6 +68,20 @@ export default function CreateWishScreen() {
   useEffect(() => {
     checkAuth();
   }, []);
+
+  // 處理預填充數據
+  useEffect(() => {
+    if (params.prefill_title) {
+      setTitle(params.prefill_title);
+    }
+    if (params.prefill_country) {
+      setTargetCountry(params.prefill_country);
+    }
+    if (params.prefill_image) {
+      setImages([params.prefill_image]);
+    }
+    // 注意：city 字段在 CreateWishScreen 中可能不存在，需要檢查是否有對應字段
+  }, [params]);
 
   const checkAuth = async () => {
     const currentUser = await getCurrentUser();
@@ -245,7 +266,7 @@ export default function CreateWishScreen() {
         productUrl.trim() || undefined,
         targetCountry,
         category,
-        dueDate // deadline
+        dueDate ? dueDate.toISOString().split('T')[0] : undefined // deadline (YYYY-MM-DD)
       );
 
       if (!result.success) {
@@ -504,11 +525,12 @@ export default function CreateWishScreen() {
 
             <View style={styles.deadlineRow}>
               <View style={styles.deadlineItem}>
-                <DatePickerField
+                <DateField
                   label="希望完成日期"
                   value={dueDate}
-                  onValueChange={setDueDate}
+                  onChange={setDueDate}
                   error={errors.dueDate}
+                  minimumDate={new Date()}
                   editable={!loading}
                 />
                 <Text style={styles.hint}>代購者需在此日期前完成購買</Text>

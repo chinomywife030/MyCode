@@ -9,6 +9,7 @@ import { colors, spacing, fontSize, fontWeight } from '@/src/theme/tokens';
 import { getCurrentProfile, updateDisplayName, uploadAvatarFromUri, updateAvatarUrl, type UserProfile } from '@/src/lib/profile';
 import { getCurrentUser } from '@/src/lib/auth';
 import { supabase } from '@/src/lib/supabase';
+import { normalizeImagesToJpg } from '@/src/utils/imageHelpers';
 
 export default function EditProfileScreen() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -102,12 +103,19 @@ export default function EditProfileScreen() {
         return;
       }
 
-      const imageUri = result.assets[0].uri;
+      // ✅ 轉換圖片為 JPG（處理 iOS HEIC 格式）
+      const processedAssets = await normalizeImagesToJpg(result.assets);
+      if (processedAssets.length === 0) {
+        Alert.alert('錯誤', '圖片處理失敗，請重試');
+        return;
+      }
+
+      const imageUri = processedAssets[0].uri;
       
       // 顯示預覽
       setAvatarPreviewUri(imageUri);
 
-      // 上傳頭像
+      // 上傳頭像（已轉換為 JPG）
       setUploadingAvatar(true);
       const uploadResult = await uploadAvatarFromUri(imageUri);
 
@@ -135,7 +143,7 @@ export default function EditProfileScreen() {
           .eq('id', currentUser.id)
           .single();
         
-        if (!profileError && profileData) {
+        if (!profileError && profileData && uploadResult.url) {
           console.log('AVATAR_VERIFY', {
             userId: currentUser.id,
             avatar_url: profileData.avatar_url,

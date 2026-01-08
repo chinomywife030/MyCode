@@ -70,3 +70,4 @@ ORDER BY ordinal_position;
 SELECT '✅ push_tokens 表已創建！' AS status;
 
 
+

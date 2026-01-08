@@ -252,3 +252,4 @@ SELECT
   '✅ 診斷完成！請將以上所有結果完整貼回' AS final_message;
 
 
+

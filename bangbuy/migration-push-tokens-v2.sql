@@ -51,3 +51,4 @@ CREATE POLICY "Users can delete own push_tokens"
 
 -- 註：執行此 SQL 前請確保已登入 Supabase Dashboard 或使用 supabase CLI
 
+

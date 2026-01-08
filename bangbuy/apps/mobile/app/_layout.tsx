@@ -76,6 +76,7 @@ export default function RootLayout() {
         <Stack.Screen name="login" options={{ title: '登入', presentation: 'modal' }} />
         <Stack.Screen name="create" options={{ title: '創建許願單' }} />
         <Stack.Screen name="wish/[id]" options={{ title: 'Wish Detail' }} />
+        <Stack.Screen name="trip/create" options={{ headerShown: false }} />
         <Stack.Screen name="trip/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="me/wishes" options={{ title: '我的需求', headerShown: false }} />

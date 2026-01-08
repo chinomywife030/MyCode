@@ -51,3 +51,4 @@ CREATE POLICY "Users can read own notification_jobs"
 
 -- 註：INSERT/UPDATE/DELETE 僅允許 service role（透過上面的 policy）
 
+

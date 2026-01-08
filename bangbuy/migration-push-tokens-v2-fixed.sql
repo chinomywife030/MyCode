@@ -90,3 +90,4 @@ WHERE table_schema = 'public'
   AND table_name = 'push_tokens'
 ORDER BY ordinal_position;
 
+

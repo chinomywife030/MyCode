@@ -43,12 +43,17 @@ export async function uploadImageToStorage(
       return { success: false, error: '解碼後的圖片資料為空' };
     }
 
-    // 3. 判斷圖片類型
+    // 3. 判斷圖片類型（優先使用 JPEG，避免 HEIC 問題）
     let contentType = 'image/jpeg';
-    if (imageUri.toLowerCase().includes('.png')) {
+    const lowerUri = imageUri.toLowerCase();
+    if (lowerUri.includes('.png')) {
       contentType = 'image/png';
-    } else if (imageUri.toLowerCase().includes('.webp')) {
+    } else if (lowerUri.includes('.webp')) {
       contentType = 'image/webp';
+    } else if (lowerUri.includes('.heic') || lowerUri.includes('.heif')) {
+      // ✅ iOS HEIC/HEIF 格式強制使用 JPEG（應該已經被 normalizeImagesToJpg 轉換）
+      console.warn('[uploadImageToStorage] HEIC/HEIF detected, forcing image/jpeg');
+      contentType = 'image/jpeg';
     }
 
     // 4. 上傳到 Supabase Storage
@@ -126,8 +131,15 @@ export async function uploadMultipleImages(
       continue;
     }
 
-    const fileExt = imageUri.toLowerCase().includes('.png') ? 'png' : 
-                    imageUri.toLowerCase().includes('.webp') ? 'webp' : 'jpg';
+    // ✅ 強制使用 jpg 作為副檔名（所有圖片應該已轉換為 JPG）
+    const lowerUri = imageUri.toLowerCase();
+    let fileExt = 'jpg';
+    if (lowerUri.includes('.png')) {
+      fileExt = 'png';
+    } else if (lowerUri.includes('.webp')) {
+      fileExt = 'webp';
+    }
+    // HEIC/HEIF 統一使用 jpg
     const filePath = `${userId}/${wishIdPath}/${i}.${fileExt}`;
 
     console.log(`[uploadMultipleImages] Uploading image ${i + 1}/${imageUris.length}: ${filePath}`);

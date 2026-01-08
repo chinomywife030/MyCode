@@ -74,14 +74,21 @@ export function TripCard({
         </Text>
       )}
 
-      {/* 底部區域：接單偏好 + 私訊按鈕 */}
+      {/* 底部區域：私訊按鈕 + 查看行程按鈕 */}
       <View style={styles.bottomRow}>
-        <View style={styles.tagContainer}>
-          <View style={styles.preferenceTag}>
-            <Text style={styles.preferenceText}>🛒 願意代購</Text>
-          </View>
-        </View>
+        {/* 次按鈕：查看行程 */}
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={(e) => {
+            e.stopPropagation?.();
+            onPress();
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.secondaryButtonText}>查看行程</Text>
+        </TouchableOpacity>
         
+        {/* 主按鈕：私訊 */}
         <TouchableOpacity
           style={styles.messageButton}
           onPress={(e) => {
@@ -192,6 +199,19 @@ const styles = StyleSheet.create({
   preferenceText: {
     fontSize: fontSize.xs,
     color: colors.textMuted,
+  },
+  secondaryButton: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: colors.brandBlue,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+  },
+  secondaryButtonText: {
+    color: colors.brandBlue,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
   },
   messageButton: {
     backgroundColor: colors.brandBlue,

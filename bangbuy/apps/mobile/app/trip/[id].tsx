@@ -18,8 +18,22 @@ export default function TripDetailScreen() {
   const [user, setUser] = useState<any>(null);
   const [messageLoading, setMessageLoading] = useState(false);
 
+  // #region agent log
   useEffect(() => {
+    fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/trip/[id].tsx:21',message:'TripDetailScreen mounted',data:{id,idType:typeof id,isCreateRoute:id==='create'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  }, []);
+  // #endregion
+
+  useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/trip/[id].tsx:26',message:'useEffect triggered',data:{id,idLength:id?.length,isValidUUID:/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id||'')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     if (id) {
+      // #region agent log
+      if (id === 'create') {
+        fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/trip/[id].tsx:30',message:'ROUTE CONFLICT DETECTED',data:{id,shouldRedirect:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      }
+      // #endregion
       fetchTrip();
       loadCurrentUser();
     }
@@ -31,16 +45,43 @@ export default function TripDetailScreen() {
   };
 
   const fetchTrip = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/trip/[id].tsx:33',message:'fetchTrip called',data:{id,idValue:id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     try {
       setLoading(true);
       setError(null);
+      // #region agent log
+      const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id || '');
+      fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/trip/[id].tsx:40',message:'Before getTripById call',data:{id,isValidUUID,willCallAPI:isValidUUID},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
+      if (!isValidUUID) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/trip/[id].tsx:45',message:'Invalid UUID detected, redirecting',data:{id,reason:'not-a-valid-uuid'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        if (id === 'create') {
+          router.replace('/trip/create');
+          return;
+        }
+        setError('無效的行程 ID');
+        setLoading(false);
+        return;
+      }
+      
       const data = await getTripById(id as string);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/trip/[id].tsx:55',message:'getTripById returned',data:{hasData:!!data,dataId:data?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       if (data) {
         setTrip(data);
       } else {
         setError('找不到該行程');
       }
     } catch (err) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/0543bbaa-340a-41c2-b5c3-e4c523fe1030',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/trip/[id].tsx:64',message:'fetchTrip error caught',data:{errorMessage:err instanceof Error?err.message:'unknown',errorType:err?.constructor?.name,id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       const errorMessage = err instanceof Error ? err.message : '載入失敗';
       setError(errorMessage);
       console.error('[TripDetailScreen] fetchTrip error:', err);

@@ -11,6 +11,7 @@ import { Card } from '@/src/ui/Card';
 import { Tag } from '@/src/ui/Tag';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/tokens';
 import { WishHeroCarousel } from '@/src/components/WishHeroCarousel';
+import { getCountryFlag } from '@/src/utils/countryFlag';
 
 /**
  * 安全地開啟 URL
@@ -188,11 +189,15 @@ export default function WishDetailScreen() {
         {/* 標題卡片 */}
         <Card style={styles.titleCard}>
           <Text style={styles.title}>{wish.title}</Text>
-          {wish.targetCountry && (
-            <View style={styles.tagContainer}>
-              <Tag label={wish.targetCountry === 'JP' ? '🇯🇵 日本' : wish.targetCountry} />
-            </View>
-          )}
+          {wish.targetCountry && (() => {
+            const flag = getCountryFlag(wish.targetCountry);
+            const displayText = flag ? `${flag} ${wish.targetCountry}` : wish.targetCountry;
+            return (
+              <View style={styles.tagContainer}>
+                <Tag label={displayText} />
+              </View>
+            );
+          })()}
         </Card>
 
         {/* 描述區塊 */}
@@ -228,14 +233,16 @@ export default function WishDetailScreen() {
                   <Text style={styles.infoValue}>NT$ {wish.budget}</Text>
                 </View>
               )}
-              {wish.targetCountry && (
-                <View style={styles.infoRow}>
-                  <Text style={styles.infoLabel}>目標國家：</Text>
-                  <Text style={styles.infoValue}>
-                    {wish.targetCountry === 'JP' ? '🇯🇵 日本' : wish.targetCountry}
-                  </Text>
-                </View>
-              )}
+              {wish.targetCountry && (() => {
+                const flag = getCountryFlag(wish.targetCountry);
+                const displayText = flag ? `${flag} ${wish.targetCountry}` : wish.targetCountry;
+                return (
+                  <View style={styles.infoRow}>
+                    <Text style={styles.infoLabel}>目標國家：</Text>
+                    <Text style={styles.infoValue}>{displayText}</Text>
+                  </View>
+                );
+              })()}
               {wish.category && (
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>分類：</Text>

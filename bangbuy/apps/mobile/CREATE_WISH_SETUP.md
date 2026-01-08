@@ -144,3 +144,4 @@ CREATE POLICY "Users can upload wish images"
 - 檢查價格是否為有效數字（>= 0）
 - 檢查圖片大小是否超過 5MB
 
+

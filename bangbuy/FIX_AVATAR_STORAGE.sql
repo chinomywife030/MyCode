@@ -63,3 +63,4 @@ ORDER BY policyname;
 -- 完成！
 SELECT 'Storage policies for avatars bucket have been created/updated!' AS status;
 
+

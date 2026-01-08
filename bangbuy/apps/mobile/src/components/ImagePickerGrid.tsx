@@ -18,6 +18,7 @@ import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/tokens';
+import { normalizeImagesToJpg } from '@/src/utils/imageHelpers';
 
 interface ImagePickerGridProps {
   images: string[]; // 圖片 URI 陣列
@@ -60,10 +61,18 @@ export function ImagePickerGrid({
         return;
       }
 
-      // 檢查檔案大小和數量
+      // ✅ Step 1: 轉換所有圖片為 JPG（處理 iOS HEIC 格式）
+      const assetsToProcess = result.assets.slice(0, remaining);
+      const processedAssets = await normalizeImagesToJpg(assetsToProcess);
+
+      if (processedAssets.length === 0) {
+        return;
+      }
+
+      // 檢查檔案大小和數量（已轉換為 JPG）
       const validImages: string[] = [];
-      for (let i = 0; i < result.assets.length && validImages.length < remaining; i++) {
-        const asset = result.assets[i];
+      for (let i = 0; i < processedAssets.length && validImages.length < remaining; i++) {
+        const asset = processedAssets[i];
         
         // 檢查檔案大小（如果可用）
         if (asset.fileSize && asset.fileSize > MAX_IMAGE_SIZE) {
@@ -71,19 +80,11 @@ export function ImagePickerGrid({
           continue;
         }
 
-        // 檢查格式
-        const uri = asset.uri;
-        const ext = uri.toLowerCase().split('.').pop();
-        if (!['jpg', 'jpeg', 'png', 'webp'].includes(ext || '')) {
-          Alert.alert('格式不支援', `第 ${i + 1} 張圖片格式不支援，僅支援 JPG/PNG/WEBP`);
-          continue;
-        }
-
-        validImages.push(uri);
+        validImages.push(asset.uri);
       }
 
       if (validImages.length > 0) {
-        console.log('[ImagePickerGrid] Selected images:', validImages);
+        console.log('[ImagePickerGrid] Selected images (converted to JPG):', validImages);
         onImagesChange([...images, ...validImages]);
       }
     } catch (error: any) {

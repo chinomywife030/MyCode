@@ -109,3 +109,4 @@ WHERE schemaname = 'public'
   AND tablename = 'user_push_tokens';
 
 
+

@@ -65,3 +65,4 @@ ORDER BY policyname;
 -- 完成！
 SELECT 'Storage policies for wish-images bucket have been created!' AS status;
 
+
