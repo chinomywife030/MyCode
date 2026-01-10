@@ -4,7 +4,7 @@
  * 
  * 📝 功能說明：
  * - Trip 模式：用戶發布代購行程（我要去哪裡、日期、代購說明）
- * - Discovery 模式：用戶發布「旅途中看到的酷東西」（照片、標題、地點、描述）
+ * - Discovery 模式：用戶發布「旅途中看到的酷東西」（照片、標題、國家）
  * 
  * ⚠️ 重要：Discovery insert 僅在用戶主動選擇「旅途發現」模式並填寫表單後提交時觸發
  *   不會在沒有 UI 勾選的情況下自動 insert discovery
@@ -52,8 +52,6 @@ export default function CreateTripScreen() {
   const [discoveryPhotos, setDiscoveryPhotos] = useState<string[]>([]);
   const [discoveryTitle, setDiscoveryTitle] = useState('');
   const [discoveryCountry, setDiscoveryCountry] = useState<string>('');
-  const [discoveryCity, setDiscoveryCity] = useState('');
-  const [discoveryDescription, setDiscoveryDescription] = useState('');
 
   // Trip 驗證錯誤
   const [tripErrors, setTripErrors] = useState<{
@@ -67,7 +65,6 @@ export default function CreateTripScreen() {
     photos?: string;
     title?: string;
     country?: string;
-    description?: string;
   }>({});
 
   useEffect(() => {
@@ -99,9 +96,7 @@ export default function CreateTripScreen() {
     return (
       discoveryPhotos.length > 0 ||
       discoveryTitle.trim() !== '' ||
-      discoveryCountry !== '' ||
-      discoveryCity.trim() !== '' ||
-      discoveryDescription.trim() !== ''
+      discoveryCountry !== ''
     );
   };
 
@@ -132,8 +127,6 @@ export default function CreateTripScreen() {
                 setDiscoveryPhotos([]);
                 setDiscoveryTitle('');
                 setDiscoveryCountry('');
-                setDiscoveryCity('');
-                setDiscoveryDescription('');
                 setDiscoveryErrors({});
               }
               setMode(newMode);
@@ -186,10 +179,6 @@ export default function CreateTripScreen() {
 
     if (!discoveryCountry) {
       newErrors.country = '請選擇國家';
-    }
-
-    if (discoveryDescription.trim().length > 500) {
-      newErrors.description = '描述不能超過 500 字';
     }
 
     setDiscoveryErrors(newErrors);
@@ -247,7 +236,7 @@ export default function CreateTripScreen() {
    * Discovery 提交處理
    * 📝 功能意圖：此為「旅途中看到的酷東西」功能
    *    - 用戶在 UI 中通過 Segmented Control 主動選擇「旅途發現」模式
-   *    - 填寫表單（照片、標題、國家、城市、描述）後點擊「立即發布」按鈕
+   *    - 填寫表單（照片、標題、國家）後點擊「立即發布」按鈕
    *    - 觸發此函數執行 insert 操作
    * ⚠️ 不會在沒有 UI 勾選的情況下自動 insert discovery
    */
@@ -294,10 +283,8 @@ export default function CreateTripScreen() {
       const { data, error } = await supabase.from('discoveries').insert({
         title: discoveryTitle.trim(),
         country: discoveryCountry,
-        city: discoveryCity.trim() || null,
-        description: discoveryDescription.trim() || null,
         photos: photoUrls,
-        author_id: session.user.id, // ✅ 第 300 行：確保 author_id = session.user.id（與 auth.uid() 完全一致）
+        author_id: session.user.id, // ✅ 確保 author_id = session.user.id（與 auth.uid() 完全一致）
       });
 
       if (error) {
@@ -504,11 +491,11 @@ export default function CreateTripScreen() {
                   照片 <Text style={styles.required}>*</Text>
                 </Text>
                 <Text style={styles.hintText}>
-                  最多 6 張（至少 1 張）
+                  最多 1 張
                 </Text>
                 <ImagePickerGrid
                   images={discoveryPhotos}
-                  maxImages={6}
+                  maxImages={1}
                   onImagesChange={(images) => {
                     setDiscoveryPhotos(images);
                     if (discoveryErrors.photos) {
@@ -562,62 +549,6 @@ export default function CreateTripScreen() {
                 />
                 {discoveryErrors.country && (
                   <Text style={styles.errorText}>{discoveryErrors.country}</Text>
-                )}
-              </View>
-
-              {/* 城市 */}
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>城市</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="例如：大阪"
-                  placeholderTextColor={colors.textMuted}
-                  value={discoveryCity}
-                  onChangeText={setDiscoveryCity}
-                  editable={!loading}
-                />
-              </View>
-
-              {/* 描述 */}
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>
-                  描述
-                  {discoveryDescription.trim().length > 0 && (
-                    <Text style={styles.charCount}>
-                      {' '}
-                      ({discoveryDescription.trim().length}/500)
-                    </Text>
-                  )}
-                </Text>
-                <TextInput
-                  style={[
-                    styles.textArea,
-                    styles.input,
-                    discoveryErrors.description && styles.inputError,
-                  ]}
-                  placeholder="分享你的發現..."
-                  placeholderTextColor={colors.textMuted}
-                  value={discoveryDescription}
-                  onChangeText={(text) => {
-                    if (text.length <= 500) {
-                      setDiscoveryDescription(text);
-                      if (discoveryErrors.description) {
-                        setDiscoveryErrors({
-                          ...discoveryErrors,
-                          description: undefined,
-                        });
-                      }
-                    }
-                  }}
-                  multiline
-                  numberOfLines={6}
-                  textAlignVertical="top"
-                  editable={!loading}
-                />
-                {discoveryErrors.description && (
-                  <Text style={styles.errorText}>
-                    {discoveryErrors.description}
-                  </Text>
                 )}
               </View>
             </>

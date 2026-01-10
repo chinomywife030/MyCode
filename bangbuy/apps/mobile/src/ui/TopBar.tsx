@@ -2,19 +2,26 @@ import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors, spacing, radius } from '@/src/theme/tokens';
+import { type Mode } from './ModeToggle';
 
 interface TopBarProps {
   onMenuPress?: () => void;
   onBellPress?: () => void;
   onAvatarPress?: () => void;
   userEmail?: string;
+  mode?: Mode; // 模式：'shopper' (代購) 或 'buyer' (買家)
 }
 
 /**
  * 頂部導航欄：左側 hamburger/Logo 區、右側 bell + avatar
  */
-export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail }: TopBarProps) {
+export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail, mode }: TopBarProps) {
   console.count('HEADER_RENDER');
+  
+  // 根據模式動態設定 Logo 顏色
+  // shopper (代購模式) = 品牌橘色，buyer (買家模式) = 藍色
+  const logoColor = mode === 'buyer' ? '#007AFF' : colors.brandOrange;
+  
   return (
     <View style={styles.container}>
       {/* 左側：Logo 或 Hamburger */}
@@ -23,7 +30,7 @@ export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail }: T
         onPress={onMenuPress || (() => router.push('/'))}
         activeOpacity={0.7}
       >
-        <Text style={styles.logo}>BangBuy</Text>
+        <Text style={[styles.logo, { color: logoColor }]}>BangBuy 幫買</Text>
       </TouchableOpacity>
 
       {/* 右側：通知 + 頭像 */}
@@ -70,6 +77,7 @@ const styles = StyleSheet.create({
   logo: {
     fontSize: 20,
     fontWeight: '700',
+    // 顏色由 props.mode 動態設定，這裡設為預設值（代購模式）
     color: colors.brandOrange,
   },
   rightSection: {

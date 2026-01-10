@@ -256,6 +256,84 @@ export default function HomeScreen() {
   };
 
   // ============================================
+  // 通知功能（背景執行，不顯示 UI）
+  // ============================================
+
+  // 1. 確保通知 Handler 已設定（前台顯示通知）
+  useEffect(() => {
+    try {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+        }),
+      });
+    } catch (error) {
+      console.error('[HomeScreen] Error setting notification handler:', error);
+    }
+  }, []);
+
+  // 2. 請求通知權限並獲取 Token（背景執行）
+  useEffect(() => {
+    const requestPermission = async () => {
+      if (Platform.OS === 'web') {
+        return;
+      }
+
+      try {
+        // 檢查現有權限狀態
+        const existingStatus = await Notifications.getPermissionsAsync();
+
+        // 如果權限不是 'granted'，則請求權限
+        if (existingStatus.status !== 'granted') {
+          await Notifications.requestPermissionsAsync();
+        }
+
+        // 如果權限已授予，嘗試取得 Expo Push Token
+        const finalStatus = await Notifications.getPermissionsAsync();
+        if (finalStatus.status === 'granted') {
+          try {
+            const Constants = await import('expo-constants');
+            const projectId = Constants.default.expoConfig?.extra?.eas?.projectId as string | undefined;
+            
+            if (!projectId) {
+              console.error('[HomeScreen] No projectId found in app.json');
+              return;
+            }
+
+            const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+            const token = tokenData.data;
+            
+            // 上傳 Token 到 Server（非阻塞）
+            try {
+              const { registerPushTokenToServer } = await import('@/src/lib/pushToken');
+              registerPushTokenToServer(token)
+                .then((success) => {
+                  if (success) {
+                    console.log('[HomeScreen] Token uploaded to server successfully');
+                  }
+                })
+                .catch((error) => {
+                  console.warn('[HomeScreen] Token upload error:', error);
+                });
+            } catch (importError) {
+              console.warn('[HomeScreen] Failed to import registerPushTokenToServer:', importError);
+            }
+          } catch (tokenError: any) {
+            console.error('[HomeScreen] Error getting Expo Push Token:', tokenError);
+          }
+        }
+      } catch (error: any) {
+        console.error('[HomeScreen] Error in permission request flow:', error);
+      }
+    };
+    
+    requestPermission();
+  }, []);
+
+
+  // ============================================
   // Event Handlers（保持原有邏輯不變）
   // ============================================
   const handleRefresh = () => {
@@ -298,28 +376,6 @@ export default function HomeScreen() {
     }
   }, [messageLoading]);
 
-  const handleTestNotification = async () => {
-    try {
-      const testChatId = '9c657fb7-f99e-4b16-b617-553cc869b639';
-
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '測試通知',
-          body: '點擊此通知測試 Deep Link',
-          data: {
-            type: 'chat_message',
-            chatId: testChatId,
-          },
-        },
-        trigger: null,
-      });
-      console.log('[HomeScreen] Test notification scheduled with conversationId:', testChatId);
-      Alert.alert('測試通知已發送', `使用對話 ID: ${testChatId.substring(0, 8)}...`);
-    } catch (error: any) {
-      console.error('[HomeScreen] Failed to schedule test notification:', error);
-      Alert.alert('錯誤', error.message || '發送測試通知失敗');
-    }
-  };
 
   // Debounce 搜索查詢
   useEffect(() => {
@@ -691,6 +747,7 @@ export default function HomeScreen() {
         userEmail={user?.email}
         onBellPress={handleBellPress}
         onAvatarPress={handleAvatarPress}
+        mode={mode}
       />
       
       <FlatList
@@ -713,18 +770,6 @@ export default function HomeScreen() {
         style={immoStyles.flatList}
       />
 
-      {/* Push 狀態顯示（Debug Only） */}
-      {Platform.OS !== 'web' && pushStatus && !pushStatus.granted && pushStatus.error !== 'Web 平台不支持推送通知' && (
-        <View style={immoStyles.debugContainer}>
-          <Text style={immoStyles.debugText}>
-            Push: {pushStatus.granted ? '✅ granted' : '❌ denied'}
-          </Text>
-          {pushStatus.error && (
-            <Text style={immoStyles.debugErrorText}>{pushStatus.error}</Text>
-          )}
-        </View>
-      )}
-
       {/* Filter Modal */}
       <FilterModal
         visible={filterModalVisible}
@@ -746,18 +791,6 @@ export default function HomeScreen() {
           }
         }}
       />
-
-      {/* Floating Action Button */}
-      {/* 只在賣家/Shopper 模式顯示（藍色），Buyer 模式移除橘色＋ */}
-      {mode === 'shopper' && (
-        <TouchableOpacity
-          style={[immoStyles.fab, { backgroundColor: immoColors.tripPrimary }]}
-          onPress={() => setQuickWishVisible(true)}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="add" size={28} color={immoColors.white} />
-        </TouchableOpacity>
-      )}
     </Screen>
   );
 }
@@ -853,19 +886,6 @@ const immoStyles = StyleSheet.create({
     paddingVertical: immoSpacing.lg,
     gap: immoSpacing.md,
   },
-  // FAB（顏色由 context 決定：Trip 藍色 / Wish 橘色）
-  fab: {
-    position: 'absolute',
-    right: immoSpacing.lg,
-    bottom: 100,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...immoShadows.lg,
-    zIndex: 1000,
-  },
   // Debug
   debugContainer: {
     margin: immoSpacing.lg,
@@ -947,31 +967,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     color: colors.error,
     marginTop: spacing.xs,
-  },
-  testNotificationButton: {
-    margin: spacing.lg,
-    padding: spacing.md,
-    backgroundColor: colors.brandOrange,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  testNotificationButtonText: {
-    fontSize: fontSize.base,
-    color: '#ffffff',
-    fontWeight: fontWeight.semibold,
-  },
-  fab: {
-    position: 'absolute',
-    right: spacing.lg,
-    bottom: 100,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#007AFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.lg,
-    zIndex: 1000,
   },
   discoveriesGridContainer: {
     flexDirection: 'row',

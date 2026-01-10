@@ -87,3 +87,5 @@ CREATE TRIGGER trigger_favorites_updated_at
 
 
 
+
+

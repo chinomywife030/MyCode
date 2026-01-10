@@ -230,7 +230,7 @@ export async function POST(request: NextRequest) {
       },
       dedupeKey,
       throttleKey,
-      throttleWindowSec: 30,
+      throttleWindowSec: 1, // 改為 1 秒，確保聊天訊息即時性
     }).catch(err => {
       // Push 失敗不影響訊息發送
       console.error('[api-send] Push notification failed (non-blocking):', err);

@@ -36,7 +36,7 @@ export async function requestPushPermission(): Promise<{
       return { granted: false, token: null, error: '通知權限未授予' };
     }
 
-    // 取得 projectId
+    // 取得 projectId（EAS Build 必須傳入）
     let projectId: string | undefined;
     if (process.env.EXPO_PUBLIC_PROJECT_ID) {
       projectId = process.env.EXPO_PUBLIC_PROJECT_ID;
@@ -44,10 +44,18 @@ export async function requestPushPermission(): Promise<{
       projectId = Constants.expoConfig.extra.eas.projectId;
     }
 
-    // 取得 push token
-    const tokenData = projectId
-      ? await Notifications.getExpoPushTokenAsync({ projectId })
-      : await Notifications.getExpoPushTokenAsync();
+    // EAS Build 必須傳入 projectId，否則會失敗
+    if (!projectId) {
+      console.error('[pushService] No projectId found. EAS Build requires projectId.');
+      return {
+        granted: false,
+        token: null,
+        error: '缺少 projectId 設定（請檢查 app.json 的 extra.eas.projectId）',
+      };
+    }
+
+    // 取得 push token（必須傳入 projectId）
+    const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
 
     return {
       granted: true,

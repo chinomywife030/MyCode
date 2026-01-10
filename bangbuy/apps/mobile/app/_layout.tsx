@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import 'react-native-reanimated';
@@ -11,6 +11,7 @@ import { initializeCore } from '@/src/lib/core';
 import { routeFromNotificationResponse } from '@/src/notifications/notificationRouter';
 import { initializePushService } from '@/src/lib/pushService';
 import { registerPushNotificationsComplete } from '@/src/lib/pushToken';
+import { supabase } from '@/src/lib/supabase';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -19,6 +20,7 @@ export const unstable_settings = {
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const initialized = useRef(false);
+  const router = useRouter();
 
   useEffect(() => {
     // 只在首次載入時初始化一次
@@ -27,6 +29,15 @@ export default function RootLayout() {
       
       // 初始化 core layer
       initializeCore();
+      
+      // 清除 App 角標（Badge）
+      Notifications.setBadgeCountAsync(0)
+        .then(() => {
+          console.log('[RootLayout] ✅ App badge cleared');
+        })
+        .catch((error) => {
+          console.warn('[RootLayout] Failed to clear badge:', error);
+        });
       
       // 初始化推播通知
       initializePushNotifications().catch((error) => {
@@ -69,11 +80,30 @@ export default function RootLayout() {
     return () => sub.remove();
   }, []);
 
+  // Auth 狀態監聽：處理密碼重設流程
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[RootLayout] Auth state changed:', event, session?.user?.id);
+      
+      if (event === 'PASSWORD_RECOVERY') {
+        // 當偵測到是「重設密碼流程」進來的，強制跳轉到重設頁面
+        console.log('[RootLayout] PASSWORD_RECOVERY event detected, redirecting to reset-password');
+        router.push('/auth/reset-password');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router]);
+
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ title: '登入', presentation: 'modal' }} />
+        <Stack.Screen name="login" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="create" options={{ title: '創建許願單' }} />
         <Stack.Screen name="wish/[id]" options={{ title: 'Wish Detail' }} />
         <Stack.Screen name="trip/create" options={{ headerShown: false }} />
@@ -84,6 +114,7 @@ export default function RootLayout() {
         <Stack.Screen name="me/edit-profile" options={{ title: '編輯個人資料', headerShown: false }} />
         <Stack.Screen name="settings" options={{ title: '設定', headerShown: false }} />
         <Stack.Screen name="help" options={{ title: '幫助中心', headerShown: false }} />
+        <Stack.Screen name="auth/reset-password" options={{ title: '重設密碼', headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

@@ -97,3 +97,5 @@ CREATE TRIGGER update_countries_updated_at
 SELECT 'Countries table created and populated successfully!' AS message;
 
 
+
+

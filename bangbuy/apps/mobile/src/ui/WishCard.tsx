@@ -1,7 +1,7 @@
 import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React from 'react';
 import { colors, spacing, radius, fontSize, fontWeight, shadows } from '@/src/theme/tokens';
 import { CountryChip } from '@/src/components/CountryChip';
 
@@ -40,13 +40,6 @@ export function WishCard({
   onPress,
   onMessagePress
 }: WishCardProps) {
-  const [isLiked, setIsLiked] = useState(false);
-
-  const handleLikePress = (e: any) => {
-    e.stopPropagation?.();
-    setIsLiked(!isLiked);
-    // TODO: 实现收藏功能
-  };
 
   const handleButtonPress = (e: any) => {
     e.stopPropagation?.();
@@ -96,19 +89,6 @@ export function WishCard({
             <CountryChip countryCode={country} size="sm" />
           </View>
         )}
-
-        {/* Top-Right: Heart Icon */}
-        <TouchableOpacity
-          style={styles.heartButton}
-          onPress={handleLikePress}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name={isLiked ? 'heart' : 'heart-outline'}
-            size={20}
-            color={isLiked ? '#EF4444' : '#FFFFFF'}
-          />
-        </TouchableOpacity>
       </TouchableOpacity>
 
       {/* B. Text Content (Padding Area) */}
@@ -118,10 +98,27 @@ export function WishCard({
           {title}
         </Text>
 
-        {/* Sub-info: Small, Grey text - Format: {UserName} · {Status} */}
-        <Text style={styles.subInfo} numberOfLines={1}>
-          {subInfo}
-        </Text>
+        {/* Sub-info: Avatar + UserName + Status */}
+        <View style={styles.subInfoRow}>
+          {/* Avatar */}
+          <View style={styles.avatarContainer}>
+            {buyer?.avatarUrl ? (
+              <ExpoImage
+                source={{ uri: buyer.avatarUrl }}
+                style={styles.avatar}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Ionicons name="person-outline" size={12} color={colors.textMuted} />
+              </View>
+            )}
+          </View>
+          {/* UserName + Status */}
+          <Text style={styles.subInfo} numberOfLines={1}>
+            {userName} · {statusText}
+          </Text>
+        </View>
 
         {/* Price: Distinct Orange color - Format: 預估 NT$ {price} */}
         <Text style={styles.price}>
@@ -182,19 +179,6 @@ const styles = StyleSheet.create({
     left: 8,
     zIndex: 10,
   },
-  heartButton: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-    // No background or semi-transparent
-    backgroundColor: 'rgba(0, 0, 0, 0.2)',
-  },
   // B. Text Content
   content: {
     padding: spacing.md,
@@ -208,10 +192,34 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     minHeight: 40, // Ensure 2 lines height
   },
+  subInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+    gap: spacing.xs,
+  },
+  avatarContainer: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    overflow: 'hidden',
+    backgroundColor: colors.background,
+  },
+  avatar: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   subInfo: {
     fontSize: fontSize.xs,
     color: colors.textMuted, // Grey
-    marginBottom: spacing.xs,
+    flex: 1,
   },
   price: {
     fontSize: fontSize.base,

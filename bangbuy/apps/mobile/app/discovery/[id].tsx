@@ -17,7 +17,7 @@ import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { getDiscoveryById, type Discovery } from '@/src/lib/discoveries';
+import { getDiscoveryById, deleteDiscovery, type Discovery } from '@/src/lib/discoveries';
 import { getCurrentUser } from '@/src/lib/auth';
 import { Screen } from '@/src/ui/Screen';
 import { Card } from '@/src/ui/Card';
@@ -31,6 +31,8 @@ export default function DiscoveryDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -109,6 +111,58 @@ export default function DiscoveryDetailScreen() {
     });
   };
 
+  // 刪除旅途發現
+  const handleDelete = () => {
+    if (!discovery || !id) return;
+
+    Alert.alert(
+      '確認刪除',
+      '確定要刪除此旅途發現嗎？此操作無法復原。',
+      [
+        {
+          text: '取消',
+          style: 'cancel',
+          onPress: () => setShowMoreMenu(false),
+        },
+        {
+          text: '刪除',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setDeleting(true);
+              setShowMoreMenu(false);
+
+              const result = await deleteDiscovery(id as string);
+
+              if (!result.success) {
+                Alert.alert('刪除失敗', result.error || '請稍後再試');
+                setDeleting(false);
+                return;
+              }
+
+              // 刪除成功，返回上一頁
+              Alert.alert('刪除成功', '旅途發現已刪除', [
+                {
+                  text: '確定',
+                  onPress: () => {
+                    router.back();
+                  },
+                },
+              ]);
+            } catch (err) {
+              console.error('[DiscoveryDetailScreen] Delete error:', err);
+              Alert.alert('錯誤', '刪除失敗，請稍後再試');
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  // 檢查是否為作者
+  const isAuthor = user && discovery && discovery.user_id === user.id;
+
   if (loading) {
     return (
       <Screen>
@@ -151,11 +205,23 @@ export default function DiscoveryDetailScreen() {
             style={styles.backButton}
             onPress={() => router.back()}
             activeOpacity={0.7}
+            disabled={deleting}
           >
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>旅途發現</Text>
-          <View style={styles.headerSpacer} />
+          {isAuthor ? (
+            <TouchableOpacity
+              style={styles.moreButton}
+              onPress={() => setShowMoreMenu(true)}
+              activeOpacity={0.7}
+              disabled={deleting}
+            >
+              <Ionicons name="ellipsis-horizontal" size={24} color={colors.text} />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.headerSpacer} />
+          )}
         </View>
       </SafeAreaView>
 
@@ -220,14 +286,47 @@ export default function DiscoveryDetailScreen() {
       {/* 底部 CTA 按鈕 */}
       <SafeAreaView edges={['bottom']} style={styles.footer}>
         <TouchableOpacity
-          style={styles.convertButton}
+          style={[styles.convertButton, deleting && styles.convertButtonDisabled]}
           onPress={handleConvertToWish}
           activeOpacity={0.8}
+          disabled={deleting}
         >
           <Ionicons name="heart" size={20} color="#FFFFFF" />
-          <Text style={styles.convertButtonText}>我想要</Text>
+          <Text style={styles.convertButtonText}>
+            {deleting ? '刪除中...' : '我想要'}
+          </Text>
         </TouchableOpacity>
       </SafeAreaView>
+
+      {/* 更多選單 Modal */}
+      {showMoreMenu && (
+        <View style={styles.moreMenuOverlay}>
+          <TouchableOpacity
+            style={styles.moreMenuBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowMoreMenu(false)}
+          />
+          <View style={styles.moreMenu}>
+            <TouchableOpacity
+              style={styles.moreMenuItem}
+              onPress={handleDelete}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="trash-outline" size={20} color={colors.error} />
+              <Text style={[styles.moreMenuText, styles.moreMenuTextDanger]}>
+                刪除
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.moreMenuItem}
+              onPress={() => setShowMoreMenu(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.moreMenuText}>取消</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </Screen>
   );
 }
@@ -260,6 +359,12 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 40,
+  },
+  moreButton: {
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollView: {
     flex: 1,
@@ -391,6 +496,46 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.bold,
     color: '#FFFFFF',
+  },
+  convertButtonDisabled: {
+    opacity: 0.6,
+  },
+  // 更多選單
+  moreMenuOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+  },
+  moreMenuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  moreMenu: {
+    position: 'absolute',
+    top: 60,
+    right: spacing.md,
+    backgroundColor: '#FFFFFF',
+    borderRadius: radius.md,
+    paddingVertical: spacing.xs,
+    minWidth: 150,
+    ...shadows.lg,
+  },
+  moreMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  moreMenuText: {
+    fontSize: fontSize.base,
+    color: colors.text,
+  },
+  moreMenuTextDanger: {
+    color: colors.error,
   },
 });
 

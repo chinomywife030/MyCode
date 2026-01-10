@@ -1,11 +1,14 @@
-import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, View, Text, TouchableOpacity, Alert } from 'react-native';
+import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, View, Text, TouchableOpacity, Alert, TextInput, Dimensions, Modal } from 'react-native';
 import { useState } from 'react';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Screen, Card, Button, Input } from '@/src/ui';
+import { Screen } from '@/src/ui';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/tokens';
 import { supabase } from '@/src/lib/supabase';
 import { navigateAfterLogin } from '@/src/lib/navigation';
+import { Image } from 'expo-image';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const { next } = useLocalSearchParams<{ next?: string }>();
@@ -14,6 +17,9 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState('');
+  const [forgotPasswordModalVisible, setForgotPasswordModalVisible] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
 
   const handleAuth = async () => {
     if (!email.trim() || !password.trim()) {
@@ -51,15 +57,35 @@ export default function LoginScreen() {
           console.warn('[LoginScreen] Failed to register push token:', pushError);
         }
 
-        Alert.alert('成功', '註冊成功！請檢查 Email 驗證信', [
-          {
-            text: '確定',
-            onPress: () => {
-              setIsSignUp(false);
-              setPassword('');
+        // 檢查是否需要 Email 確認
+        if (data.user && !data.session) {
+          // 需要 Email 確認
+          Alert.alert(
+            '註冊成功',
+            '我們已發送驗證信到您的信箱，請前往信箱收取驗證信並點擊連結完成驗證。\n\n驗證後即可登入使用。',
+            [
+              {
+                text: '確定',
+                onPress: () => {
+                  setIsSignUp(false);
+                  setPassword('');
+                  setEmail('');
+                },
+              },
+            ]
+          );
+        } else {
+          // 已自動登入（如果 Supabase 設定為不需要確認）
+          Alert.alert('成功', '註冊成功！', [
+            {
+              text: '確定',
+              onPress: () => {
+                setIsSignUp(false);
+                setPassword('');
+              },
             },
-          },
-        ]);
+          ]);
+        }
       } else {
         // 登入
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -95,178 +121,515 @@ export default function LoginScreen() {
     }
   };
 
-  return (
-    <Screen>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{isSignUp ? '註冊' : '登入'}</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+  const handleForgotPassword = async () => {
+    if (!forgotPasswordEmail.trim()) {
+      Alert.alert('錯誤', '請輸入 Email');
+      return;
+    }
 
+    // 簡單的 Email 格式驗證
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(forgotPasswordEmail.trim())) {
+      Alert.alert('錯誤', '請輸入有效的 Email 地址');
+      return;
+    }
+
+    setForgotPasswordLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail.trim(), {
+        redirectTo: `${process.env.EXPO_PUBLIC_SUPABASE_URL || ''}/auth/callback`,
+      });
+
+      if (error) throw error;
+
+      Alert.alert(
+        '重設密碼信已發送',
+        '我們已發送重設密碼連結到您的信箱，請前往信箱收取並點擊連結重設密碼。',
+        [
+          {
+            text: '確定',
+            onPress: () => {
+              setForgotPasswordModalVisible(false);
+              setForgotPasswordEmail('');
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('[LoginScreen] Forgot password error:', error);
+      Alert.alert('錯誤', error.message || '發送重設密碼信失敗，請稍後再試');
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
+
+  return (
+    <Screen style={styles.screen}>
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-          {/* Logo / Branding */}
+        {/* 上半部：橘色背景區域 (固定高度約 180px) */}
+        <View style={styles.orangeSection}>
+          {/* 返回按鈕 */}
+          <TouchableOpacity 
+            onPress={handleBack} 
+            style={styles.backButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+
+          {/* Logo 和歡迎標語 */}
           <View style={styles.brandingContainer}>
-            <View style={styles.logoContainer}>
-              <Text style={styles.logoText}>🛒</Text>
-            </View>
-            <Text style={styles.appName}>BangBuy</Text>
-            <Text style={styles.tagline}>
-              {isSignUp ? '建立帳號，開始代購之旅' : '歡迎回來'}
-            </Text>
+            <Image
+              source={require('@/assets/images/icon.png')}
+              style={styles.logo}
+              contentFit="contain"
+            />
+            <Text style={styles.welcomeText}>Welcome Back!</Text>
           </View>
+        </View>
 
-          {/* Form */}
-          <Card style={styles.formCard}>
-            {isSignUp && (
-              <Input
-                label="姓名"
-                placeholder="輸入姓名"
-                value={name}
-                onChangeText={setName}
-                editable={!loading}
-                autoCapitalize="words"
-              />
-            )}
+        {/* 下半部：白色卡片區域 (佔據剩餘所有空間) */}
+        <View style={styles.whiteSection}>
+          <ScrollView 
+            style={styles.scrollView} 
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {/* 表單標題 */}
+            <Text style={styles.formTitle}>{isSignUp ? '建立帳號' : '登入'}</Text>
 
-            <Input
-              label="Email"
-              placeholder="輸入 Email"
-              value={email}
-              onChangeText={setEmail}
-              editable={!loading}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
+            {/* 輸入表單 */}
+            <View style={styles.formContainer}>
+              {isSignUp && (
+                <View style={styles.inputContainer}>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="person-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="姓名"
+                      placeholderTextColor="#9CA3AF"
+                      value={name}
+                      onChangeText={setName}
+                      editable={!loading}
+                      autoCapitalize="words"
+                    />
+                  </View>
+                </View>
+              )}
 
-            <Input
-              label="密碼"
-              placeholder="輸入密碼"
-              value={password}
-              onChangeText={setPassword}
-              editable={!loading}
-              secureTextEntry
-              autoCapitalize="none"
-            />
+              <View style={styles.inputContainer}>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="mail-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Email"
+                    placeholderTextColor="#9CA3AF"
+                    value={email}
+                    onChangeText={setEmail}
+                    editable={!loading}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              </View>
 
-            <Button
-              title={loading ? (isSignUp ? '註冊中...' : '登入中...') : (isSignUp ? '註冊' : '登入')}
-              onPress={handleAuth}
-              loading={loading}
-              disabled={loading}
-              fullWidth
-              size="lg"
-              style={styles.submitButton}
-            />
+              <View style={styles.inputContainer}>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="lock-closed-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="密碼"
+                    placeholderTextColor="#9CA3AF"
+                    value={password}
+                    onChangeText={setPassword}
+                    editable={!loading}
+                    secureTextEntry
+                    autoCapitalize="none"
+                  />
+                </View>
+                {!isSignUp && (
+                  <TouchableOpacity
+                    style={styles.forgotPasswordButton}
+                    onPress={() => setForgotPasswordModalVisible(true)}
+                    disabled={loading}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.forgotPasswordText}>忘記密碼？</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
 
-            <TouchableOpacity
-              style={styles.switchButton}
-              onPress={() => setIsSignUp(!isSignUp)}
-              disabled={loading}
-            >
-              <Text style={styles.switchButtonText}>
-                {isSignUp ? '已有帳號？點此登入' : '沒有帳號？點此註冊'}
-              </Text>
-            </TouchableOpacity>
-          </Card>
+              {/* 登入按鈕 */}
+              <TouchableOpacity
+                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                onPress={handleAuth}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.loginButtonText}>
+                  {loading ? (isSignUp ? '註冊中...' : '登入中...') : (isSignUp ? '註冊' : '登入')}
+                </Text>
+              </TouchableOpacity>
 
-          {/* Terms */}
-          <Text style={styles.termsText}>
-            繼續即表示您同意我們的服務條款和隱私政策
-          </Text>
-        </ScrollView>
+              {/* 登入/註冊切換連結 */}
+              <TouchableOpacity
+                style={styles.signUpLink}
+                onPress={() => setIsSignUp(!isSignUp)}
+                disabled={loading}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.signUpLinkText}>
+                  {isSignUp ? (
+                    <>
+                      已經有帳號？ <Text style={styles.signUpLinkHighlight}>立即登入</Text>
+                    </>
+                  ) : (
+                    <>
+                      還沒有帳號？ <Text style={styles.signUpLinkHighlight}>立即註冊</Text>
+                    </>
+                  )}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
       </KeyboardAvoidingView>
+
+      {/* 忘記密碼 Modal */}
+      <Modal
+        visible={forgotPasswordModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setForgotPasswordModalVisible(false);
+          setForgotPasswordEmail('');
+        }}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => {
+              setForgotPasswordModalVisible(false);
+              setForgotPasswordEmail('');
+            }}
+          >
+            <TouchableOpacity
+              activeOpacity={1}
+              onPress={(e) => e.stopPropagation()}
+              style={styles.modalContentWrapper}
+            >
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>重設密碼</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      setForgotPasswordModalVisible(false);
+                      setForgotPasswordEmail('');
+                    }}
+                    style={styles.modalCloseButton}
+                  >
+                    <Ionicons name="close" size={24} color={colors.text} />
+                  </TouchableOpacity>
+                </View>
+
+                <Text style={styles.modalDescription}>
+                  請輸入您的 Email，我們將寄送重設連結給您。
+                </Text>
+
+                <View style={styles.modalInputContainer}>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="mail-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email"
+                      placeholderTextColor="#9CA3AF"
+                      value={forgotPasswordEmail}
+                      onChangeText={setForgotPasswordEmail}
+                      editable={!forgotPasswordLoading}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoFocus
+                    />
+                  </View>
+                </View>
+
+                <View style={styles.modalButtonGroup}>
+                  <TouchableOpacity
+                    style={styles.modalCancelButton}
+                    onPress={() => {
+                      setForgotPasswordModalVisible(false);
+                      setForgotPasswordEmail('');
+                    }}
+                    disabled={forgotPasswordLoading}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.modalCancelButtonText}>取消</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.modalSendButton, forgotPasswordLoading && styles.modalSendButtonDisabled]}
+                    onPress={handleForgotPassword}
+                    disabled={forgotPasswordLoading}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.modalSendButtonText}>
+                      {forgotPasswordLoading ? '發送中...' : '發送'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.bgCard,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backButton: {
-    padding: spacing.sm,
-    marginLeft: -spacing.sm,
-  },
-  headerTitle: {
-    fontSize: fontSize.lg,
-    fontWeight: fontWeight.bold,
-    color: colors.text,
-  },
-  headerSpacer: {
-    width: 40,
+  screen: {
+    flex: 1,
+    backgroundColor: colors.brandOrange,
   },
   keyboardAvoidingView: {
     flex: 1,
+  },
+  // 上半部：橘色背景區域 (固定高度約 180px，確保不被瀏海遮住)
+  orangeSection: {
+    height: 180,
+    backgroundColor: colors.brandOrange,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: spacing.md,
+  },
+  backButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30,
+    left: spacing.lg,
+    padding: spacing.sm,
+    zIndex: 10,
+  },
+  brandingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    flex: 1,
+  },
+  logo: {
+    width: 56,
+    height: 56,
+    marginBottom: spacing.xs, // 縮小間距，讓 Logo 和文字更緊湊
+  },
+  welcomeText: {
+    fontSize: fontSize.xl, // 稍微縮小字體
+    fontWeight: fontWeight.bold,
+    color: '#FFFFFF',
+    marginTop: 0, // 移除額外的 marginTop，使用 marginBottom 控制間距
+  },
+  // 下半部：白色卡片區域 (佔據剩餘所有空間)
+  whiteSection: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    marginTop: -1, // 確保覆蓋橘色區域
+    overflow: 'hidden', // 確保圓角正確顯示
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing['2xl'],
     paddingBottom: spacing['3xl'],
   },
-  brandingContainer: {
-    alignItems: 'center',
-    marginTop: spacing['2xl'],
-    marginBottom: spacing['2xl'],
-  },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    backgroundColor: colors.brandOrange,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: spacing.lg,
-  },
-  logoText: {
-    fontSize: 40,
-  },
-  appName: {
-    fontSize: fontSize['2xl'],
+  formTitle: {
+    fontSize: fontSize['3xl'],
     fontWeight: fontWeight.bold,
     color: colors.text,
-    marginBottom: spacing.sm,
+    marginBottom: spacing['2xl'],
+    textAlign: 'center',
   },
-  tagline: {
-    fontSize: fontSize.base,
-    color: colors.textMuted,
+  formContainer: {
+    width: '100%',
   },
-  formCard: {
+  inputContainer: {
     marginBottom: spacing.lg,
   },
-  submitButton: {
-    marginTop: spacing.sm,
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 15,
+    borderWidth: 0,
   },
-  switchButton: {
-    marginTop: spacing.lg,
+  inputIcon: {
+    marginRight: spacing.sm,
+  },
+  input: {
+    flex: 1,
+    fontSize: fontSize.base,
+    color: colors.text,
+    padding: 0,
+    margin: 0,
+  },
+  loginButton: {
+    width: '100%',
+    height: 55,
+    backgroundColor: colors.brandOrange,
+    borderRadius: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: spacing.xl,
+    // 陰影效果
+    shadowColor: colors.brandOrange,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6, // Android 陰影
+  },
+  loginButtonDisabled: {
+    opacity: 0.6,
+  },
+  loginButtonText: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: '#FFFFFF',
+  },
+  signUpLink: {
+    marginTop: spacing.xl,
     paddingVertical: spacing.md,
     alignItems: 'center',
   },
-  switchButtonText: {
+  signUpLinkText: {
+    fontSize: fontSize.base,
+    color: colors.textMuted,
+  },
+  signUpLinkHighlight: {
+    color: colors.brandOrange,
+    fontWeight: fontWeight.semibold,
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+    marginTop: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  forgotPasswordText: {
     fontSize: fontSize.sm,
     color: colors.brandOrange,
+    fontWeight: fontWeight.medium,
   },
-  termsText: {
-    fontSize: fontSize.xs,
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContentWrapper: {
+    width: '85%',
+    maxWidth: 400,
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 20,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  modalTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+  },
+  modalCloseButton: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalDescription: {
+    fontSize: fontSize.sm,
     color: colors.textMuted,
-    textAlign: 'center',
-    lineHeight: fontSize.xs * 1.5,
+    lineHeight: 20,
+    marginBottom: spacing.lg,
+  },
+  modalInputContainer: {
+    marginBottom: spacing.lg,
+  },
+  modalButtonGroup: {
+    flexDirection: 'row',
+    marginTop: spacing.md,
+  },
+  modalCancelButton: {
+    flex: 1,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: '#FFFFFF',
+    marginRight: spacing.sm,
+  },
+  modalCancelButtonText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+    color: colors.textMuted,
+  },
+  modalSendButton: {
+    flex: 1,
+    height: 50,
+    backgroundColor: colors.brandOrange,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: spacing.sm,
+    shadowColor: colors.brandOrange,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  modalSendButtonDisabled: {
+    opacity: 0.6,
+  },
+  modalSendButtonText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.bold,
+    color: '#FFFFFF',
   },
 });

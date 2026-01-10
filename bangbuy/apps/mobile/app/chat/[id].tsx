@@ -1,6 +1,6 @@
 import { StyleSheet, View, Text, FlatList, KeyboardAvoidingView, Platform, Alert, SafeAreaView, TouchableOpacity } from 'react-native';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Screen } from '@/src/ui';
 import { colors, spacing } from '@/src/theme/tokens';
@@ -50,6 +50,98 @@ export default function ChatScreen() {
       fetchMessages();
     }
   }, [conversationId]);
+
+  // 當頁面重新獲得焦點時，刷新訊息列表
+  useFocusEffect(
+    useCallback(() => {
+      if (conversationId && isUUID(conversationId)) {
+        console.log('[ChatScreen] Page focused, refreshing messages');
+        fetchMessages();
+      }
+    }, [conversationId])
+  );
+
+  // Supabase Realtime 訂閱：監聽新訊息
+  useEffect(() => {
+    if (!conversationId || !isUUID(conversationId)) return;
+
+    console.log('[ChatScreen] Setting up Realtime subscription for conversation:', conversationId);
+
+    // 建立 Realtime channel
+    const channel = supabase
+      .channel(`messages:${conversationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        async (payload) => {
+          console.log('[ChatScreen] New message received via Realtime:', payload.new.id);
+          
+          // 獲取新訊息的完整資料（包含發送者資訊）
+          try {
+            const newMessageData = payload.new;
+            
+            // 查詢發送者資訊
+            const { data: senderProfile } = await supabase
+              .from('profiles')
+              .select('name, avatar_url')
+              .eq('id', newMessageData.sender_id)
+              .single();
+
+            // 構建 Message 物件
+            const newMessage: Message = {
+              id: newMessageData.id,
+              senderId: newMessageData.sender_id,
+              senderName: senderProfile?.name || null,
+              senderAvatar: senderProfile?.avatar_url || null,
+              content: newMessageData.content,
+              createdAt: newMessageData.created_at,
+            };
+
+            // 檢查是否已存在（避免重複）
+            setMessages((prev) => {
+              const exists = prev.some((m) => m.id === newMessage.id);
+              if (exists) {
+                console.log('[ChatScreen] Message already exists, skipping:', newMessage.id);
+                return prev;
+              }
+              
+              console.log('[ChatScreen] Adding new message to list:', newMessage.id);
+              return [...prev, newMessage];
+            });
+
+            // 如果用戶在底部附近，自動滾動到底部
+            if (isNearBottom) {
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 100);
+            }
+
+            // 標記為已讀（非阻塞）
+            markAsRead(conversationId).catch((err) => {
+              console.warn('[ChatScreen] Failed to mark as read:', err);
+            });
+          } catch (err) {
+            console.error('[ChatScreen] Error processing Realtime message:', err);
+            // 如果處理失敗，重新獲取所有訊息
+            fetchMessages();
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('[ChatScreen] Realtime subscription status:', status);
+      });
+
+    // 清理函數：組件卸載時移除訂閱
+    return () => {
+      console.log('[ChatScreen] Cleaning up Realtime subscription');
+      supabase.removeChannel(channel);
+    };
+  }, [conversationId, isNearBottom]);
 
   // 智能滚动：只在用户接近底部时自动滚动
   useEffect(() => {
@@ -231,23 +323,22 @@ export default function ChatScreen() {
   const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const isMine = item.senderId === user?.id;
     const prevMessage = index > 0 ? messages[index - 1] : undefined;
-    const showTime = shouldShowTime(item, index, prevMessage);
     
     // 計算間距：同一人連續訊息間距較小
     const isSameSender = prevMessage && prevMessage.senderId === item.senderId;
-    const marginTop = isSameSender ? 4 : 12;
+    const marginTop = isSameSender ? 2 : 8;
 
     return (
       <View style={[styles.messageWrapper, { marginTop }]}>
         <MessageBubble
           message={item}
           isMine={isMine}
-          showTime={showTime}
+          showTime={false} // 不再使用上方的時間顯示
           formatTime={formatTime}
         />
       </View>
     );
-  }, [user?.id, messages, shouldShowTime, formatTime]);
+  }, [user?.id, messages, formatTime]);
 
   if (loading && messages.length === 0) {
     return (
@@ -329,7 +420,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: '#F9FAFB',
+    backgroundColor: '#F9F9F9', // 非常淡的灰白色，讓氣泡對比更清晰
   },
   centerContainer: {
     flex: 1,

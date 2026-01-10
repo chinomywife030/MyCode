@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen } from '@/src/ui';
@@ -24,13 +24,24 @@ const faqData: FAQItem[] = [
   },
   {
     question: '如何聯絡客服？',
-    answer: '你可以透過以下方式聯絡我們：\n• Email: support@bangbuy.app\n• 在 App 內回報問題',
+    answer: '你可以透過以下方式聯絡我們：\n• Email: bangbuy.contact@gmail.com\n• 在 App 內回報問題',
   },
 ];
 
 export default function HelpScreen() {
-  const handleContactEmail = () => {
-    Linking.openURL('mailto:support@bangbuy.app');
+  const handleContactEmail = async () => {
+    const url = 'mailto:bangbuy.contact@gmail.com';
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('錯誤', '無法開啟郵件應用程式');
+      }
+    } catch (error) {
+      console.error('[HelpScreen] Open email error:', error);
+      Alert.alert('錯誤', '無法開啟郵件應用程式');
+    }
   };
 
   return (
@@ -55,6 +66,14 @@ export default function HelpScreen() {
           ))}
         </View>
 
+        {/* 合作夥伴資訊 */}
+        <View style={styles.section}>
+          <View style={styles.partnerBanner}>
+            <Ionicons name="handshake-outline" size={24} color={colors.brandOrange} />
+            <Text style={styles.partnerText}>我們正在尋找合作夥伴</Text>
+          </View>
+        </View>
+
         {/* 聯絡方式 */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>聯絡我們</Text>
@@ -66,7 +85,7 @@ export default function HelpScreen() {
             <Ionicons name="mail-outline" size={22} color={colors.brandOrange} />
             <View style={styles.contactContent}>
               <Text style={styles.contactLabel}>Email</Text>
-              <Text style={styles.contactValue}>support@bangbuy.app</Text>
+              <Text style={styles.contactValue}>bangbuy.contact@gmail.com</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </TouchableOpacity>
@@ -155,6 +174,24 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
     color: colors.text,
   },
+  partnerBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(249, 115, 22, 0.15)', // 品牌橘色 15% 透明度
+    borderRadius: 12,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(249, 115, 22, 0.3)', // 品牌橘色 30% 透明度
+  },
+  partnerText: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+    color: colors.brandOrange,
+    marginLeft: spacing.md,
+    flex: 1,
+  },
 });
+
+
 
 

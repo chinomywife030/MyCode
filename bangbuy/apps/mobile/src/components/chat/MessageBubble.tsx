@@ -16,23 +16,31 @@ export const MessageBubble = memo(function MessageBubble({
   showTime,
   formatTime,
 }: MessageBubbleProps) {
+  // 格式化時間為簡短格式（用於氣泡內顯示）
+  const formatBubbleTime = (timeString: string) => {
+    try {
+      const date = new Date(timeString);
+      const hours = date.getHours();
+      const minutes = date.getMinutes();
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    } catch {
+      return '';
+    }
+  };
+
   return (
     <View style={[styles.container, isMine ? styles.containerMine : styles.containerOther]}>
       <View style={[styles.bubble, isMine ? styles.bubbleMine : styles.bubbleOther]}>
         <Text style={[styles.text, isMine && styles.textMine]}>
           {message.content}
         </Text>
-      </View>
-      {showTime && (
-        <View style={[styles.timeContainer, isMine && styles.timeContainerMine]}>
-          <Text style={[styles.time, isMine && styles.timeMine]}>
-            {formatTime(message.createdAt || message.created_at)}
+        {/* 時間顯示在氣泡內部右下角 */}
+        <View style={styles.timeContainer}>
+          <Text style={[styles.bubbleTime, isMine && styles.bubbleTimeMine]}>
+            {formatBubbleTime(message.createdAt || message.created_at)}
           </Text>
-          {isMine && (
-            <Text style={styles.checkmark}>✓</Text>
-          )}
         </View>
-      )}
+      </View>
     </View>
   );
 });
@@ -40,7 +48,7 @@ export const MessageBubble = memo(function MessageBubble({
 const styles = StyleSheet.create({
   container: {
     maxWidth: '75%',
-    marginBottom: 4,
+    marginBottom: 6,
   },
   containerMine: {
     alignSelf: 'flex-end',
@@ -51,45 +59,46 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   bubble: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 18,
   },
+  // 我發送的訊息：經典藍色，右下角稍微尖一點
   bubbleMine: {
     backgroundColor: '#007AFF',
-    borderBottomRightRadius: 4,
+    borderTopLeftRadius: 18,
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 4, // 右下角尖一點
   },
+  // 對方發送的訊息：淺灰色，左上角稍微尖一點
   bubbleOther: {
-    backgroundColor: '#F3F4F6',
-    borderBottomLeftRadius: 4,
+    backgroundColor: '#E5E5EA',
+    borderTopLeftRadius: 4, // 左上角尖一點
+    borderTopRightRadius: 18,
+    borderBottomLeftRadius: 18,
+    borderBottomRightRadius: 18,
   },
   text: {
     fontSize: fontSize.base,
-    lineHeight: 20,
-    color: colors.text,
+    lineHeight: 22, // 增加行高提升閱讀舒適度
+    color: '#000000',
+    marginBottom: 2, // 與時間的間距
   },
   textMine: {
-    color: '#ffffff',
+    color: '#FFFFFF',
   },
   timeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
+    alignSelf: 'flex-end',
+    marginTop: 2,
   },
-  timeContainerMine: {
-    justifyContent: 'flex-end',
+  bubbleTime: {
+    fontSize: 10,
+    color: 'rgba(0, 0, 0, 0.5)', // 半透明黑色
+    lineHeight: 12,
   },
-  time: {
-    fontSize: 11,
-    color: colors.textMuted,
-  },
-  timeMine: {
-    color: colors.textMuted,
-  },
-  checkmark: {
-    fontSize: 11,
-    color: colors.textMuted,
-    marginLeft: 4,
+  bubbleTimeMine: {
+    color: 'rgba(255, 255, 255, 0.7)', // 半透明白色
   },
 });
 

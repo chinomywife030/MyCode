@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CountryChip } from '@/src/components/CountryChip';
-import { ImmoImageCarousel } from './ImmoImageCarousel';
+import { ImageCarousel } from '@/src/components/ImageCarousel';
 import { ImmoCardActions } from './ImmoCardActions';
 import {
   immoColors,
@@ -108,12 +108,10 @@ export function ImmoScoutWishCard({
   onMessagePress,
   isLoading = false,
 }: ImmoScoutWishCardProps) {
-  const [isLiked, setIsLiked] = useState(false);
-
-  const handleLikePress = () => {
-    setIsLiked(!isLiked);
-    // TODO: 實現收藏功能
-  };
+  const [imageContainerSize, setImageContainerSize] = useState({ 
+    width: 0, 
+    height: 0 
+  });
 
   // 取得圖片陣列（優先使用 images，fallback 到 image）
   const imageList = display.images && display.images.length > 0 
@@ -121,6 +119,15 @@ export function ImmoScoutWishCard({
     : display.image 
       ? [display.image] 
       : [];
+
+  // 計算圖片容器實際尺寸（4:3 比例）
+  const handleImageContainerLayout = (event: any) => {
+    const { width, height } = event.nativeEvent.layout;
+    if (width > 0 && height > 0) {
+      // 確保尺寸與容器一致（aspectRatio 會自動計算高度）
+      setImageContainerSize({ width, height });
+    }
+  };
 
   return (
     <TouchableOpacity
@@ -131,13 +138,18 @@ export function ImmoScoutWishCard({
       {/* ============================================ */}
       {/* Image Carousel Area */}
       {/* ============================================ */}
-      <View style={styles.imageContainer}>
-        <ImmoImageCarousel
-          images={imageList}
-          aspectRatio={4 / 3}
-          showIndicator={imageList.length > 1}
-          indicatorType="dots"
-        />
+      <View 
+        style={styles.imageContainer}
+        onLayout={handleImageContainerLayout}
+      >
+        {imageContainerSize.width > 0 && imageContainerSize.height > 0 && (
+          <ImageCarousel
+            images={imageList}
+            width={imageContainerSize.width}
+            height={imageContainerSize.height}
+            showIndicator={imageList.length > 1}
+          />
+        )}
 
         {/* Country Chip (Top-Left) */}
         {display.country && (
@@ -145,19 +157,6 @@ export function ImmoScoutWishCard({
             <CountryChip countryCode={display.country} size="sm" />
           </View>
         )}
-
-        {/* Heart Button (Top-Right) */}
-        <TouchableOpacity
-          style={styles.heartButton}
-          onPress={handleLikePress}
-          activeOpacity={0.8}
-        >
-          <Ionicons
-            name={isLiked ? 'heart' : 'heart-outline'}
-            size={22}
-            color={isLiked ? immoColors.heartActive : immoColors.heartInactive}
-          />
-        </TouchableOpacity>
 
         {/* Status Badge (Bottom-Left) */}
         <View style={styles.statusBadge}>
@@ -231,27 +230,17 @@ const styles = StyleSheet.create({
     borderColor: immoColors.borderLight,
     ...immoShadows.card,
   },
-  // Image Area
+  // Image Area - 固定比例容器，不影響其他區塊
   imageContainer: {
     width: '100%',
+    aspectRatio: 4 / 3, // 固定 4:3 比例，鎖定圖片區高度
     position: 'relative',
+    overflow: 'hidden', // 確保圓角和裁切
   },
   countryBadge: {
     position: 'absolute',
     top: immoSpacing.sm,
     left: immoSpacing.sm,
-    zIndex: 10,
-  },
-  heartButton: {
-    position: 'absolute',
-    top: immoSpacing.sm,
-    right: immoSpacing.sm,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    alignItems: 'center',
-    justifyContent: 'center',
     zIndex: 10,
   },
   statusBadge: {

@@ -192,6 +192,12 @@ export default function ProfileScreen() {
       onPress: () => router.push('/me/trips'),
     },
     {
+      id: 'my-discoveries',
+      icon: 'compass-outline',
+      label: '我的旅途發現',
+      onPress: () => router.push('/me/discoveries'),
+    },
+    {
       id: 'settings',
       icon: 'settings-outline',
       label: '設定',

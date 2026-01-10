@@ -60,18 +60,23 @@ export async function getNotificationPermission(): Promise<PushTokenStatus> {
       projectId = (Constants.manifest2 as any).extra.eas.projectId;
     }
     
-    // 如果沒有 projectId，嘗試不傳入（某些情況下 Expo 可以自動推斷）
+    // EAS Build 必須傳入 projectId，否則會失敗
+    if (!projectId) {
+      console.error('[getNotificationPermission] No projectId found. EAS Build requires projectId.');
+      return {
+        granted: false,
+        token: null,
+        error: '缺少 projectId 設定（請檢查 app.json 的 extra.eas.projectId）',
+      };
+    }
+
+    // 取得 push token（必須傳入 projectId）
     let tokenData;
     try {
-      if (projectId) {
-        tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-      } else {
-        // 嘗試不傳入 projectId（可能會失敗，但先試試）
-        console.warn('[getNotificationPermission] No projectId found, attempting without it');
-        tokenData = await Notifications.getExpoPushTokenAsync();
-      }
+      tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
     } catch (tokenError: any) {
       // 如果失敗，提供明確的錯誤訊息
+      console.error('[getNotificationPermission] Failed to get push token:', tokenError);
       if (tokenError.message?.includes('projectId')) {
         throw new Error('需要設定 EXPO_PUBLIC_PROJECT_ID 環境變數或在 app.json 中配置 projectId');
       }

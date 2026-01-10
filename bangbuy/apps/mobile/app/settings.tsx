@@ -1,4 +1,4 @@
-import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Switch, Alert } from 'react-native';
+import { StyleSheet, View, Text, ScrollView, TouchableOpacity, Switch, Alert, Linking } from 'react-native';
 import { useState, useEffect } from 'react';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +42,36 @@ export default function SettingsScreen() {
 
   const handleLanguagePress = () => {
     Alert.alert('語言設定', '目前僅支援繁體中文', [{ text: '確定' }]);
+  };
+
+  const handleOpenPrivacyPolicy = async () => {
+    const url = 'https://bangbuy.app/privacy';
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('錯誤', '無法開啟此連結');
+      }
+    } catch (error) {
+      console.error('[SettingsScreen] Open privacy policy error:', error);
+      Alert.alert('錯誤', '無法開啟隱私權政策');
+    }
+  };
+
+  const handleOpenTermsOfService = async () => {
+    const url = 'https://bangbuy.app/terms';
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (supported) {
+        await Linking.openURL(url);
+      } else {
+        Alert.alert('錯誤', '無法開啟此連結');
+      }
+    } catch (error) {
+      console.error('[SettingsScreen] Open terms of service error:', error);
+      Alert.alert('錯誤', '無法開啟服務條款');
+    }
   };
 
   return (
@@ -101,6 +131,33 @@ export default function SettingsScreen() {
             </View>
             <Text style={styles.settingValue}>v1.0.0</Text>
           </View>
+        </View>
+
+        {/* 法律條款 */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>法律條款</Text>
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={handleOpenPrivacyPolicy}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingLeft}>
+              <Ionicons name="shield-checkmark-outline" size={22} color={colors.text} />
+              <Text style={styles.settingLabel}>隱私權政策</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.settingItem}
+            onPress={handleOpenTermsOfService}
+            activeOpacity={0.7}
+          >
+            <View style={styles.settingLeft}>
+              <Ionicons name="document-text-outline" size={22} color={colors.text} />
+              <Text style={styles.settingLabel}>服務條款</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </Screen>
@@ -176,5 +233,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 });
+
+
 
 

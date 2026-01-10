@@ -40,16 +40,6 @@ export function ChatHeader({ otherUserName, otherUserAvatar }: ChatHeaderProps) 
           {displayName}
         </Text>
       </View>
-
-      <TouchableOpacity
-        style={styles.menuButton}
-        activeOpacity={0.7}
-        onPress={() => {
-          // TODO: 顯示 menu（未來實作）
-        }}
-      >
-        <Ionicons name="ellipsis-vertical" size={24} color={colors.text} />
-      </TouchableOpacity>
     </View>
   );
 }
@@ -102,13 +92,8 @@ const styles = StyleSheet.create({
     color: colors.text,
     flex: 1,
   },
-  menuButton: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginLeft: spacing.sm,
-  },
 });
+
+
 
 

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "mobile",
+    "name": "bangbuy",
     "slug": "bangbuy",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -16,6 +16,7 @@
       }
     },
     "android": {
+      "package": "com.bangbuy.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",

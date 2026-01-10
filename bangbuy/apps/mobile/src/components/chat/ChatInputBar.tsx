@@ -22,11 +22,12 @@ export function ChatInputBar({
 
   return (
     <View style={styles.container}>
+      {/* 膠囊狀輸入框 */}
       <View style={styles.inputWrapper}>
         <TextInput
           style={styles.input}
           placeholder="輸入訊息..."
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor="#8E8E93"
           value={value}
           onChangeText={onChangeText}
           multiline
@@ -35,6 +36,8 @@ export function ChatInputBar({
           textAlignVertical="center"
         />
       </View>
+
+      {/* 右側發送按鈕（藍色 Icon） */}
       <TouchableOpacity
         style={[styles.sendButton, !canSend && styles.sendButtonDisabled]}
         onPress={onSend}
@@ -44,7 +47,7 @@ export function ChatInputBar({
         <Ionicons
           name="send"
           size={20}
-          color={canSend ? '#ffffff' : colors.textMuted}
+          color={canSend ? '#007AFF' : '#C7C7CC'}
         />
       </TouchableOpacity>
     </View>
@@ -55,22 +58,29 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
     paddingBottom: Platform.OS === 'ios' ? spacing.md : spacing.sm,
-    backgroundColor: '#ffffff',
-    borderTopWidth: 1,
-    borderTopColor: '#E5E7EB',
+    backgroundColor: '#FFFFFF',
+    // 頂部輕微陰影
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: -2,
+    },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 3, // Android 陰影
   },
   inputWrapper: {
     flex: 1,
     marginRight: spacing.sm,
-    backgroundColor: colors.bg,
-    borderRadius: 20,
-    minHeight: 40,
+    backgroundColor: '#F2F2F7', // 淺灰色背景（膠囊狀）
+    borderRadius: 20, // 膠囊狀圓角
+    minHeight: 36,
     maxHeight: 100,
     paddingHorizontal: spacing.md,
-    paddingVertical: Platform.OS === 'ios' ? 10 : 8,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
     justifyContent: 'center',
   },
   input: {
@@ -78,19 +88,22 @@ const styles = StyleSheet.create({
     color: colors.text,
     padding: 0,
     margin: 0,
+    lineHeight: 20,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#007AFF',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'transparent', // 透明背景，只顯示 Icon
     justifyContent: 'center',
     alignItems: 'center',
+    marginBottom: 2,
   },
   sendButtonDisabled: {
-    backgroundColor: '#E5E7EB',
-    opacity: 0.6,
+    opacity: 0.4,
   },
 });
+
+
 
 
