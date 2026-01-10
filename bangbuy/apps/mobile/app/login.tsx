@@ -137,8 +137,8 @@ export default function LoginScreen() {
     setForgotPasswordLoading(true);
 
     try {
-      // 使用 Supabase Storage 上的重設密碼網頁
-      const redirectUrl = 'https://iaizclcplchjhbfafkiy.supabase.co/storage/v1/object/public/public1/reset-password.html';
+      // 使用 Netlify 部署的重設密碼網頁
+      const redirectUrl = 'https://melodious-khapse-e1b916.netlify.app';
       console.log('🔗 Redirect URL:', redirectUrl); // Debug 用
 
       const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail.trim(), {
