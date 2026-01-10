@@ -138,7 +138,7 @@ export default function LoginScreen() {
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail.trim(), {
-        redirectTo: `${process.env.EXPO_PUBLIC_SUPABASE_URL || ''}/auth/callback`,
+        redirectTo: 'bangbuy://auth/callback',
       });
 
       if (error) throw error;
