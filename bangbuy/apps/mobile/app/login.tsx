@@ -7,6 +7,7 @@ import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/token
 import { supabase } from '@/src/lib/supabase';
 import { navigateAfterLogin } from '@/src/lib/navigation';
 import { Image } from 'expo-image';
+import * as Linking from 'expo-linking';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -137,8 +138,15 @@ export default function LoginScreen() {
     setForgotPasswordLoading(true);
 
     try {
+      // 動態生成 Redirect URI（支援 Expo Go 和 Production Build）
+      // 使用 expo-linking 替代 expo-auth-session，避免 expo-crypto 依賴問題
+      const redirectUrl = Linking.createURL('auth/reset-password', {
+        scheme: 'bangbuy', // 對應 app.json 的 scheme
+      });
+      console.log('🔗 Redirect URL:', redirectUrl); // Debug 用
+
       const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail.trim(), {
-        redirectTo: 'bangbuy://auth/callback',
+        redirectTo: redirectUrl,
       });
 
       if (error) throw error;

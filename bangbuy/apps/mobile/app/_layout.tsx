@@ -1,5 +1,5 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
 import 'react-native-reanimated';
@@ -21,6 +21,7 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const initialized = useRef(false);
   const router = useRouter();
+  const segments = useSegments();
 
   useEffect(() => {
     // 只在首次載入時初始化一次
@@ -84,20 +85,40 @@ export default function RootLayout() {
   useEffect(() => {
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[RootLayout] Auth state changed:', event, session?.user?.id);
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔔 Auth Event:', event, session?.user?.id); // Debug 用
+      console.log('📍 Current segments:', segments); // Debug 用
       
+      // 1. 如果是重設密碼事件，強制跳轉
       if (event === 'PASSWORD_RECOVERY') {
-        // 當偵測到是「重設密碼流程」進來的，強制跳轉到重設頁面
         console.log('[RootLayout] PASSWORD_RECOVERY event detected, redirecting to reset-password');
         router.push('/auth/reset-password');
+        return;
+      }
+
+      // 2. 如果是一般登入 (SIGNED_IN)
+      if (event === 'SIGNED_IN' && session) {
+        // 🚨 關鍵判斷：檢查當前是否已經在 "auth" 群組中
+        // segments[0] 通常是群組名，segments[1] 是頁面名
+        const inAuthGroup = segments[0] === 'auth';
+        
+        console.log('[RootLayout] SIGNED_IN event, inAuthGroup:', inAuthGroup, 'segments:', segments);
+        
+        // 如果使用者現在不在 Auth 流程中 (例如正在登入頁)，才跳轉去首頁
+        // 如果使用者是因為 Deep Link 被帶到 reset-password 頁面的，這裡就不會執行跳轉
+        if (!inAuthGroup) {
+          console.log('[RootLayout] User not in auth group, navigating to home');
+          router.replace('/(tabs)');
+        } else {
+          console.log('[RootLayout] User in auth group, skipping auto-navigation');
+        }
       }
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, segments]); // 記得把 segments 加入依賴
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
