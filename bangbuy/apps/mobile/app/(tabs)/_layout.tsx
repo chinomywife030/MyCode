@@ -69,9 +69,6 @@ export default function TabLayout() {
       {/* 🔴 CRITICAL: Explicitly HIDE everything else that might exist in the folder */}
       <Tabs.Screen name="_trips-page-content" options={{ href: null }} />
       <Tabs.Screen name="_wishes-page-content" options={{ href: null }} />
-      <Tabs.Screen name="create" options={{ href: null }} />
-      <Tabs.Screen name="trips" options={{ href: null }} />
-      <Tabs.Screen name="wishes" options={{ href: null }} />
     </Tabs>
   );
 }
