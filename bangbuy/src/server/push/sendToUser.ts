@@ -105,6 +105,43 @@ export interface PushPayload {
   data?: Record<string, any>;
 }
 
+/**
+ * 強制推播白名單
+ * 
+ * 這些通知類型屬於高價值交易事件，必須無條件發送 Push Notification，
+ * 不受使用者通知偏好影響。
+ * 
+ * 原因：
+ * - wish_quote / new_quote：報價是交易流程的關鍵節點，買家需要即時知道有人報價，
+ *   錯過報價可能導致交易機會流失，影響平台交易轉換率。
+ */
+const FORCE_PUSH_TYPES = ['wish_quote', 'new_quote'];
+
+/**
+ * 檢查是否應該發送推播通知
+ * 
+ * @param notificationType - 通知類型（從 payload.data.type 取得）
+ * @param userPreferences - 使用者通知偏好設定
+ * @returns 是否應該發送推播
+ */
+async function shouldSendPush(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  userId: string,
+  notificationType: string | undefined
+): Promise<boolean> {
+  // 強制推播白名單：無條件發送
+  if (notificationType && FORCE_PUSH_TYPES.includes(notificationType)) {
+    console.log(`[shouldSendPush] Force push for type: ${notificationType}`);
+    return true;
+  }
+
+  // 其他類型：檢查使用者偏好
+  // 目前預設為 true（允許推播），未來可根據實際偏好設定調整
+  // 例如：查詢 notification_preferences 表，檢查 email_reco_enabled 等
+  
+  return true;
+}
+
 export interface SendToUserResult {
   success: boolean;
   sent: number;
@@ -133,6 +170,22 @@ export async function sendToUser(
     const supabase = getSupabaseAdmin();
     if (!supabase) {
       throw new Error('Supabase service role key 未配置');
+    }
+
+    // 取得通知類型（從 payload.data.type）
+    const notificationType = payload.data?.type;
+
+    // 檢查是否應該發送推播（gating 邏輯）
+    const shouldSend = await shouldSendPush(supabase, userId, notificationType);
+    if (!shouldSend) {
+      console.log(`[sendToUser] Skipping push for user ${userId}, type: ${notificationType}`);
+      return {
+        success: true,
+        sent: 0,
+        errors: 0,
+        tokensFound: 0,
+        tokensUsed: 0,
+      };
     }
 
     // 查詢該用戶的所有有效 device tokens

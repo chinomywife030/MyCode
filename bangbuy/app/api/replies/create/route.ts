@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
         const notificationTitle = notificationContent.title;
         const pushBody = notificationContent.body;
         const notificationData = {
-          type: 'NEW_REPLY',
+          type: 'wish_quote', // 使用 wish_quote 以符合強制推播白名單
           wishId: wishId,
           url: `/wish/${wishId}`,
         };
@@ -123,12 +123,12 @@ export async function POST(request: NextRequest) {
             .insert([
               {
                 user_id: wish.buyer_id,
-                type: 'NEW_REPLY',
+                type: 'wish_quote', // 使用 wish_quote 以符合強制推播白名單
                 title: notificationTitle,
                 body: pushBody,
                 data: notificationData,
                 is_read: false,
-                dedupe_key: `NEW_REPLY_${wishId}_${reply.id}`, // 防止重複通知
+                dedupe_key: `wish_quote_${wishId}_${reply.id}`, // 防止重複通知
               },
             ]);
 

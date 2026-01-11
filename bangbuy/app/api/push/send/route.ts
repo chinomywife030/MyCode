@@ -102,6 +102,45 @@ async function removeInvalidTokens(
   }
 }
 
+/**
+ * 強制推播白名單
+ * 
+ * 這些通知類型屬於高價值交易事件，必須無條件發送 Push Notification，
+ * 不受使用者通知偏好影響。
+ * 
+ * 原因：
+ * - wish_quote / new_quote：報價是交易流程的關鍵節點，買家需要即時知道有人報價，
+ *   錯過報價可能導致交易機會流失，影響平台交易轉換率。
+ */
+const FORCE_PUSH_TYPES = ['wish_quote', 'new_quote'];
+
+/**
+ * 檢查是否應該發送推播通知
+ * 
+ * @param notificationType - 通知類型（從 data.type 取得）
+ * @param userPreferences - 使用者通知偏好設定
+ * @returns 是否應該發送推播
+ */
+function shouldSendPush(
+  notificationType: string | undefined,
+  userPreferences: {
+    email_reco_enabled?: boolean;
+    [key: string]: any;
+  } | null
+): boolean {
+  // 強制推播白名單：無條件發送
+  if (notificationType && FORCE_PUSH_TYPES.includes(notificationType)) {
+    console.log(`[shouldSendPush] Force push for type: ${notificationType}`);
+    return true;
+  }
+
+  // 其他類型：檢查使用者偏好
+  // 目前預設為 true（允許推播），未來可根據實際偏好設定調整
+  // 例如：if (userPreferences?.email_reco_enabled === false) return false;
+  
+  return true;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -122,6 +161,31 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Supabase service role key 未配置' },
         { status: 500 }
       );
+    }
+
+    // 取得通知類型（從 data.type 或 body.type）
+    const notificationType = data?.type || body.type;
+
+    // 查詢使用者通知偏好（僅在非強制推播類型時查詢）
+    let userPreferences: any = null;
+    if (!notificationType || !FORCE_PUSH_TYPES.includes(notificationType)) {
+      const { data: prefs } = await supabase
+        .from('notification_preferences')
+        .select('email_reco_enabled, digest_mode')
+        .eq('user_id', user_id)
+        .single();
+      
+      userPreferences = prefs;
+    }
+
+    // 檢查是否應該發送推播（gating 邏輯）
+    if (!shouldSendPush(notificationType, userPreferences)) {
+      console.log(`[POST /api/push/send] Skipping push for user ${user_id}, type: ${notificationType}, preferences:`, userPreferences);
+      return NextResponse.json({ 
+        success: true, 
+        sent: 0, 
+        skipped: 'user-preference' 
+      });
     }
 
     // 查詢該用戶的所有 push tokens
