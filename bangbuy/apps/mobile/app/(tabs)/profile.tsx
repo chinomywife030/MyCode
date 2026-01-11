@@ -206,7 +206,7 @@ export default function ProfileScreen() {
     {
       id: 'help',
       icon: 'help-circle-outline',
-      label: '幫助中心',
+      label: '聯絡我們',
       onPress: () => router.push('/help'),
     },
   ];

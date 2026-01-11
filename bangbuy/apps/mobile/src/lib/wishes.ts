@@ -16,6 +16,8 @@ import {
   type CreateWishResult,
   type WishStatus,
 } from '@bangbuy/core';
+import { supabase } from './supabase';
+import { getCurrentUser } from './auth';
 
 // 確保 core 已初始化
 ensureCoreInitialized();
@@ -87,4 +89,49 @@ export async function updateWishStatus(
 ): Promise<{ success: boolean; error?: string }> {
   ensureCoreInitialized();
   return coreUpdateWishStatus(wishId, status);
+}
+
+/**
+ * 刪除需求（soft delete）
+ * 使用 status = 'cancelled' 標記為已刪除
+ */
+export async function deleteWish(wishId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) {
+      return { success: false, error: '請先登入' };
+    }
+
+    // 先檢查該 wish 是否存在且為當前用戶所有
+    const { data: wish, error: fetchError } = await supabase
+      .from('wish_requests')
+      .select('buyer_id, status')
+      .eq('id', wishId)
+      .single();
+
+    if (fetchError || !wish) {
+      return { success: false, error: '找不到該需求' };
+    }
+
+    if (wish.buyer_id !== currentUser.id) {
+      return { success: false, error: '您沒有權限刪除此需求' };
+    }
+
+    // Soft delete: 將 status 設為 'cancelled'
+    const { error: updateError } = await supabase
+      .from('wish_requests')
+      .update({ status: 'cancelled' })
+      .eq('id', wishId)
+      .eq('buyer_id', currentUser.id); // 雙重保護：確保只能刪除自己的
+
+    if (updateError) {
+      console.error('[deleteWish] Error:', updateError);
+      return { success: false, error: updateError.message || '刪除失敗' };
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('[deleteWish] Exception:', error);
+    return { success: false, error: error instanceof Error ? error.message : '刪除失敗：發生未知錯誤' };
+  }
 }

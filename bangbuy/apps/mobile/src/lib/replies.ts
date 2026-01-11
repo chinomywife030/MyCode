@@ -198,3 +198,25 @@ export async function getLatestWishReply(
   }
 }
 
+/**
+ * 獲取某個 wish 的報價數量
+ */
+export async function getWishReplyCount(wishId: string): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('wish_replies')
+      .select('id', { count: 'exact', head: true })
+      .eq('wish_id', wishId);
+
+    if (error) {
+      console.error('[getWishReplyCount] Error:', error);
+      return 0;
+    }
+
+    return count || 0;
+  } catch (error) {
+    console.error('[getWishReplyCount] Exception:', error);
+    return 0;
+  }
+}
+

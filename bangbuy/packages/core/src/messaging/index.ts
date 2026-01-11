@@ -316,6 +316,14 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
 
             const senderName = senderProfile?.name || '有人';
 
+            // 組裝通知內容
+            const { buildNotificationContent } = await import('../notifications');
+            const notificationContent = buildNotificationContent({
+              type: 'chat_message',
+              senderName: senderName,
+              messageContent: content,
+            });
+
             // 非阻塞發送，不等待結果
             fetch(`${apiBaseUrl}/api/push/send`, {
               method: 'POST',
@@ -324,8 +332,8 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
               },
               body: JSON.stringify({
                 user_id: recipientId,
-                title: 'BangBuy',
-                body: `${senderName}: ${content.trim().substring(0, 40)}${content.trim().length > 40 ? '...' : ''}`,
+                title: notificationContent.title,
+                body: notificationContent.body,
                 data: {
                   type: 'chat_message',
                   chatId: conversationId,

@@ -49,12 +49,15 @@ export async function getWishes(options?: {
       .limit(limit);
 
     // 狀態篩選（預設為 'open'，除非明確指定 'all' 或其他狀態）
+    // 排除已刪除的項目（status = 'cancelled'）
     if (status && status !== 'all') {
       query = query.eq('status', status);
     } else if (!status) {
-      // 如果沒有指定 status，預設只顯示 'open'
+      // 如果沒有指定 status，預設只顯示 'open'，並排除 'cancelled'（已刪除）
       query = query.eq('status', 'open');
     }
+    // 無論如何都排除 'cancelled' 狀態（已刪除的項目）
+    query = query.neq('status', 'cancelled');
 
     // 國家篩選
     if (country) {
@@ -266,6 +269,13 @@ export async function createWish(params: CreateWishParams): Promise<CreateWishRe
     try {
       const apiBaseUrl = getApiBaseUrl();
       if (apiBaseUrl) {
+        // 組裝通知內容
+        const { buildNotificationContent } = await import('../notifications');
+        const notificationContent = buildNotificationContent({
+          type: 'wish_created',
+          wishTitle: params.title,
+        });
+
         // 非阻塞發送，不等待結果
         fetch(`${apiBaseUrl}/api/push/send`, {
           method: 'POST',
@@ -274,8 +284,8 @@ export async function createWish(params: CreateWishParams): Promise<CreateWishRe
           },
           body: JSON.stringify({
             user_id: user.id,
-            title: 'BangBuy',
-            body: `新需求：${params.title.trim().substring(0, 40)}${params.title.trim().length > 40 ? '...' : ''}`,
+            title: notificationContent.title,
+            body: notificationContent.body,
             data: {
               type: 'wish_created',
               wishId: data.id,

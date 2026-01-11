@@ -211,8 +211,14 @@ export async function POST(request: NextRequest) {
       .single();
     
     const senderName = senderProfile?.display_name || senderProfile?.name || '有人';
-    const messagePreview = content.trim().substring(0, 60);
-    const pushBody = `${senderName}: ${messagePreview}${content.trim().length > 60 ? '...' : ''}`;
+    
+    // 組裝通知內容
+    const { buildNotificationContent } = await import('@/lib/notificationContent');
+    const notificationContent = buildNotificationContent({
+      type: 'chat',
+      senderName: senderName,
+      messageContent: content,
+    });
     
     // 構建去重與節流的 key
     const dedupeKey = `chat:${conversationId}:${messageData.id}:${receiverId}`;
@@ -222,8 +228,8 @@ export async function POST(request: NextRequest) {
       userId: receiverId,
       type: 'chat',
       entityId: conversationId,
-      title: 'BangBuy',
-      body: pushBody,
+      title: notificationContent.title,
+      body: notificationContent.body,
       data: {
         type: 'chat',
         conversationId,

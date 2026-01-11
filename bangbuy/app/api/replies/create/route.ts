@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { sendToUser } from '@/src/server/push/sendToUser';
+import { buildNotificationContent } from '@/lib/notificationContent';
 
 export const runtime = 'nodejs';
 
@@ -89,13 +90,26 @@ export async function POST(request: NextRequest) {
     // 3. 發送推播通知並寫入 in-app notification 給 wish owner（如果 owner 存在且不是回覆者本人）
     if (wish.buyer_id && wish.buyer_id !== userId) {
       try {
-        // 準備推播內容
-        const replyPreview = message.trim().substring(0, 30);
-        const pushBody = replyPreview.length < message.trim().length 
-          ? `${replyPreview}...` 
-          : replyPreview;
+        // 查詢回覆者名稱（用於通知文案）
+        let senderName: string | undefined;
+        if (userId) {
+          const { data: senderProfile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('id', userId)
+            .single();
+          senderName = senderProfile?.name;
+        }
 
-        const notificationTitle = '有人回覆你的需求';
+        // 組裝通知內容
+        const notificationContent = buildNotificationContent({
+          type: 'wish_quote',
+          senderName: senderName,
+          wishTitle: wish.title || undefined,
+        });
+
+        const notificationTitle = notificationContent.title;
+        const pushBody = notificationContent.body;
         const notificationData = {
           type: 'NEW_REPLY',
           wishId: wishId,

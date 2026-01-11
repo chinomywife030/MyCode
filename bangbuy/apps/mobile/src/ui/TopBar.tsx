@@ -3,19 +3,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors, spacing, radius } from '@/src/theme/tokens';
 import { type Mode } from './ModeToggle';
+import { UserAvatar } from '@/src/components/UserAvatar';
 
 interface TopBarProps {
   onMenuPress?: () => void;
   onBellPress?: () => void;
   onAvatarPress?: () => void;
   userEmail?: string;
+  userName?: string;
+  userAvatarUrl?: string | null;
   mode?: Mode; // 模式：'shopper' (代購) 或 'buyer' (買家)
 }
 
 /**
  * 頂部導航欄：左側 hamburger/Logo 區、右側 bell + avatar
  */
-export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail, mode }: TopBarProps) {
+export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail, userName, userAvatarUrl, mode }: TopBarProps) {
   console.count('HEADER_RENDER');
   
   // 根據模式動態設定 Logo 顏色
@@ -43,19 +46,23 @@ export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail, mod
           <Ionicons name="notifications-outline" size={24} color={colors.text} />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.avatarButton}
-          onPress={onAvatarPress || (() => router.push('/login'))}
-          activeOpacity={0.7}
-        >
-          {userEmail ? (
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{userEmail.charAt(0).toUpperCase()}</Text>
-            </View>
-          ) : (
+        {userEmail || userName ? (
+          <UserAvatar
+            avatarUrl={userAvatarUrl}
+            name={userName}
+            email={userEmail}
+            size={32}
+            onPress={onAvatarPress || (() => router.push('/login'))}
+          />
+        ) : (
+          <TouchableOpacity
+            style={styles.avatarButton}
+            onPress={onAvatarPress || (() => router.push('/login'))}
+            activeOpacity={0.7}
+          >
             <Ionicons name="person-circle-outline" size={32} color={colors.textMuted} />
-          )}
-        </TouchableOpacity>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );
@@ -90,19 +97,6 @@ const styles = StyleSheet.create({
   },
   avatarButton: {
     padding: spacing.xs,
-  },
-  avatar: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    backgroundColor: colors.brandOrange,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
   },
 });
 

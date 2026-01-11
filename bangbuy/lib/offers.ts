@@ -5,7 +5,7 @@
  * 整合 Email 通知（保底通知）
  */
 
-import { safeRpc } from '@/lib/safeCall';
+import { safeRpc, supabase } from '@/lib/safeCall';
 
 // ========== Email 通知 Helper ==========
 
@@ -140,6 +140,68 @@ export async function createOffer(params: CreateOfferParams): Promise<CreateOffe
       const emailResult = await sendEmailNotification('offer_created', data.offer_id);
       emailSent = emailResult.emailSent;
       emailError = emailResult.emailError;
+    }
+
+    // 📱 發送 Push Notification 給買家（非阻斷式）
+    if (data.offer_id) {
+      try {
+        // 查詢 wish 和 shopper 資訊以組裝通知內容
+        // 查詢 wish 資訊
+        const { data: wishData } = await supabase
+          .from('wish_requests')
+          .select('id, title, buyer_id')
+          .eq('id', wishId)
+          .single();
+
+        // 查詢當前用戶（shopper）資訊
+        const { data: { user } } = await supabase.auth.getUser();
+        let shopperName: string | undefined;
+        if (user) {
+          const { data: shopperProfile } = await supabase
+            .from('profiles')
+            .select('name')
+            .eq('id', user.id)
+            .single();
+          shopperName = shopperProfile?.name;
+        }
+
+        if (wishData && wishData.buyer_id) {
+          // 組裝通知內容
+          const { buildNotificationContent } = await import('@/lib/notificationContent');
+          const notificationContent = buildNotificationContent({
+            type: 'wish_quote',
+            senderName: shopperName,
+            wishTitle: wishData.title,
+          });
+
+          // 組裝 payload data（deep link）
+          const payloadData = {
+            type: 'wish_quote',
+            wishId: wishData.id,
+            quoteId: data.offer_id,
+          };
+
+          // 呼叫 push API（非阻塞，失敗不影響報價建立）
+          fetch('/api/push/send', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              user_id: wishData.buyer_id,
+              title: notificationContent.title,
+              body: notificationContent.body,
+              data: payloadData,
+            }),
+          }).catch((pushError) => {
+            // 靜默處理錯誤，不影響報價建立
+            console.warn('[createOffer] Push notification failed (non-critical):', pushError);
+          });
+        }
+      } catch (pushError: any) {
+        // 靜默處理錯誤，不影響報價建立
+        console.warn('[createOffer] Push notification exception (non-critical):', pushError);
+      }
     }
 
     return { success: true, offerId: data.offer_id, emailSent, emailError };

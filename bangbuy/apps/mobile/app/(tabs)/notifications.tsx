@@ -6,6 +6,7 @@ import { Screen, TopBar, Card, StateView, Button } from '@/src/ui';
 import { colors, spacing, radius, fontSize, fontWeight, shadows } from '@/src/theme/tokens';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, type Notification } from '@/src/lib/notifications';
 import { getCurrentUser } from '@/src/lib/auth';
+import { handleNotificationPress } from '@/src/lib/notifications/navigation';
 
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -59,7 +60,7 @@ export default function NotificationsScreen() {
     fetchNotifications();
   };
 
-  const handleNotificationPress = async (notification: Notification) => {
+  const handleNotificationItemPress = async (notification: Notification) => {
     // 標記為已讀（失敗不影響跳頁）
     if (!notification.is_read) {
       try {
@@ -78,31 +79,10 @@ export default function NotificationsScreen() {
       }
     }
 
-    // 獲取 conversationId：依序嘗試
-    // a) notification.conversation_id
-    // b) notification.data?.conversation_id
-    // c) notification.data?.conversationId
-    const conversationId = 
-      (notification as any).conversation_id || 
-      notification.data?.conversation_id || 
-      notification.data?.conversationId;
-
-    // 如果有 conversationId，跳轉到聊天頁
-    if (conversationId && typeof conversationId === 'string' && conversationId.trim()) {
-      const cleanConversationId = conversationId.trim();
-      console.log('[NotificationsScreen] Navigating to chat:', cleanConversationId);
-      router.push(`/chat/${cleanConversationId}` as any);
-      return;
-    }
-
-    // 如果沒有 conversationId，記錄日誌
-    console.log('NO_CONVERSATION_ID', notification.id, notification);
-
-    // 其他導航邏輯（保持原有功能）
-    if (notification.type === 'NEW_REPLY' && notification.data?.wishId) {
-      router.push(`/wish/${notification.data.wishId}` as any);
-    } else if (notification.data?.url) {
-      router.push(notification.data.url as any);
+    // 使用共用的導頁函數
+    const success = await handleNotificationPress(notification, router);
+    if (!success) {
+      console.warn('[NotificationsScreen] Failed to navigate for notification:', notification.id);
     }
   };
 
@@ -161,7 +141,7 @@ export default function NotificationsScreen() {
   const renderItem = ({ item }: { item: Notification }) => (
     <TouchableOpacity
       style={[styles.notificationItem, !item.is_read && styles.notificationItemUnread]}
-      onPress={() => handleNotificationPress(item)}
+      onPress={() => handleNotificationItemPress(item)}
       activeOpacity={0.7}
     >
       <View style={styles.notificationContent}>

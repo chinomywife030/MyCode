@@ -41,6 +41,11 @@ export async function getTrips(options?: {
         )
       `)
       .limit(limit);
+    
+    // 排除已刪除的行程（description 以 "[DELETED]" 開頭）
+    // 注意：Supabase 的 not() 方法不支援 'like'，我們需要在應用層過濾
+    // 或者使用 .or('description.is.null,description.not.like.[DELETED]%')
+    // 但更簡單的方法是在應用層過濾
 
     // 搜索（使用 ilike 在 destination 和 description 上）
     if (keyword && keyword.trim()) {
@@ -128,6 +133,12 @@ export async function getTripById(id: string): Promise<Trip | undefined> {
     }
 
     if (!data) {
+      return undefined;
+    }
+
+    // 檢查是否已刪除（description 以 "[DELETED]" 開頭）
+    const desc = data.description || '';
+    if (desc.startsWith('[DELETED]')) {
       return undefined;
     }
 

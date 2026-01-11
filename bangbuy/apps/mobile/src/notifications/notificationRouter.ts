@@ -1,5 +1,6 @@
 import * as Notifications from "expo-notifications";
 import { router } from "expo-router";
+import { getPushNotificationRoute } from "@/src/lib/notifications/navigation";
 
 /**
  * 通知 data 格式定義
@@ -187,8 +188,8 @@ export function routeFromNotificationResponse(
       return;
     }
     
-    // 解析 URL
-    const url = parseUrlFromData(data);
+    // 使用共用的導頁函數解析 URL
+    const url = getPushNotificationRoute(data) || parseUrlFromData(data);
     
     // 如果無法解析 URL，直接返回
     if (!url) {

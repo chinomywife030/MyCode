@@ -74,33 +74,49 @@ export async function signOut(): Promise<{ success: boolean; error?: string }> {
 
 /**
  * 獲取當前用戶
+ * 嚴格檢查 Session，避免 AuthSessionMissingError
  */
 export async function getCurrentUser() {
   try {
-    // 先檢查是否有 session（避免 AuthSessionMissingError）
+    // 1. 先檢查是否有 session（避免 AuthSessionMissingError）
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
-    if (sessionError || !session) {
+    if (sessionError) {
+      // Session 檢查失敗，可能是網路問題或配置錯誤
+      if (!sessionError.message?.includes('Auth session missing')) {
+        console.error('[getCurrentUser] Session error:', sessionError);
+      }
+      return null;
+    }
+    
+    if (!session) {
       // 沒有 session，表示未登入（這是正常情況，不是錯誤）
       return null;
     }
     
-    // 如果有 session，獲取用戶資訊
-    const { data: { user }, error } = await supabase.auth.getUser();
+    // 2. 確認 session 有效後，獲取用戶資訊
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
     
-    if (error) {
+    if (userError) {
       // 只有在有 session 但獲取用戶失敗時才記錄錯誤
-      console.error('[getCurrentUser] Error:', error);
+      console.error('[getCurrentUser] Get user error:', userError);
+      return null;
+    }
+    
+    if (!user) {
+      // Session 存在但用戶不存在（異常情況）
+      console.warn('[getCurrentUser] Session exists but user is null');
       return null;
     }
     
     return user;
   } catch (error: any) {
-    // AuthSessionMissingError 是正常情況（未登入），不需要記錄為錯誤
-    if (error?.message?.includes('Auth session missing')) {
+    // 捕獲所有異常，包括 AuthSessionMissingError
+    if (error?.message?.includes('Auth session missing') || error?.name === 'AuthSessionMissingError') {
+      // 這是正常情況（未登入），不需要記錄為錯誤
       return null;
     }
-    console.error('[getCurrentUser] Exception:', error);
+    console.error('[getCurrentUser] Unexpected error:', error);
     return null;
   }
 }

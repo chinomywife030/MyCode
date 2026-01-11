@@ -50,7 +50,7 @@ export default function HelpScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>幫助中心</Text>
+        <Text style={styles.headerTitle}>聯絡我們</Text>
         <View style={styles.backButton} />
       </View>
 
@@ -70,7 +70,12 @@ export default function HelpScreen() {
         <View style={styles.section}>
           <View style={styles.partnerBanner}>
             <Ionicons name="handshake-outline" size={24} color={colors.brandOrange} />
-            <Text style={styles.partnerText}>我們正在尋找合作夥伴</Text>
+            <View style={styles.partnerContent}>
+              <Text style={styles.partnerTitle}>合作夥伴與代購品牌招募</Text>
+              <Text style={styles.partnerDescription}>
+                我們正在尋找代購個人品牌、專業代購者、品牌商家與物流夥伴，一起打造更可靠、透明的跨境代購平台。
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -176,19 +181,27 @@ const styles = StyleSheet.create({
   },
   partnerBanner: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: 'rgba(249, 115, 22, 0.15)', // 品牌橘色 15% 透明度
     borderRadius: 12,
     padding: spacing.lg,
     borderWidth: 1,
     borderColor: 'rgba(249, 115, 22, 0.3)', // 品牌橘色 30% 透明度
   },
-  partnerText: {
+  partnerContent: {
+    flex: 1,
+    marginLeft: spacing.md,
+  },
+  partnerTitle: {
     fontSize: fontSize.base,
     fontWeight: fontWeight.semibold,
     color: colors.brandOrange,
-    marginLeft: spacing.md,
-    flex: 1,
+    marginBottom: spacing.xs,
+  },
+  partnerDescription: {
+    fontSize: fontSize.sm,
+    color: colors.brandOrange,
+    lineHeight: 20,
   },
 });
 

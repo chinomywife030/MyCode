@@ -17,6 +17,9 @@ export default function LoginPage() {
   // 🔐 從 URL 獲取 returnTo 參數
   const returnTo = searchParams.get('returnTo');
   const validReturnTo = returnTo && isValidReturnTo(returnTo) ? returnTo : null;
+  
+  // 從 URL 獲取成功訊息
+  const successMessage = searchParams.get('message');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,6 +35,7 @@ export default function LoginPage() {
 
     try {
       if (view === 'signup') {
+        // 使用 signUp 但不設定 emailRedirectTo，讓 Supabase 發送 OTP
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -39,8 +43,7 @@ export default function LoginPage() {
             data: {
               name: name || email.split('@')[0],
             },
-            // 🔐 使用統一的 site URL，確保驗證信連結正確
-            emailRedirectTo: getAuthCallbackUrl(),
+            // 不設定 emailRedirectTo，Supabase 會發送 OTP 驗證碼
           },
         });
         
@@ -69,8 +72,13 @@ export default function LoginPage() {
           }
         }
         
-        // ✅ 註冊成功後直接導向首頁
-        // 無論 session 是否為 null，只要沒 error 就視為註冊成功
+        // ✅ 註冊成功後導向 OTP 驗證頁面
+        if (data.user) {
+          router.push(`/auth/verify-otp?email=${encodeURIComponent(email)}`);
+          return;
+        }
+        
+        // Fallback: 如果沒有 user，導向首頁
         router.replace('/');
         router.refresh();
         return;
@@ -131,6 +139,12 @@ export default function LoginPage() {
           <p className="text-sm text-gray-500 mb-6">
             {view === 'login' ? '請輸入您的帳號密碼以繼續。' : '填寫資料即可開始你的代購之旅。'}
           </p>
+
+          {successMessage && (
+            <div className="mb-4 p-3 bg-green-50 border border-green-100 text-green-700 text-sm rounded-lg flex items-center gap-2">
+              <span>✓</span> {successMessage}
+            </div>
+          )}
 
           {errorMsg && (
             <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-sm rounded-lg flex items-center gap-2">

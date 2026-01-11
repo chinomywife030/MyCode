@@ -9,12 +9,15 @@ import { getTrips, formatDateRange, type Trip } from '@/src/lib/trips';
 import { getDiscoveries, type Discovery } from '@/src/lib/discoveries';
 import { getNotificationPermission, registerPushToken } from '@/src/lib/push';
 import { signOut, getCurrentUser, getSession } from '@/src/lib/auth';
+import { getCurrentProfile } from '@/src/lib/profile';
 import { startChat } from '@/src/lib/chat';
 // ✅ 保留原有 UI 組件（確保可編譯）
-import { Screen, TopBar, HeroBanner, SearchRow, WishCard, TripCard, StateView, FilterModal, type FilterOptions, ModeToggle, type Mode } from '@/src/ui';
+import { Screen, TopBar, HeroBanner, SearchRow, WishCard, TripCard, StateView, FilterModal, type FilterOptions, type Mode } from '@/src/ui';
+import { RoleSwitch } from '@/src/components/RoleSwitch';
 import { colors, spacing, fontSize, fontWeight, shadows } from '@/src/theme/tokens';
 import { QuickWishModal } from '@/src/components/QuickWishModal';
 import { DiscoveryCard } from '@/src/components/DiscoveryCard';
+import { StableSearchBar } from '@/src/components/StableSearchBar';
 
 // ✅ 新增 ImmoScout 風格 UI 組件
 import {
@@ -72,8 +75,10 @@ export default function HomeScreen() {
   // ============================================
   const [pushStatus, setPushStatus] = useState<{ granted: boolean; token: string | null; error?: string } | null>(null);
   const [user, setUser] = useState<any>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [userProfile, setUserProfile] = useState<{ name?: string; avatar_url?: string | null } | null>(null);
+  // 搜尋狀態：分離即時值與 debounced 值，避免每次輸入都觸發重新渲染
+  const [searchQueryRaw, setSearchQueryRaw] = useState(''); // 即時值，綁定到 TextInput
+  const [searchQuery, setSearchQuery] = useState(''); // debounced 值，用於實際搜尋
   const [filterModalVisible, setFilterModalVisible] = useState(false);
   const [filters, setFilters] = useState<FilterOptions>({});
   const [messageLoading, setMessageLoading] = useState<string | null>(null);
@@ -112,7 +117,7 @@ export default function HomeScreen() {
       }
       
       const queryOptions = {
-        keyword: debouncedSearchQuery.trim() || undefined,
+        keyword: searchQuery.trim() || undefined,
         country: filters.country,
         category: filters.category,
         status: finalStatus,
@@ -132,7 +137,7 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [debouncedSearchQuery, filters]);
+  }, [searchQuery, filters]);
 
   // ============================================
   // 獲取旅途發現列表（保持原有邏輯不變）
@@ -180,7 +185,7 @@ export default function HomeScreen() {
       setError(null);
       
       const queryOptions = {
-        keyword: debouncedSearchQuery.trim() || undefined,
+        keyword: searchQuery.trim() || undefined,
         sortBy: filters.sortBy === 'newest' ? 'newest' : undefined,
       };
       
@@ -194,7 +199,7 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [debouncedSearchQuery, filters]);
+  }, [searchQuery, filters]);
 
   // ============================================
   // 根據模式獲取資料
@@ -240,6 +245,20 @@ export default function HomeScreen() {
     setUser(currentUser);
     
     if (currentUser) {
+      // 載入 profile 資料（包含 avatar_url）
+      try {
+        const profile = await getCurrentProfile();
+        if (profile) {
+          setUserProfile({
+            name: profile.name || profile.display_name,
+            avatar_url: profile.avatar_url,
+          });
+        }
+      } catch (profileError) {
+        console.warn('[HomeScreen] Failed to load profile:', profileError);
+        // 即使 profile 載入失敗，也不影響其他功能
+      }
+
       try {
         const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
         await registerPushTokenToSupabase();
@@ -247,6 +266,8 @@ export default function HomeScreen() {
       } catch (pushError) {
         console.warn('[HomeScreen] Failed to re-register push token:', pushError);
       }
+    } else {
+      setUserProfile(null);
     }
   };
 
@@ -378,30 +399,32 @@ export default function HomeScreen() {
 
 
   // Debounce 搜索查詢
+  // Debounce 搜尋輸入（300ms），避免每次輸入都觸發重新渲染
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery);
-    }, 500);
+      setSearchQuery(searchQueryRaw);
+    }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQueryRaw]);
 
+  // 只在 debounced searchQuery 改變時重新 fetch
   useEffect(() => {
     if (mode === 'shopper') {
       fetchWishes(false);
     } else {
       fetchTrips(false);
     }
-  }, [mode, debouncedSearchQuery, filters, fetchWishes, fetchTrips]);
+  }, [mode, searchQuery, filters, fetchWishes, fetchTrips]);
 
   const filteredData = useMemo(() => {
     return currentData;
   }, [currentData]);
 
-  const handleFilterPress = () => {
+  const handleFilterPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setFilterModalVisible(true);
-  };
+  }, []);
 
   const handleFilterApply = useCallback((newFilters: FilterOptions) => {
     setFilters(newFilters);
@@ -513,7 +536,7 @@ export default function HomeScreen() {
     }
   }, []);
 
-  const handleFilterChipPress = (chipId: string) => {
+  const handleFilterChipPress = useCallback((chipId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setActiveFilterChips(prev => 
       prev.includes(chipId) 
@@ -522,7 +545,7 @@ export default function HomeScreen() {
     );
     // 打開 filter modal 讓用戶設定詳細條件
     setFilterModalVisible(true);
-  };
+  }, []);
 
   // ============================================
   // DiscoveriesSection - 提取的 UI 組件
@@ -686,15 +709,19 @@ export default function HomeScreen() {
 
   // ============================================
   // 渲染 Header - ImmoScout 風格
+  // 使用 useMemo 穩定 ListHeaderComponent，避免每次 render 都重新創建導致 TextInput 失焦
+  // 根因：原本 renderHeader 是函數，每次 render 都會重新創建，導致 FlatList 的 ListHeaderComponent 重新 mount
   // ============================================
-  const renderHeader = () => {
+  const renderHeader = useMemo(() => {
     const sectionTitle = mode === 'shopper' ? '熱門需求' : '最新行程';
     const sectionSubtitle = mode === 'shopper' ? '正在找代購的需求' : '即將出發的代購行程';
 
     return (
       <View style={immoStyles.headerContainer}>
-        {/* Mode Toggle */}
-        <ModeToggle mode={mode} onModeChange={setMode} />
+        {/* Role Switch */}
+        <View style={immoStyles.roleSwitchContainer}>
+          <RoleSwitch mode={mode} onChange={setMode} />
+        </View>
         
         {/* Hero Banner */}
         {/* 代購（shopper）：橘色 | 買家（buyer）：藍色 */}
@@ -708,20 +735,25 @@ export default function HomeScreen() {
           variant={mode === 'shopper' ? 'orange' : 'blue'}
         />
 
-        {/* ImmoScout SearchBar */}
-        <ImmoScoutSearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery}
+        {/* Stable SearchBar - 使用穩定的搜尋元件避免鍵盤收起 */}
+        {/* 買家模式：隱藏 filter button；代購模式：顯示 filter button */}
+        <StableSearchBar
+          value={searchQueryRaw}
+          onChangeText={setSearchQueryRaw}
           placeholder={mode === 'shopper' ? '搜尋商品、關鍵字、目的地…' : '搜尋目的地、城市、日期…'}
           onFilterPress={handleFilterPress}
+          showFilter={mode !== 'buyer'}
         />
 
         {/* Filter Chips */}
-        <ImmoScoutFilterChips
-          chips={defaultFilterChips}
-          activeChipIds={activeFilterChips}
-          onChipPress={handleFilterChipPress}
-        />
+        {/* 買家模式：隱藏 filter chips；代購模式：顯示 filter chips */}
+        {mode !== 'buyer' && (
+          <ImmoScoutFilterChips
+            chips={defaultFilterChips}
+            activeChipIds={activeFilterChips}
+            onChipPress={handleFilterChipPress}
+          />
+        )}
 
         {/* Discoveries Section - 只在 Trip feed (buyer mode) 顯示 */}
         <DiscoveriesSection visible={isTripTab} data={discoveries} />
@@ -736,7 +768,7 @@ export default function HomeScreen() {
         </View>
       </View>
     );
-  };
+  }, [mode, searchQueryRaw, activeFilterChips, discoveries, isTripTab, handleFilterPress, handleFilterChipPress]);
 
   // ============================================
   // Main Render
@@ -745,13 +777,17 @@ export default function HomeScreen() {
     <Screen style={immoStyles.screen}>
       <TopBar
         userEmail={user?.email}
+        userName={userProfile?.name}
+        userAvatarUrl={userProfile?.avatar_url}
         onBellPress={handleBellPress}
         onAvatarPress={handleAvatarPress}
         mode={mode}
       />
       
       <FlatList
-        key={mode}
+        // 移除 key={mode}，避免 mode 切換時整個 FlatList 重新 mount 導致 TextInput 失焦
+        // 改用 extraData 來觸發重新渲染
+        extraData={mode}
         data={filteredData}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
@@ -804,6 +840,11 @@ const immoStyles = StyleSheet.create({
   },
   headerContainer: {
     backgroundColor: immoColors.background,
+  },
+  roleSwitchContainer: {
+    paddingHorizontal: immoSpacing.lg,
+    paddingTop: immoSpacing.md,
+    paddingBottom: immoSpacing.sm,
   },
   flatList: {
     flex: 1,

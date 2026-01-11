@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { useLocalSearchParams, router } from 'expo-router';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
-import { getTripById, formatDateRange, type Trip } from '@/src/lib/trips';
+import { getTripById, deleteTrip, formatDateRange, type Trip } from '@/src/lib/trips';
 import { getCurrentUser } from '@/src/lib/auth';
 import { startChat } from '@/src/lib/chat';
 import { Screen } from '@/src/ui/Screen';
@@ -17,6 +17,7 @@ export default function TripDetailScreen() {
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
   const [messageLoading, setMessageLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // #region agent log
   useEffect(() => {
@@ -171,7 +172,20 @@ export default function TripDetailScreen() {
           <Text style={styles.backButtonText}>← 返回</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>行程詳情</Text>
-        <View style={styles.headerSpacer} />
+        {isOwner ? (
+          <TouchableOpacity
+            onPress={handleDelete}
+            disabled={deleting}
+            style={styles.menuButton}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.menuButtonText, deleting && styles.menuButtonTextDisabled]}>
+              {deleting ? '刪除中...' : '⋯'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerSpacer} />
+        )}
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -269,6 +283,19 @@ const styles = StyleSheet.create({
   },
   headerSpacer: {
     width: 60,
+  },
+  menuButton: {
+    width: 60,
+    alignItems: 'flex-end',
+    paddingVertical: spacing.sm,
+  },
+  menuButtonText: {
+    fontSize: fontSize['2xl'],
+    color: colors.text,
+    fontWeight: fontWeight.bold,
+  },
+  menuButtonTextDisabled: {
+    color: colors.textMuted,
   },
   scrollView: {
     flex: 1,

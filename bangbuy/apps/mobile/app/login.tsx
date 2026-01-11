@@ -20,6 +20,16 @@ export default function LoginScreen() {
   const [forgotPasswordModalVisible, setForgotPasswordModalVisible] = useState(false);
   const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordStep, setForgotPasswordStep] = useState<'email' | 'otp'>('email');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  
+  // 註冊流程狀態
+  const [signupStep, setSignupStep] = useState<'form' | 'verify'>('form');
+  const [signupOtpCode, setSignupOtpCode] = useState('');
+  const [signupOtpLoading, setSignupOtpLoading] = useState(false);
 
   const handleAuth = async () => {
     if (!email.trim() || !password.trim()) {
@@ -49,42 +59,12 @@ export default function LoginScreen() {
 
         if (error) throw error;
 
-        // 註冊成功後，重新註冊 push token
-        try {
-          const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
-          await registerPushTokenToSupabase();
-        } catch (pushError) {
-          console.warn('[LoginScreen] Failed to register push token:', pushError);
-        }
-
-        // 檢查是否需要 Email 確認
-        if (data.user && !data.session) {
-          // 需要 Email 確認
-          Alert.alert(
-            '註冊成功',
-            '我們已發送驗證信到您的信箱，請前往信箱收取驗證信並點擊連結完成驗證。\n\n驗證後即可登入使用。',
-            [
-              {
-                text: '確定',
-                onPress: () => {
-                  setIsSignUp(false);
-                  setPassword('');
-                  setEmail('');
-                },
-              },
-            ]
-          );
+        // 註冊成功後，切換到驗證碼輸入步驟
+        if (data.user) {
+          setSignupStep('verify');
+          Alert.alert('驗證碼已發送', '我們已發送 6 位數驗證碼到您的信箱，請輸入驗證碼完成註冊。');
         } else {
-          // 已自動登入（如果 Supabase 設定為不需要確認）
-          Alert.alert('成功', '註冊成功！', [
-            {
-              text: '確定',
-              onPress: () => {
-                setIsSignUp(false);
-                setPassword('');
-              },
-            },
-          ]);
+          throw new Error('註冊失敗，請重新嘗試');
         }
       } else {
         // 登入
@@ -121,7 +101,8 @@ export default function LoginScreen() {
     }
   };
 
-  const handleForgotPassword = async () => {
+  // Step 1: 發送 OTP 驗證碼
+  const handleSendOtp = async () => {
     if (!forgotPasswordEmail.trim()) {
       Alert.alert('錯誤', '請輸入 Email');
       return;
@@ -137,34 +118,187 @@ export default function LoginScreen() {
     setForgotPasswordLoading(true);
 
     try {
-      // 使用 Netlify 部署的重設密碼網頁
-      const redirectUrl = 'https://melodious-khapse-e1b916.netlify.app';
-      console.log('🔗 Redirect URL:', redirectUrl); // Debug 用
-
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotPasswordEmail.trim(), {
-        redirectTo: redirectUrl,
+      // 使用 signInWithOtp 發送驗證碼
+      const { error } = await supabase.auth.signInWithOtp({
+        email: forgotPasswordEmail.trim(),
+        options: {
+          shouldCreateUser: false, // 確保只允許舊用戶
+        },
       });
 
       if (error) throw error;
 
+      // 成功發送，進入 Step 2
+      setForgotPasswordStep('otp');
+      Alert.alert('驗證碼已發送', '我們已發送 6 位數驗證碼到您的信箱，請輸入驗證碼。');
+    } catch (error: any) {
+      console.error('[LoginScreen] Send OTP error:', error);
+      Alert.alert('錯誤', error.message || '發送驗證碼失敗，請稍後再試');
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
+
+  // Step 2: 驗證 OTP 並重設密碼
+  const handleVerifyAndReset = async () => {
+    // 驗證輸入
+    if (!otpCode.trim() || otpCode.trim().length !== 6) {
+      Alert.alert('錯誤', '請輸入 6 位數驗證碼');
+      return;
+    }
+
+    if (!newPassword.trim()) {
+      Alert.alert('錯誤', '請輸入新密碼');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      Alert.alert('錯誤', '密碼長度至少需要 6 個字元');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      Alert.alert('錯誤', '兩次輸入的密碼不一致');
+      return;
+    }
+
+    setOtpLoading(true);
+
+    try {
+      // 1. 驗證 OTP
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        email: forgotPasswordEmail.trim(),
+        token: otpCode.trim(),
+        type: 'email',
+      });
+
+      if (verifyError) {
+        console.error('[LoginScreen] Verify OTP error:', verifyError);
+        Alert.alert('驗證失敗', verifyError.message || '驗證碼錯誤或已過期，請重新申請');
+        setOtpCode('');
+        return;
+      }
+
+      // 2. 關鍵修正：確認 Session 是否存在
+      if (!data.session) {
+        console.error('[LoginScreen] Session missing after verifyOtp');
+        Alert.alert('錯誤', '驗證成功但無法建立登入狀態，請重新嘗試。');
+        setOtpCode('');
+        return;
+      }
+
+      // 3. 只有現在才能更新密碼
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword.trim(),
+      });
+
+      if (updateError) {
+        console.error('[LoginScreen] Update password error:', updateError);
+        Alert.alert('密碼更新失敗', updateError.message || '更新密碼時發生錯誤，請稍後再試');
+        return;
+      }
+
+      // 成功後登出（清除 recovery session）
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutError) {
+        console.warn('[LoginScreen] Sign out error (non-critical):', signOutError);
+      }
+
+      // 顯示成功訊息
       Alert.alert(
-        '重設密碼信已發送',
-        '我們已發送重設密碼連結到您的信箱，請前往信箱收取並點擊連結重設密碼。',
+        '成功',
+        '密碼已重設！請使用新密碼重新登入。',
         [
           {
             text: '確定',
             onPress: () => {
+              // 重置所有狀態
               setForgotPasswordModalVisible(false);
+              setForgotPasswordStep('email');
               setForgotPasswordEmail('');
+              setOtpCode('');
+              setNewPassword('');
+              setConfirmPassword('');
             },
           },
         ]
       );
     } catch (error: any) {
-      console.error('[LoginScreen] Forgot password error:', error);
-      Alert.alert('錯誤', error.message || '發送重設密碼信失敗，請稍後再試');
+      console.error('[LoginScreen] Unexpected error:', error);
+      Alert.alert('錯誤', error.message || '發生未知錯誤，請重新嘗試');
+      setOtpCode('');
     } finally {
-      setForgotPasswordLoading(false);
+      setOtpLoading(false);
+    }
+  };
+
+  // 驗證註冊 OTP
+  const handleVerifySignup = async () => {
+    if (!signupOtpCode.trim() || signupOtpCode.trim().length !== 6) {
+      Alert.alert('錯誤', '請輸入 6 位數驗證碼');
+      return;
+    }
+
+    setSignupOtpLoading(true);
+
+    try {
+      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: signupOtpCode.trim(),
+        type: 'signup',
+      });
+
+      if (verifyError) {
+        console.error('[LoginScreen] Verify signup OTP error:', verifyError);
+        Alert.alert('驗證失敗', verifyError.message || '驗證碼錯誤或已過期，請重新申請');
+        setSignupOtpCode('');
+        return;
+      }
+
+      // 確認 Session 是否存在
+      if (!data.session) {
+        console.error('[LoginScreen] Session missing after verifySignup');
+        Alert.alert('錯誤', '驗證成功但無法建立登入狀態，請重新嘗試。');
+        setSignupOtpCode('');
+        return;
+      }
+
+      // 註冊成功後，重新註冊 push token
+      try {
+        const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
+        await registerPushTokenToSupabase();
+      } catch (pushError) {
+        console.warn('[LoginScreen] Failed to register push token:', pushError);
+      }
+
+      // 顯示成功訊息並導航
+      Alert.alert(
+        '註冊成功',
+        '歡迎加入 BangBuy！',
+        [
+          {
+            text: '確定',
+            onPress: () => {
+              // 重置狀態
+              setSignupStep('form');
+              setSignupOtpCode('');
+              setIsSignUp(false);
+              setPassword('');
+              setEmail('');
+              setName('');
+              // 導航到首頁
+              navigateAfterLogin(next);
+            },
+          },
+        ]
+      );
+    } catch (error: any) {
+      console.error('[LoginScreen] Verify signup error:', error);
+      Alert.alert('錯誤', error.message || '驗證失敗，請重新嘗試');
+      setSignupOtpCode('');
+    } finally {
+      setSignupOtpLoading(false);
     }
   };
 
@@ -206,102 +340,163 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
           >
             {/* 表單標題 */}
-            <Text style={styles.formTitle}>{isSignUp ? '建立帳號' : '登入'}</Text>
+            <Text style={styles.formTitle}>
+              {isSignUp && signupStep === 'verify' ? '驗證信箱' : isSignUp ? '建立帳號' : '登入'}
+            </Text>
 
-            {/* 輸入表單 */}
-            <View style={styles.formContainer}>
-              {isSignUp && (
+            {/* 註冊驗證碼步驟 */}
+            {isSignUp && signupStep === 'verify' ? (
+              <View style={styles.formContainer}>
+                <Text style={styles.verifyDescription}>
+                  我們已發送 6 位數驗證碼到 {email}，請輸入驗證碼完成註冊。
+                </Text>
+
                 <View style={styles.inputContainer}>
                   <View style={styles.inputWrapper}>
-                    <Ionicons name="person-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                    <Ionicons name="keypad-outline" size={20} color="#6B7280" style={styles.inputIcon} />
                     <TextInput
                       style={styles.input}
-                      placeholder="姓名"
+                      placeholder="請輸入 6 位數驗證碼"
                       placeholderTextColor="#9CA3AF"
-                      value={name}
-                      onChangeText={setName}
-                      editable={!loading}
-                      autoCapitalize="words"
+                      value={signupOtpCode}
+                      onChangeText={(text) => {
+                        // 只允許數字，最多 6 位
+                        const numericText = text.replace(/[^0-9]/g, '').slice(0, 6);
+                        setSignupOtpCode(numericText);
+                      }}
+                      editable={!signupOtpLoading}
+                      keyboardType="number-pad"
+                      maxLength={6}
+                      autoFocus
                     />
                   </View>
                 </View>
-              )}
 
-              <View style={styles.inputContainer}>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="mail-outline" size={20} color="#6B7280" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email"
-                    placeholderTextColor="#9CA3AF"
-                    value={email}
-                    onChangeText={setEmail}
-                    editable={!loading}
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                  />
-                </View>
+                <TouchableOpacity
+                  style={[styles.loginButton, (signupOtpLoading || signupOtpCode.length !== 6) && styles.loginButtonDisabled]}
+                  onPress={handleVerifySignup}
+                  disabled={signupOtpLoading || signupOtpCode.length !== 6}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.loginButtonText}>
+                    {signupOtpLoading ? '驗證中...' : '驗證'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.signUpLink}
+                  onPress={() => {
+                    setSignupStep('form');
+                    setSignupOtpCode('');
+                  }}
+                  disabled={signupOtpLoading}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.signUpLinkText}>
+                    返回修改 Email
+                  </Text>
+                </TouchableOpacity>
               </View>
-
-              <View style={styles.inputContainer}>
-                <View style={styles.inputWrapper}>
-                  <Ionicons name="lock-closed-outline" size={20} color="#6B7280" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="密碼"
-                    placeholderTextColor="#9CA3AF"
-                    value={password}
-                    onChangeText={setPassword}
-                    editable={!loading}
-                    secureTextEntry
-                    autoCapitalize="none"
-                  />
-                </View>
-                {!isSignUp && (
-                  <TouchableOpacity
-                    style={styles.forgotPasswordButton}
-                    onPress={() => setForgotPasswordModalVisible(true)}
-                    disabled={loading}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.forgotPasswordText}>忘記密碼？</Text>
-                  </TouchableOpacity>
+            ) : (
+              /* 登入/註冊表單 */
+              <View style={styles.formContainer}>
+                {isSignUp && (
+                  <View style={styles.inputContainer}>
+                    <View style={styles.inputWrapper}>
+                      <Ionicons name="person-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="姓名"
+                        placeholderTextColor="#9CA3AF"
+                        value={name}
+                        onChangeText={setName}
+                        editable={!loading}
+                        autoCapitalize="words"
+                      />
+                    </View>
+                  </View>
                 )}
-              </View>
 
-              {/* 登入按鈕 */}
-              <TouchableOpacity
-                style={[styles.loginButton, loading && styles.loginButtonDisabled]}
-                onPress={handleAuth}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.loginButtonText}>
-                  {loading ? (isSignUp ? '註冊中...' : '登入中...') : (isSignUp ? '註冊' : '登入')}
-                </Text>
-              </TouchableOpacity>
+                <View style={styles.inputContainer}>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="mail-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email"
+                      placeholderTextColor="#9CA3AF"
+                      value={email}
+                      onChangeText={setEmail}
+                      editable={!loading}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                    />
+                  </View>
+                </View>
 
-              {/* 登入/註冊切換連結 */}
-              <TouchableOpacity
-                style={styles.signUpLink}
-                onPress={() => setIsSignUp(!isSignUp)}
-                disabled={loading}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.signUpLinkText}>
-                  {isSignUp ? (
-                    <>
-                      已經有帳號？ <Text style={styles.signUpLinkHighlight}>立即登入</Text>
-                    </>
-                  ) : (
-                    <>
-                      還沒有帳號？ <Text style={styles.signUpLinkHighlight}>立即註冊</Text>
-                    </>
+                <View style={styles.inputContainer}>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="lock-closed-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="密碼"
+                      placeholderTextColor="#9CA3AF"
+                      value={password}
+                      onChangeText={setPassword}
+                      editable={!loading}
+                      secureTextEntry
+                      autoCapitalize="none"
+                    />
+                  </View>
+                  {!isSignUp && (
+                    <TouchableOpacity
+                      style={styles.forgotPasswordButton}
+                      onPress={() => setForgotPasswordModalVisible(true)}
+                      disabled={loading}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.forgotPasswordText}>忘記密碼？</Text>
+                    </TouchableOpacity>
                   )}
-                </Text>
-              </TouchableOpacity>
-            </View>
+                </View>
+
+                {/* 登入按鈕 */}
+                <TouchableOpacity
+                  style={[styles.loginButton, loading && styles.loginButtonDisabled]}
+                  onPress={handleAuth}
+                  disabled={loading}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.loginButtonText}>
+                    {loading ? (isSignUp ? '註冊中...' : '登入中...') : (isSignUp ? '註冊' : '登入')}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* 登入/註冊切換連結 */}
+                <TouchableOpacity
+                  style={styles.signUpLink}
+                  onPress={() => {
+                    setIsSignUp(!isSignUp);
+                    setSignupStep('form');
+                    setSignupOtpCode('');
+                  }}
+                  disabled={loading}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.signUpLinkText}>
+                    {isSignUp ? (
+                      <>
+                        已經有帳號？ <Text style={styles.signUpLinkHighlight}>立即登入</Text>
+                      </>
+                    ) : (
+                      <>
+                        還沒有帳號？ <Text style={styles.signUpLinkHighlight}>立即註冊</Text>
+                      </>
+                    )}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -313,7 +508,11 @@ export default function LoginScreen() {
         animationType="fade"
         onRequestClose={() => {
           setForgotPasswordModalVisible(false);
+          setForgotPasswordStep('email');
           setForgotPasswordEmail('');
+          setOtpCode('');
+          setNewPassword('');
+          setConfirmPassword('');
         }}
       >
         <KeyboardAvoidingView
@@ -326,7 +525,11 @@ export default function LoginScreen() {
             activeOpacity={1}
             onPress={() => {
               setForgotPasswordModalVisible(false);
+              setForgotPasswordStep('email');
               setForgotPasswordEmail('');
+              setOtpCode('');
+              setNewPassword('');
+              setConfirmPassword('');
             }}
           >
             <TouchableOpacity
@@ -340,7 +543,11 @@ export default function LoginScreen() {
                   <TouchableOpacity
                     onPress={() => {
                       setForgotPasswordModalVisible(false);
+                      setForgotPasswordStep('email');
                       setForgotPasswordEmail('');
+                      setOtpCode('');
+                      setNewPassword('');
+                      setConfirmPassword('');
                     }}
                     style={styles.modalCloseButton}
                   >
@@ -348,52 +555,160 @@ export default function LoginScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.modalDescription}>
-                  請輸入您的 Email，我們將寄送重設連結給您。
-                </Text>
-
-                <View style={styles.modalInputContainer}>
-                  <View style={styles.inputWrapper}>
-                    <Ionicons name="mail-outline" size={20} color="#6B7280" style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Email"
-                      placeholderTextColor="#9CA3AF"
-                      value={forgotPasswordEmail}
-                      onChangeText={setForgotPasswordEmail}
-                      editable={!forgotPasswordLoading}
-                      keyboardType="email-address"
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      autoFocus
-                    />
-                  </View>
-                </View>
-
-                <View style={styles.modalButtonGroup}>
-                  <TouchableOpacity
-                    style={styles.modalCancelButton}
-                    onPress={() => {
-                      setForgotPasswordModalVisible(false);
-                      setForgotPasswordEmail('');
-                    }}
-                    disabled={forgotPasswordLoading}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.modalCancelButtonText}>取消</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.modalSendButton, forgotPasswordLoading && styles.modalSendButtonDisabled]}
-                    onPress={handleForgotPassword}
-                    disabled={forgotPasswordLoading}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.modalSendButtonText}>
-                      {forgotPasswordLoading ? '發送中...' : '發送'}
+                {/* Step 1: 輸入 Email */}
+                {forgotPasswordStep === 'email' && (
+                  <>
+                    <Text style={styles.modalDescription}>
+                      請輸入您的 Email，我們將寄送 6 位數驗證碼給您。
                     </Text>
-                  </TouchableOpacity>
-                </View>
+
+                    <View style={styles.modalInputContainer}>
+                      <View style={styles.inputWrapper}>
+                        <Ionicons name="mail-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Email"
+                          placeholderTextColor="#9CA3AF"
+                          value={forgotPasswordEmail}
+                          onChangeText={setForgotPasswordEmail}
+                          editable={!forgotPasswordLoading}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          autoFocus
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.modalButtonGroup}>
+                      <TouchableOpacity
+                        style={styles.modalCancelButton}
+                        onPress={() => {
+                          setForgotPasswordModalVisible(false);
+                          setForgotPasswordStep('email');
+                          setForgotPasswordEmail('');
+                        }}
+                        disabled={forgotPasswordLoading}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.modalCancelButtonText}>取消</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[styles.modalSendButton, forgotPasswordLoading && styles.modalSendButtonDisabled]}
+                        onPress={handleSendOtp}
+                        disabled={forgotPasswordLoading}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.modalSendButtonText}>
+                          {forgotPasswordLoading ? '發送中...' : '發送驗證碼'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
+
+                {/* Step 2: 驗證碼與重設密碼 */}
+                {forgotPasswordStep === 'otp' && (
+                  <>
+                    <Text style={styles.modalDescription}>
+                      我們已發送 6 位數驗證碼到 {forgotPasswordEmail}，請輸入驗證碼並設定新密碼。
+                    </Text>
+
+                    {/* 驗證碼輸入框 */}
+                    <View style={styles.modalInputContainer}>
+                      <View style={styles.inputWrapper}>
+                        <Ionicons name="keypad-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="請輸入 6 位數驗證碼"
+                          placeholderTextColor="#9CA3AF"
+                          value={otpCode}
+                          onChangeText={(text) => {
+                            // 只允許數字，最多 6 位
+                            const numericText = text.replace(/[^0-9]/g, '').slice(0, 6);
+                            setOtpCode(numericText);
+                          }}
+                          editable={!otpLoading}
+                          keyboardType="number-pad"
+                          maxLength={6}
+                          autoFocus
+                        />
+                      </View>
+                    </View>
+
+                    {/* 新密碼輸入框 */}
+                    <View style={styles.modalInputContainer}>
+                      <View style={styles.inputWrapper}>
+                        <Ionicons name="lock-closed-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="新密碼（至少 6 個字元）"
+                          placeholderTextColor="#9CA3AF"
+                          value={newPassword}
+                          onChangeText={setNewPassword}
+                          editable={!otpLoading}
+                          secureTextEntry
+                          autoCapitalize="none"
+                        />
+                      </View>
+                    </View>
+
+                    {/* 確認密碼輸入框 */}
+                    <View style={styles.modalInputContainer}>
+                      <View style={styles.inputWrapper}>
+                        <Ionicons name="lock-closed-outline" size={20} color="#6B7280" style={styles.inputIcon} />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="確認新密碼"
+                          placeholderTextColor="#9CA3AF"
+                          value={confirmPassword}
+                          onChangeText={setConfirmPassword}
+                          editable={!otpLoading}
+                          secureTextEntry
+                          autoCapitalize="none"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.modalButtonGroup}>
+                      <TouchableOpacity
+                        style={styles.modalCancelButton}
+                        onPress={() => {
+                          setForgotPasswordStep('email');
+                          setOtpCode('');
+                          setNewPassword('');
+                          setConfirmPassword('');
+                        }}
+                        disabled={otpLoading}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.modalCancelButtonText}>返回</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        style={[
+                          styles.modalSendButton,
+                          (otpLoading || otpCode.length !== 6 || !newPassword.trim() || newPassword.length < 6 || newPassword !== confirmPassword) &&
+                          styles.modalSendButtonDisabled,
+                        ]}
+                        onPress={handleVerifyAndReset}
+                        disabled={
+                          otpLoading ||
+                          otpCode.length !== 6 ||
+                          !newPassword.trim() ||
+                          newPassword.length < 6 ||
+                          newPassword !== confirmPassword
+                        }
+                        activeOpacity={0.8}
+                      >
+                        <Text style={styles.modalSendButtonText}>
+                          {otpLoading ? '處理中...' : '確認重設'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </View>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -465,6 +780,13 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
     color: colors.text,
     marginBottom: spacing['2xl'],
+    textAlign: 'center',
+  },
+  verifyDescription: {
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
+    lineHeight: 20,
+    marginBottom: spacing.lg,
     textAlign: 'center',
   },
   formContainer: {

@@ -226,43 +226,13 @@ async function handleNotificationResponse(response: Notifications.NotificationRe
       return;
     }
 
-    // 優先處理聊天室通知（conversationId）
-    if (data.conversationId && typeof data.conversationId === 'string') {
-      const conversationId = data.conversationId.trim();
-      
-      // UUID 驗證：確保 conversationId 是合法的 UUID
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      if (!uuidRegex.test(conversationId)) {
-        console.error('[handleNotificationResponse] Invalid conversationId (not a valid UUID):', conversationId);
-        return;
-      }
-      
-      console.log('[handleNotificationResponse] Navigating to chat:', conversationId);
-      router.push(`/chat/${conversationId}`);
-      return;
-    }
+    // 使用共用的導頁函數
+    const { getPushNotificationRoute } = await import('./notifications/navigation');
+    const route = getPushNotificationRoute(data);
 
-    // 處理 wishId（優先順序：wishId > url 解析）
-    let wishId: string | null = null;
-
-    if (data.wishId && typeof data.wishId === 'string') {
-      wishId = data.wishId.trim();
-    } else if (data.url && typeof data.url === 'string') {
-      // 從 url 中解析 wishId（例如：/wish/123）
-      const urlMatch = data.url.match(/\/wish\/([^/?]+)/);
-      if (urlMatch && urlMatch[1]) {
-        wishId = urlMatch[1].trim();
-      }
-    }
-
-    // 如果有 wishId，導航到對應的 wish 詳情頁（會自動處理登入檢查）
-    if (wishId) {
-      const { navigateToRoute } = await import('./navigation');
-      await navigateToRoute(`/wish/${wishId}`, true); // requireAuth = true
-    } else if (data.url && typeof data.url === 'string') {
-      // 如果有 url 但無法解析 wishId，直接使用 url
-      const { navigateToRoute } = await import('./navigation');
-      await navigateToRoute(data.url, true);
+    if (route) {
+      console.log('[handleNotificationResponse] Navigating to:', route);
+      router.push(route as any);
     } else {
       // 無有效路由信息，導航到首頁
       console.warn('[handleNotificationResponse] No valid route found, navigating to home');

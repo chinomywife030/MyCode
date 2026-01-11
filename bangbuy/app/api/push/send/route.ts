@@ -125,10 +125,29 @@ export async function POST(request: NextRequest) {
     }
 
     // 查詢該用戶的所有 push tokens
-    const { data: tokens, error: tokensError } = await supabase
-      .from('push_tokens')
-      .select('token')
+    // 優先使用 user_push_tokens（mobile app 使用），如果沒有則回退到 push_tokens
+    let tokens: any[] | null = null;
+    let tokensError: any = null;
+    
+    // 先嘗試 user_push_tokens（mobile app）
+    const { data: mobileTokens, error: mobileTokensError } = await supabase
+      .from('user_push_tokens')
+      .select('expo_push_token')
       .eq('user_id', user_id);
+    
+    if (!mobileTokensError && mobileTokens && mobileTokens.length > 0) {
+      // 轉換格式：expo_push_token -> token
+      tokens = mobileTokens.map(t => ({ token: t.expo_push_token }));
+    } else {
+      // 回退到 push_tokens（web 或其他）
+      const { data: webTokens, error: webTokensError } = await supabase
+        .from('push_tokens')
+        .select('token')
+        .eq('user_id', user_id);
+      
+      tokens = webTokens;
+      tokensError = webTokensError;
+    }
 
     if (tokensError) {
       console.error('[POST /api/push/send] Tokens query error:', tokensError);

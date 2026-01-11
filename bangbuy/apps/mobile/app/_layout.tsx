@@ -12,6 +12,7 @@ import { routeFromNotificationResponse } from '@/src/notifications/notificationR
 import { initializePushService } from '@/src/lib/pushService';
 import { registerPushNotificationsComplete } from '@/src/lib/pushToken';
 import { supabase } from '@/src/lib/supabase';
+import { checkIfFirstLaunch } from '@/src/lib/onboarding';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -49,8 +50,29 @@ export default function RootLayout() {
       initializePushService().catch((error) => {
         console.warn('[RootLayout] Push service initialization error:', error);
       });
+
+      // 檢查是否為首次啟動，決定是否顯示 Onboarding
+      checkIfFirstLaunch()
+        .then((isFirstLaunch) => {
+          if (isFirstLaunch) {
+            console.log('[RootLayout] First launch detected, showing onboarding');
+            // 使用 setTimeout 確保在 Splash Screen 結束後再導向
+            setTimeout(() => {
+              router.replace('/onboarding');
+            }, 100);
+          } else {
+            console.log('[RootLayout] Not first launch, skipping onboarding');
+          }
+        })
+        .catch((error) => {
+          console.error('[RootLayout] Error checking first launch:', error);
+          // 發生錯誤時，預設顯示 Onboarding
+          setTimeout(() => {
+            router.replace('/onboarding');
+          }, 100);
+        });
     }
-  }, []);
+  }, [router]);
 
   // 推送通知 Token 註冊（取得 token 並註冊到 Server）
   useEffect(() => {
@@ -123,6 +145,7 @@ export default function RootLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
+        <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="login" options={{ headerShown: false, presentation: 'modal' }} />
         <Stack.Screen name="create" options={{ title: '創建許願單' }} />
@@ -134,7 +157,7 @@ export default function RootLayout() {
         <Stack.Screen name="me/trips" options={{ title: '我的行程', headerShown: false }} />
         <Stack.Screen name="me/edit-profile" options={{ title: '編輯個人資料', headerShown: false }} />
         <Stack.Screen name="settings" options={{ title: '設定', headerShown: false }} />
-        <Stack.Screen name="help" options={{ title: '幫助中心', headerShown: false }} />
+        <Stack.Screen name="help" options={{ title: '聯絡我們', headerShown: false }} />
         <Stack.Screen name="auth/reset-password" options={{ title: '重設密碼', headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
