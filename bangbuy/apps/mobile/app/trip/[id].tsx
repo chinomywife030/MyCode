@@ -164,6 +164,52 @@ export default function TripDetailScreen() {
 
   const dateRange = formatDateRange(trip.startDate, trip.endDate);
 
+  // 判斷是否為行程擁有者（安全處理 null/undefined）
+  const isOwner = Boolean(trip && user && trip.shopperId === user.id);
+
+  // 處理刪除
+  const handleDelete = () => {
+    if (!trip || !isOwner) return;
+
+    Alert.alert(
+      '確認刪除',
+      '確定要刪除此行程嗎？此操作無法復原。',
+      [
+        {
+          text: '取消',
+          style: 'cancel',
+        },
+        {
+          text: '刪除',
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              const result = await deleteTrip(trip.id);
+              if (result.success) {
+                Alert.alert('成功', '行程已刪除', [
+                  {
+                    text: '確定',
+                    onPress: () => {
+                      router.back();
+                    },
+                  },
+                ]);
+              } else {
+                Alert.alert('刪除失敗', result.error || '請稍後再試');
+              }
+            } catch (error) {
+              console.error('[TripDetailScreen] Delete error:', error);
+              Alert.alert('刪除失敗', '請稍後再試');
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   return (
     <Screen>
       {/* Header */}

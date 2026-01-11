@@ -1,7 +1,7 @@
 import { StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, Text, View, Modal, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState, useCallback } from 'react';
-import { useLocalSearchParams, Link, useFocusEffect, router as expoRouter } from 'expo-router';
+import { useLocalSearchParams, Link, useFocusEffect, router as expoRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getWishById, deleteWish, type Wish } from '@/src/lib/wishes';
@@ -370,6 +370,7 @@ export default function WishDetailScreen() {
 
   return (
     <Screen>
+      <Stack.Screen options={{ headerShown: false }} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => expoRouter.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />

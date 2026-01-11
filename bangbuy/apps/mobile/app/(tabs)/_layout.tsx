@@ -14,9 +14,12 @@ function TabBarIcon({ name, color, size = 24 }: { name: keyof typeof Ionicons.gl
 export default function TabLayout() {
   const colorScheme = useColorScheme();
 
-  // 根據主題選擇活躍色
-  const activeTintColor = colorScheme === 'dark' ? colors.brandOrangeLight : colors.brandOrange;
-  const inactiveTintColor = colorScheme === 'dark' ? '#9ca3af' : colors.textMuted;
+  // Tab Bar 顏色設定
+  // Active 顏色：固定使用品牌橘（代購模式）
+  // 註：目前 mode 狀態在個別頁面管理，Tab Layout 無法存取，因此固定使用品牌橘
+  // 未來若需要依身分切換（代購橘 #FF7A00 / 買家藍 #1E78FF），需透過 Context 或全域狀態管理
+  const activeTintColor = '#FF7A00'; // 品牌橘
+  const inactiveTintColor = '#9CA3AF'; // 灰色
 
   return (
     <Tabs
@@ -25,9 +28,17 @@ export default function TabLayout() {
         tabBarInactiveTintColor: inactiveTintColor,
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarLabelStyle: {
+          fontSize: 12,
+          fontWeight: '600',
+        },
         tabBarStyle: {
-          backgroundColor: colorScheme === 'dark' ? '#1f2937' : colors.bgCard,
-          borderTopColor: colorScheme === 'dark' ? '#374151' : colors.border,
+          backgroundColor: '#F7F7F8', // 灰白色背景
+          borderTopColor: '#E5E7EB', // 淺灰邊框
+          borderTopWidth: 1,
+          height: 80,
+          paddingBottom: 8,
+          paddingTop: 6,
         },
       }}>
       {/* 1. Home Tab */}
