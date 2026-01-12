@@ -14,27 +14,25 @@
     "@supabase/auth-helpers-nextjs": "^0.15.0",
     "@supabase/supabase-js": "^2.86.0",
     "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "~19.1.7",
     "dotenv": "^17.2.3",
     "next": "^16.0.8",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "resend": "^6.5.2",
     "server-only": "^0.0.1",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4",
+    "typescript": "^5"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "~19.1.7",
     "eslint": "^9",
-    "eslint-config-next": "^16.0.8",
-    "typescript": "^5"
+    "eslint-config-next": "^16.0.8"
   },
   "pnpm": {
     "overrides": {
-      "react-native": "0.76.5",
-      "@types/react": "~18.3.12",
-      "@types/react-dom": "~18.3.1"
+      "react-native": "0.76.5"
     }
   }
 }
