@@ -64,17 +64,24 @@ export default function ResetPasswordScreen() {
 
       if (error) throw error;
 
+      // 修改密碼成功後立即登出，清除舊 session
+      try {
+        await supabase.auth.signOut();
+        console.log('[ResetPasswordScreen] Signed out after password change');
+      } catch (signOutError) {
+        console.warn('[ResetPasswordScreen] Sign out error (non-critical):', signOutError);
+        // 即使登出失敗，也繼續流程
+      }
+
+      // 顯示成功訊息並導向登入頁
       Alert.alert(
-        '密碼重設成功',
-        '您的密碼已成功更新，請使用新密碼登入。',
+        '密碼已更新',
+        '密碼已更新，請重新登入',
         [
           {
             text: '確定',
             onPress: () => {
-              // 登出並返回首頁（因為重設密碼後需要重新登入）
-              supabase.auth.signOut().then(() => {
-                router.replace('/');
-              });
+              router.replace('/login');
             },
           },
         ]

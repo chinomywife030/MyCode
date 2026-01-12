@@ -86,9 +86,41 @@ export async function registerPushTokenToSupabase(): Promise<{
   tokenRegistrationInProgress = true;
 
   try {
-    // 1. 檢查登入狀態
+    // Session Guard：先檢查 session，避免 AuthSessionMissingError
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      // 不記錄 AuthSessionMissingError（這是正常情況）
+      if (!sessionError.message?.includes('Auth session missing') && 
+          !sessionError.message?.includes('AuthSessionMissingError')) {
+        console.error('[pushService] Session error:', sessionError);
+      }
+      tokenRegistrationInProgress = false;
+      return { success: false, error: '請先登入' };
+    }
+    
+    if (!session) {
+      // 沒有 session，表示未登入
+      tokenRegistrationInProgress = false;
+      return { success: false, error: '請先登入' };
+    }
+    
+    // 確認 session 存在後，獲取用戶資訊
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    
+    if (userError) {
+      // 如果錯誤是 session 相關，直接返回（不 throw）
+      if (userError.message?.includes('Auth session missing') || 
+          userError.message?.includes('AuthSessionMissingError')) {
+        tokenRegistrationInProgress = false;
+        return { success: false, error: '請先登入' };
+      }
+      console.error('[pushService] Get user error:', userError);
+      tokenRegistrationInProgress = false;
+      return { success: false, error: '請先登入' };
+    }
+    
+    if (!user) {
       tokenRegistrationInProgress = false;
       return { success: false, error: '請先登入' };
     }
@@ -131,6 +163,14 @@ export async function registerPushTokenToSupabase(): Promise<{
     tokenRegistrationInProgress = false;
     return { success: true };
   } catch (error: any) {
+    // Session Guard：捕獲 AuthSessionMissingError，不 throw
+    if (error?.message?.includes('Auth session missing') || 
+        error?.name === 'AuthSessionMissingError' ||
+        error?.message?.includes('AuthSessionMissingError')) {
+      // 這是正常情況（未登入或 session 已失效），不需要記錄為錯誤
+      tokenRegistrationInProgress = false;
+      return { success: false, error: '請先登入' };
+    }
     console.error('[pushService] Exception:', error);
     tokenRegistrationInProgress = false;
     return { success: false, error: error.message || '註冊失敗' };
@@ -139,18 +179,37 @@ export async function registerPushTokenToSupabase(): Promise<{
 
 /**
  * 初始化推播通知（在 App 啟動時呼叫）
+ * Session Guard：只檢查 session，不嘗試註冊 token（由其他地方處理）
  */
 export async function initializePushService(): Promise<void> {
   try {
-    // 檢查登入狀態，如果已登入則註冊 token
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-      // 非阻塞，不等待結果
-      registerPushTokenToSupabase().catch((error) => {
-        console.warn('[pushService] Failed to register token on init:', error);
-      });
+    // Session Guard：先檢查 session，避免 AuthSessionMissingError
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      // 不記錄 AuthSessionMissingError（這是正常情況）
+      if (!sessionError.message?.includes('Auth session missing') && 
+          !sessionError.message?.includes('AuthSessionMissingError')) {
+        console.warn('[pushService] Session error:', sessionError);
+      }
+      return;
     }
-  } catch (error) {
+    
+    if (!session) {
+      // 沒有 session，表示未登入，不註冊 token
+      return;
+    }
+    
+    // 有 session 時，由 RootLayout 或其他地方負責註冊 token
+    // 這裡不主動註冊，避免在初始化時觸發錯誤
+  } catch (error: any) {
+    // Session Guard：捕獲 AuthSessionMissingError，不 throw
+    if (error?.message?.includes('Auth session missing') || 
+        error?.name === 'AuthSessionMissingError' ||
+        error?.message?.includes('AuthSessionMissingError')) {
+      // 這是正常情況（未登入），不需要記錄為錯誤
+      return;
+    }
     console.warn('[pushService] Failed to initialize:', error);
   }
 }

@@ -23,7 +23,7 @@ const PLANE = require("../assets/images/airplane.png");
 
 // ✅ Global speed multiplier (does NOT change CONFIG.DURATION values)
 // 1.0 = original speed, 0.75 = 25% faster, 0.6 = very fast
-const TIME_SCALE = 1;
+const TIME_SCALE = 0.85;
 
 // Minimum display time for splash screen (ms)
 const MIN_SHOW_MS = 1800;

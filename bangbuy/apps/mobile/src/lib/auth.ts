@@ -75,15 +75,19 @@ export async function signOut(): Promise<{ success: boolean; error?: string }> {
 /**
  * 獲取當前用戶
  * 嚴格檢查 Session，避免 AuthSessionMissingError
+ * Session Guard：若 session 不存在，直接 return null，不 throw error
  */
 export async function getCurrentUser() {
   try {
     // 1. 先檢查是否有 session（避免 AuthSessionMissingError）
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     
+    // Session Guard：如果沒有 session 或發生錯誤，直接返回 null
     if (sessionError) {
-      // Session 檢查失敗，可能是網路問題或配置錯誤
-      if (!sessionError.message?.includes('Auth session missing')) {
+      // Session 檢查失敗，可能是網路問題、配置錯誤或 session 已失效
+      // 不記錄 AuthSessionMissingError（這是正常情況）
+      if (!sessionError.message?.includes('Auth session missing') && 
+          !sessionError.message?.includes('AuthSessionMissingError')) {
         console.error('[getCurrentUser] Session error:', sessionError);
       }
       return null;
@@ -98,6 +102,11 @@ export async function getCurrentUser() {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError) {
+      // 如果錯誤是 session 相關，直接返回 null（不 throw）
+      if (userError.message?.includes('Auth session missing') || 
+          userError.message?.includes('AuthSessionMissingError')) {
+        return null;
+      }
       // 只有在有 session 但獲取用戶失敗時才記錄錯誤
       console.error('[getCurrentUser] Get user error:', userError);
       return null;
@@ -112,8 +121,11 @@ export async function getCurrentUser() {
     return user;
   } catch (error: any) {
     // 捕獲所有異常，包括 AuthSessionMissingError
-    if (error?.message?.includes('Auth session missing') || error?.name === 'AuthSessionMissingError') {
-      // 這是正常情況（未登入），不需要記錄為錯誤
+    // Session Guard：不 throw error，直接返回 null
+    if (error?.message?.includes('Auth session missing') || 
+        error?.name === 'AuthSessionMissingError' ||
+        error?.message?.includes('AuthSessionMissingError')) {
+      // 這是正常情況（未登入或 session 已失效），不需要記錄為錯誤
       return null;
     }
     console.error('[getCurrentUser] Unexpected error:', error);

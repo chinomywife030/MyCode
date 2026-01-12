@@ -9,8 +9,7 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { initializePushNotifications } from '@/src/lib/push';
 import { initializeCore } from '@/src/lib/core';
 import { routeFromNotificationResponse } from '@/src/notifications/notificationRouter';
-import { initializePushService } from '@/src/lib/pushService';
-import { registerPushNotificationsComplete } from '@/src/lib/pushToken';
+import { registerPushTokenToSupabase } from '@/src/lib/pushService';
 import { supabase } from '@/src/lib/supabase';
 import { checkIfFirstLaunch } from '@/src/lib/onboarding';
 import SplashAnimation from '@/components/SplashAnimation';
@@ -22,81 +21,153 @@ export const unstable_settings = {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const initialized = useRef(false);
   const router = useRouter();
   const segments = useSegments();
   const navigationState = useRootNavigationState();
   
+  // 一次性初始化鎖
+  const didInitRef = useRef(false);
+  const didCheckOnboardingRef = useRef(false);
+  const didSetupAuthListenerRef = useRef(false);
+  const didRegisterPushTokenRef = useRef(false);
+  
+  // 使用 ref 存儲 router 和 segments，避免在 useEffect 中依賴它們
+  const routerRef = useRef(router);
+  const segmentsRef = useRef(segments);
+  
+  // 更新 refs（不觸發重新執行）
+  routerRef.current = router;
+  segmentsRef.current = segments;
+  
   // Splash Gate：控制是否顯示啟動動畫
   const [ready, setReady] = useState(false);
+  
+  // Onboarding 狀態：獨立管理，不依賴 router
+  const [shouldShowOnboarding, setShouldShowOnboarding] = useState<boolean | null>(null);
   
   // 暫存待處理的通知 response（在 navigation ready 前收到）
   const [pendingNotificationResponse, setPendingNotificationResponse] = useState<Notifications.NotificationResponse | null>(null);
 
+  // 一次性初始化：只在組件首次 mount 時執行
   useEffect(() => {
-    // 只在首次載入時初始化一次
-    if (!initialized.current) {
-      initialized.current = true;
-      
-      // 初始化 core layer
-      initializeCore();
-      
-      // 清除 App 角標（Badge）
-      Notifications.setBadgeCountAsync(0)
-        .then(() => {
-          console.log('[RootLayout] ✅ App badge cleared');
-        })
-        .catch((error) => {
-          console.warn('[RootLayout] Failed to clear badge:', error);
-        });
-      
-      // 初始化推播通知
-      initializePushNotifications().catch((error) => {
-        console.error('[RootLayout] Push notification initialization error:', error);
+    if (didInitRef.current) return;
+    didInitRef.current = true;
+    
+    console.log('[RootLayout] 🔄 Starting one-time initialization');
+    
+    // 初始化 core layer
+    initializeCore();
+    
+    // 清除 App 角標（Badge）
+    Notifications.setBadgeCountAsync(0)
+      .then(() => {
+        console.log('[RootLayout] ✅ App badge cleared');
+      })
+      .catch((error) => {
+        console.warn('[RootLayout] Failed to clear badge:', error);
       });
+    
+    // 初始化推播通知（只設置 handler，不註冊 token）
+    initializePushNotifications().catch((error) => {
+      console.error('[RootLayout] Push notification initialization error:', error);
+    });
 
-      // 初始化推播服務（請求權限並註冊 token）
-      initializePushService().catch((error) => {
-        console.warn('[RootLayout] Push service initialization error:', error);
-      });
-
-      // 檢查是否為首次啟動，決定是否顯示 Onboarding
+    // 檢查是否為首次啟動（只計算狀態，不直接導航）
+    if (!didCheckOnboardingRef.current) {
+      didCheckOnboardingRef.current = true;
       checkIfFirstLaunch()
         .then((isFirstLaunch) => {
           if (isFirstLaunch) {
-            console.log('[RootLayout] First launch detected, showing onboarding');
-            // 使用 setTimeout 確保在 Splash Screen 結束後再導向
-            setTimeout(() => {
-              router.replace('/onboarding');
-            }, 100);
+            console.log('[RootLayout] First launch detected, will show onboarding');
           } else {
             console.log('[RootLayout] Not first launch, skipping onboarding');
           }
+          setShouldShowOnboarding(isFirstLaunch);
         })
         .catch((error) => {
           console.error('[RootLayout] Error checking first launch:', error);
           // 發生錯誤時，預設顯示 Onboarding
-          setTimeout(() => {
-            router.replace('/onboarding');
-          }, 100);
+          setShouldShowOnboarding(true);
         });
     }
-  }, [router]);
+  }, []); // 空依賴：只執行一次
 
-  // 推送通知 Token 註冊（取得 token 並註冊到 Server）
+  // Onboarding 路由：根據狀態導航，不形成循環
   useEffect(() => {
-    registerPushNotificationsComplete()
-      .then((token) => {
-        if (token) {
-          console.log('[RootLayout] Push token registered:', token.substring(0, 30) + '...');
-        } else {
-          console.log('[RootLayout] Failed to get Expo Push Token');
+    if (shouldShowOnboarding === null || !ready) return;
+    
+    if (shouldShowOnboarding) {
+      // 使用 ref 獲取最新的 segments，避免依賴變化
+      const currentSegments = segmentsRef.current;
+      const currentRouter = routerRef.current;
+      
+      // 只在當前不在 onboarding 頁面時才導航
+      if (currentSegments[0] !== 'onboarding') {
+        console.log('[RootLayout] Navigating to onboarding');
+        currentRouter.replace('/onboarding');
+      }
+    }
+  }, [shouldShowOnboarding, ready]); // 只依賴狀態，不依賴 router/segments
+
+  // Push Token 註冊：只在用戶登入後且未註冊過時執行一次
+  useEffect(() => {
+    if (didRegisterPushTokenRef.current) return;
+    
+    const checkAndRegister = async () => {
+      try {
+        // Session Guard：先檢查 session，避免 AuthSessionMissingError
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          // 不記錄 AuthSessionMissingError（這是正常情況）
+          if (!sessionError.message?.includes('Auth session missing') && 
+              !sessionError.message?.includes('AuthSessionMissingError')) {
+            console.error('[RootLayout] Session error:', sessionError);
+          }
+          console.log('[RootLayout] Push token registration skipped: no session');
+          return;
         }
-      })
-      .catch((error) => {
-        console.error('[RootLayout] Error registering for push notifications:', error);
-      });
-  }, []);
+        
+        if (!session) {
+          console.log('[RootLayout] Push token registration skipped: user not logged in');
+          return;
+        }
+
+        // 檢查是否已註冊過（通過檢查 didRegisterPushTokenRef）
+        if (didRegisterPushTokenRef.current) {
+          console.log('[RootLayout] Push token registration skipped: already registered');
+          return;
+        }
+
+        didRegisterPushTokenRef.current = true;
+        console.log('[RootLayout] Registering push token for logged-in user');
+        
+        const result = await registerPushTokenToSupabase();
+        if (result.success) {
+          console.log('[RootLayout] Push token registered successfully');
+        } else {
+          console.log('[RootLayout] Push token registration skipped:', result.error);
+          // 如果註冊失敗，重置標記以便下次重試
+          didRegisterPushTokenRef.current = false;
+        }
+      } catch (error: any) {
+        // Session Guard：捕獲 AuthSessionMissingError，不 throw
+        if (error?.message?.includes('Auth session missing') || 
+            error?.name === 'AuthSessionMissingError' ||
+            error?.message?.includes('AuthSessionMissingError')) {
+          console.log('[RootLayout] Push token registration skipped: session missing');
+          didRegisterPushTokenRef.current = false;
+          return;
+        }
+        console.error('[RootLayout] Error checking/registering push token:', error);
+        didRegisterPushTokenRef.current = false;
+      }
+    };
+
+    // 延遲執行，確保 auth 狀態已初始化
+    const timer = setTimeout(checkAndRegister, 500);
+    return () => clearTimeout(timer);
+  }, []); // 空依賴：只執行一次
 
   // 通知 Deep Link 處理（確保 navigation ready 後才執行）
   useEffect(() => {
@@ -153,36 +224,62 @@ export default function RootLayout() {
     return () => sub.remove();
   }, [navigationState?.key]);
 
-  // Auth 狀態監聽：處理密碼重設流程
+  // Auth 狀態監聽：只設置一次，使用 ref 訪問 router 和 segments
   useEffect(() => {
+    if (didSetupAuthListenerRef.current) return;
+    didSetupAuthListenerRef.current = true;
+    
+    console.log('[RootLayout] Setting up auth state listener (one-time)');
+    
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      console.log('🔔 Auth Event:', event, session?.user?.id); // Debug 用
-      console.log('📍 Current segments:', segments); // Debug 用
+      // 使用 ref 獲取最新的 router 和 segments，避免依賴變化
+      const currentRouter = routerRef.current;
+      const currentSegments = segmentsRef.current;
+      
+      // 只在非 INITIAL_SESSION 事件時記錄（避免重複 log）
+      if (event !== 'INITIAL_SESSION') {
+        console.log('🔔 Auth Event:', event, session?.user?.id);
+      }
       
       // 1. 如果是重設密碼事件，強制跳轉
       if (event === 'PASSWORD_RECOVERY') {
         console.log('[RootLayout] PASSWORD_RECOVERY event detected, redirecting to reset-password');
-        router.push('/auth/reset-password');
+        currentRouter.push('/auth/reset-password');
         return;
       }
 
       // 2. 如果是一般登入 (SIGNED_IN)
       if (event === 'SIGNED_IN' && session) {
-        // 🚨 關鍵判斷：檢查當前是否已經在 "auth" 群組中
-        // segments[0] 通常是群組名，segments[1] 是頁面名
-        const inAuthGroup = segments[0] === 'auth';
+        // 檢查當前是否已經在 "auth" 群組中
+        const inAuthGroup = currentSegments[0] === 'auth';
         
-        console.log('[RootLayout] SIGNED_IN event, inAuthGroup:', inAuthGroup, 'segments:', segments);
+        console.log('[RootLayout] SIGNED_IN event, inAuthGroup:', inAuthGroup, 'segments:', currentSegments);
         
-        // 如果使用者現在不在 Auth 流程中 (例如正在登入頁)，才跳轉去首頁
-        // 如果使用者是因為 Deep Link 被帶到 reset-password 頁面的，這裡就不會執行跳轉
+        // 如果使用者現在不在 Auth 流程中，才跳轉去首頁
         if (!inAuthGroup) {
           console.log('[RootLayout] User not in auth group, navigating to home');
-          router.replace('/(tabs)');
+          currentRouter.replace('/(tabs)');
         } else {
           console.log('[RootLayout] User in auth group, skipping auto-navigation');
+        }
+
+        // 登入後嘗試註冊 push token（如果尚未註冊）
+        if (!didRegisterPushTokenRef.current) {
+          console.log('[RootLayout] User signed in, attempting to register push token');
+          registerPushTokenToSupabase()
+            .then((result) => {
+              if (result.success) {
+                didRegisterPushTokenRef.current = true;
+                console.log('[RootLayout] Push token registered after sign-in');
+              } else {
+                console.log('[RootLayout] Push token registration skipped after sign-in:', result.error);
+              }
+            })
+            .catch((error) => {
+              console.error('[RootLayout] Error registering push token after sign-in:', error);
+            });
         }
       }
     });
@@ -190,7 +287,7 @@ export default function RootLayout() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [router, segments]); // 記得把 segments 加入依賴
+  }, []); // 空依賴：只設置一次
 
   // Splash Gate：如果動畫尚未完成，顯示啟動動畫
   if (!ready) {
@@ -215,6 +312,8 @@ export default function RootLayout() {
           <Stack.Screen name="me/edit-profile" options={{ title: '編輯個人資料', headerShown: false }} />
           <Stack.Screen name="settings" options={{ title: '設定', headerShown: false }} />
           <Stack.Screen name="help" options={{ title: '聯絡我們', headerShown: false }} />
+          <Stack.Screen name="help/shipping" options={{ title: '運回台灣方式', headerShown: false }} />
+          <Stack.Screen name="help/shipping/risks" options={{ title: '風險與法規', headerShown: false }} />
           <Stack.Screen name="auth/reset-password" options={{ title: '重設密碼', headerShown: false }} />
         </Stack>
         <StatusBar style="auto" />

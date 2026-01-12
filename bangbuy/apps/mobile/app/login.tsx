@@ -198,17 +198,19 @@ export default function LoginScreen() {
         return;
       }
 
-      // 成功後登出（清除 recovery session）
+      // 修改密碼成功後立即登出，清除舊 session
       try {
         await supabase.auth.signOut();
+        console.log('[LoginScreen] Signed out after password change');
       } catch (signOutError) {
         console.warn('[LoginScreen] Sign out error (non-critical):', signOutError);
+        // 即使登出失敗，也繼續流程
       }
 
       // 顯示成功訊息
       Alert.alert(
-        '成功',
-        '密碼已重設！請使用新密碼重新登入。',
+        '密碼已更新',
+        '密碼已更新，請重新登入',
         [
           {
             text: '確定',
@@ -220,6 +222,7 @@ export default function LoginScreen() {
               setOtpCode('');
               setNewPassword('');
               setConfirmPassword('');
+              // 頁面會自動顯示登入表單（因為 modal 已關閉）
             },
           },
         ]
@@ -515,13 +518,10 @@ export default function LoginScreen() {
           setConfirmPassword('');
         }}
       >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-        >
+        {/* Overlay：第一層，完整覆蓋整個螢幕 */}
+        <View style={styles.modalOverlay}>
           <TouchableOpacity
-            style={styles.modalOverlay}
+            style={styles.modalOverlayTouchable}
             activeOpacity={1}
             onPress={() => {
               setForgotPasswordModalVisible(false);
@@ -532,12 +532,17 @@ export default function LoginScreen() {
               setConfirmPassword('');
             }}
           >
+            {/* 白色卡片：使用 KeyboardAvoidingView 處理鍵盤 */}
             <TouchableOpacity
               activeOpacity={1}
               onPress={(e) => e.stopPropagation()}
               style={styles.modalContentWrapper}
             >
-              <View style={styles.modalContent}>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+              >
+                <View style={styles.modalContent}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>重設密碼</Text>
                   <TouchableOpacity
@@ -709,10 +714,11 @@ export default function LoginScreen() {
                     </View>
                   </>
                 )}
-              </View>
+                </View>
+              </KeyboardAvoidingView>
             </TouchableOpacity>
           </TouchableOpacity>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
     </Screen>
   );
@@ -864,8 +870,21 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.medium,
   },
   modalOverlay: {
-    flex: 1,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalOverlayTouchable: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: 'center',
     alignItems: 'center',
   },

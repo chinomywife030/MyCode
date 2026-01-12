@@ -113,11 +113,41 @@ export async function getProfileStats(): Promise<ProfileStats> {
 /**
  * 獲取當前用戶的 Profile 資料
  * 從 profiles 表讀取，fallback 到 auth.user
+ * Session Guard：若 session 不存在，直接 return null，不 throw error
  */
 export async function getCurrentProfile(): Promise<UserProfile | null> {
   try {
+    // Session Guard：先檢查 session，避免 AuthSessionMissingError
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
+      // 不記錄 AuthSessionMissingError（這是正常情況）
+      if (!sessionError.message?.includes('Auth session missing') && 
+          !sessionError.message?.includes('AuthSessionMissingError')) {
+        console.error('[getCurrentProfile] Session error:', sessionError);
+      }
+      return null;
+    }
+    
+    if (!session) {
+      // 沒有 session，表示未登入
+      return null;
+    }
+    
+    // 確認 session 存在後，獲取用戶資訊
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
+    
+    if (userError) {
+      // 如果錯誤是 session 相關，直接返回 null（不 throw）
+      if (userError.message?.includes('Auth session missing') || 
+          userError.message?.includes('AuthSessionMissingError')) {
+        return null;
+      }
+      console.error('[getCurrentProfile] Get user error:', userError);
+      return null;
+    }
+    
+    if (!user) {
       return null;
     }
 
@@ -146,7 +176,14 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
       avatar_url: profile.avatar_url,
       email: user.email,
     };
-  } catch (error) {
+  } catch (error: any) {
+    // Session Guard：捕獲 AuthSessionMissingError，不 throw
+    if (error?.message?.includes('Auth session missing') || 
+        error?.name === 'AuthSessionMissingError' ||
+        error?.message?.includes('AuthSessionMissingError')) {
+      // 這是正常情況（未登入或 session 已失效），不需要記錄為錯誤
+      return null;
+    }
     console.error('[getCurrentProfile] Error:', error);
     return null;
   }
