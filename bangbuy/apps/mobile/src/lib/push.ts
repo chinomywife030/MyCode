@@ -145,34 +145,28 @@ export async function registerPushToken(): Promise<{
     const platform = Platform.OS === 'ios' ? 'ios' : 'android';
     const deviceId = await getDeviceId();
 
-    // 2. 嘗試獲取當前用戶（如果已登入）
-    let userId: string | null = null;
-    try {
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) {
-        console.warn('[registerPushToken] Auth error:', userError);
-      }
-      userId = user?.id || null;
-      if (userId) {
-        console.log(`[registerPushToken] User logged in: ${userId}`);
-      } else {
-        console.log('[registerPushToken] No user session, registering anonymously');
-      }
-    } catch (authError) {
-      // 未登入，允許匿名註冊
-      console.log('[registerPushToken] No user session, registering anonymously');
-    }
-
-    // 3. 必須有 user_id 才能註冊（不允許匿名）
-    if (!userId) {
+    // 2. 從 session 獲取當前用戶（必須使用 getSession）
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError) {
       registrationInProgress = false;
       return {
         success: false,
         error: '請先登入後再註冊推播通知',
       };
     }
+    
+    if (!session || !session.user) {
+      registrationInProgress = false;
+      return {
+        success: false,
+        error: '請先登入後再註冊推播通知',
+      };
+    }
+    
+    const userId = session.user.id;
 
-    // 4. Upsert 到 Supabase（使用 expo_push_token 作為唯一鍵）
+    // 3. Upsert 到 Supabase（使用 user_id,expo_push_token 作為唯一鍵）
     const { error } = await supabase
       .from('user_push_tokens')
       .upsert(
@@ -183,7 +177,7 @@ export async function registerPushToken(): Promise<{
           updated_at: new Date().toISOString(),
         },
         {
-          onConflict: 'expo_push_token',
+          onConflict: 'user_id,expo_push_token',
         }
       );
 
@@ -224,9 +218,10 @@ async function handleNotificationResponse(response: Notifications.NotificationRe
       const { incrementUnreadCount, isNotificationProcessed, markNotificationAsProcessed } = await import('./notifications/unread');
       
       // 取得通知 ID（用於去重）
-      const notificationId = notification.request.identifier || 
-                            data?.notificationId ||
-                            `${Date.now()}_${Math.random()}`;
+      const notificationId: string = 
+        (typeof notification.request.identifier === 'string' ? notification.request.identifier : '') ||
+        (typeof data?.notificationId === 'string' ? data.notificationId : '') ||
+        `${Date.now()}_${Math.random()}`;
       
       // 檢查是否已處理過（避免重複累加）
       const isProcessed = await isNotificationProcessed(notificationId);
@@ -302,15 +297,16 @@ function setupNotificationHandlers() {
 
   // 設定通知接收處理器（App 在前台時）
   Notifications.setNotificationHandler({
-    handleNotification: async (notification) => {
+    handleNotification: async (notification): Promise<Notifications.NotificationBehavior> => {
       // 更新未讀通知數（去重處理）
       try {
         const { incrementUnreadCount, isNotificationProcessed, markNotificationAsProcessed } = await import('./notifications/unread');
         
         // 取得通知 ID（用於去重）
-        const notificationId = notification.request.identifier || 
-                              notification.request.content.data?.notificationId ||
-                              `${Date.now()}_${Math.random()}`;
+        const notificationId: string = 
+          (typeof notification.request.identifier === 'string' ? notification.request.identifier : '') ||
+          (typeof notification.request.content.data?.notificationId === 'string' ? notification.request.content.data.notificationId : '') ||
+          `${Date.now()}_${Math.random()}`;
         
         // 檢查是否已處理過（避免重複累加）
         const isProcessed = await isNotificationProcessed(notificationId);
@@ -324,13 +320,15 @@ function setupNotificationHandlers() {
       }
       
       // 更新未讀訊息數（如果是 chat 通知）
-      const notificationType = notification.request.content.data?.type || '';
+      const notificationType = typeof notification.request.content.data?.type === 'string' 
+        ? notification.request.content.data.type 
+        : '';
       const isChatNotification = 
         notificationType === 'chat' || 
         notificationType === 'message' || 
         notificationType === 'chat_message' ||
-        notificationType?.toLowerCase().includes('chat') ||
-        notificationType?.toLowerCase().includes('message');
+        notificationType.toLowerCase().includes('chat') ||
+        notificationType.toLowerCase().includes('message');
       
       if (isChatNotification) {
         try {
@@ -341,9 +339,10 @@ function setupNotificationHandlers() {
           } = await import('./messages/unread');
           
           // 取得通知 ID（用於去重）
-          const notificationId = notification.request.identifier || 
-                              notification.request.content.data?.notificationId ||
-                              `${Date.now()}_${Math.random()}`;
+          const notificationId: string = 
+            (typeof notification.request.identifier === 'string' ? notification.request.identifier : '') ||
+            (typeof notification.request.content.data?.notificationId === 'string' ? notification.request.content.data.notificationId : '') ||
+            `${Date.now()}_${Math.random()}`;
           
           // 檢查是否已處理過（避免重複累加）
           const isProcessed = await isMessageNotificationProcessed(notificationId);
@@ -363,6 +362,8 @@ function setupNotificationHandlers() {
         shouldShowAlert: true,
         shouldPlaySound: true,
         shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
       };
     },
   });

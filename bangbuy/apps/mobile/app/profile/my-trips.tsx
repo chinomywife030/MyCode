@@ -62,7 +62,12 @@ export default function MyTripsScreen() {
         console.error('[MyTripsScreen] Error:', error);
         setTrips([]);
       } else {
-        setTrips(data || []);
+        // 過濾掉已刪除的行程（description 以 "[DELETED]" 開頭）
+        const validTrips = (data || []).filter((trip: any) => {
+          const desc = trip.description || '';
+          return !desc.startsWith('[DELETED]');
+        });
+        setTrips(validTrips);
       }
     } catch (error) {
       console.error('[MyTripsScreen] Exception:', error);

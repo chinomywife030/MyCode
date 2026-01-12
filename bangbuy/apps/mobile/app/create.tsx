@@ -21,9 +21,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Screen, Card, Button, Input } from '@/src/ui';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/tokens';
 import { getCurrentUser } from '@/src/lib/auth';
-import { createWish } from '@/src/lib/wishes';
-import { uploadMultipleImages } from '@/src/lib/supabaseUpload';
-import { ImagePickerPreview } from '@/src/components/ImagePickerPreview';
+import { createWishRequest } from '@/src/features/wishCreate/wishCreateService';
+import { WishImagePicker } from '@/src/features/wishCreate/WishImagePicker';
 import { CountryPickerField } from '@/src/components/CountryPickerField';
 import { CategoryChips } from '@/src/components/CategoryChips';
 import { DateField } from '@/src/components/DateField';
@@ -45,7 +44,8 @@ export default function CreateWishScreen() {
   const [uploading, setUploading] = useState(false);
 
   // 表單狀態 - 商品資訊
-  const [images, setImages] = useState<string[]>([]);
+  // 使用原始 asset 对象（用于上传）
+  const [imageAssets, setImageAssets] = useState<Array<{ uri: string; mimeType?: string; fileName?: string }>>([]);
   const [title, setTitle] = useState('');
   const [productUrl, setProductUrl] = useState('');
   const [targetCountry, setTargetCountry] = useState<string>('');
@@ -79,7 +79,8 @@ export default function CreateWishScreen() {
       setTargetCountry(params.prefill_country);
     }
     if (params.prefill_image) {
-      setImages([params.prefill_image]);
+      // 预填充图片（如果有）
+      setImageAssets([{ uri: params.prefill_image }]);
     }
     // 注意：city 字段在 CreateWishScreen 中可能不存在，需要檢查是否有對應字段
   }, [params]);
@@ -171,23 +172,9 @@ export default function CreateWishScreen() {
     return Object.keys(newErrors).length === 0;
   };
 
-  // 驗證圖片大小
+  // 驗證圖片（簡化版，實際上傳時會再檢查）
   const validateImages = async (): Promise<boolean> => {
-    const FileSystem = await import('expo-file-system/legacy');
-    for (let i = 0; i < images.length; i++) {
-      const uri = images[i];
-      try {
-        // 嘗試讀取檔案資訊
-        const fileInfo = await FileSystem.getInfoAsync(uri);
-        if (fileInfo.exists && 'size' in fileInfo && fileInfo.size && fileInfo.size > MAX_IMAGE_SIZE) {
-          Alert.alert('檔案過大', `第 ${i + 1} 張圖片超過 5MB，請選擇較小的圖片`);
-          return false;
-        }
-      } catch (error) {
-        // 如果無法取得檔案大小，繼續（在實際上傳時會再檢查）
-        console.warn('[CreateWishScreen] Cannot get file size:', error);
-      }
-    }
+    // 圖片驗證在上傳時進行，這裡只做基本檢查
     return true;
   };
 
@@ -219,136 +206,59 @@ export default function CreateWishScreen() {
       const budgetCapValue = budgetCapNT ? Number(budgetCapNT) : undefined;
       const estimatedTotalValue = estimatedTotalNT > 0 ? estimatedTotalNT : undefined;
 
-      let imageUrls: string[] = [];
+      // 使用新的创建服务（包含图片上传）
+      console.log('[CreateWishScreen] Starting wish creation:', {
+        title: title.trim(),
+        imageAssetsCount: imageAssets.length,
+        userId: user.id,
+      });
 
-      // 1. 如果有圖片，先上傳圖片（在創建許願單之前）
-      if (images.length > 0) {
-        console.log('[CreateWishScreen] Starting image upload, count:', images.length);
-        setUploading(true);
+      setUploading(imageAssets.length > 0);
 
-        const uploadResult = await uploadMultipleImages(
-          images,
-          'wish-images',
-          user.id
-        );
-
-        if (!uploadResult.success) {
-          // 圖片上傳失敗，阻止創建許願單
-          Alert.alert(
-            '圖片上傳失敗',
-            uploadResult.error || '圖片上傳時發生錯誤，請重試',
-            [{ text: '確定' }]
-          );
-          setLoading(false);
-          setUploading(false);
-          return;
-        }
-
-        imageUrls = uploadResult.urls || [];
-        console.log('[CreateWishScreen] Image upload successful, URLs:', imageUrls);
-
-        if (imageUrls.length === 0) {
-          Alert.alert('錯誤', '圖片上傳成功但未取得 URL，請重試');
-          setLoading(false);
-          setUploading(false);
-          return;
-        }
-      }
-
-      setUploading(false);
-
-      // 2. 創建許願單（包含圖片 URLs）
-      const result = await createWish(
-        title.trim(),
-        notes.trim() || undefined, // description
-        estimatedTotalValue, // budget（使用預估總價）
-        priceValue, // price
-        feeValue, // commission
-        productUrl.trim() || undefined,
-        targetCountry,
-        category,
-        dueDate ? dueDate.toISOString().split('T')[0] : undefined // deadline (YYYY-MM-DD)
+      const result = await createWishRequest(
+        {
+          title: title.trim(),
+          description: notes.trim() || undefined,
+          budget: estimatedTotalValue,
+          price: priceValue,
+          commission: feeValue,
+          productUrl: productUrl.trim() || undefined,
+          targetCountry: targetCountry,
+          category: category,
+          deadline: dueDate ? dueDate.toISOString().split('T')[0] : undefined,
+          isUrgent: isUrgent,
+        },
+        imageAssets // 传入原始 assets，服务会处理上传
       );
 
       if (!result.success) {
-        Alert.alert('發布失敗', result.error || '發布許願單時發生錯誤');
+        // 显示详细错误信息
+        const errorMsg = result.error || '發布許願單時發生錯誤';
+        console.error('[CreateWishScreen] Create failed:', {
+          error: errorMsg,
+          payload: {
+            title: title.trim(),
+            imageAssetsCount: imageAssets.length,
+          },
+        });
+        Alert.alert('發布失敗', errorMsg);
         setLoading(false);
+        setUploading(false);
         return;
       }
 
-      // 3. 更新許願單的 images 欄位（只更新 images，不包含其他不存在的欄位）
-      if (result.wish && imageUrls.length > 0) {
-        try {
-          const { supabase } = await import('@/src/lib/supabase');
-          
-          console.log('[CreateWishScreen] Updating images field:', imageUrls);
-          
-          const { data: updateResult, error: updateError } = await supabase
-            .from('wish_requests')
-            .update({ images: imageUrls })
-            .eq('id', result.wish.id)
-            .select('images');
-
-          if (updateError) {
-            console.error('[CreateWishScreen] Failed to update images:', updateError);
-            Alert.alert(
-              '警告',
-              `許願單已創建，但圖片 URL 更新失敗：${updateError.message}`
-            );
-          } else {
-            console.log('[CreateWishScreen] Images updated successfully:', updateResult);
-            // 驗證 images 是否正確保存
-            if (updateResult && updateResult[0]) {
-              const savedImages = updateResult[0].images;
-              console.log('[CreateWishScreen] Saved images in DB:', savedImages);
-              if (!savedImages || savedImages.length === 0) {
-                console.warn('[CreateWishScreen] WARNING: Images were not saved correctly!');
-              }
-            }
-          }
-        } catch (updateErr) {
-          console.error('[CreateWishScreen] Error updating images:', updateErr);
-          Alert.alert(
-            '警告',
-            `許願單已創建，但更新圖片時發生錯誤：${(updateErr as Error).message}`
-          );
-        }
-      }
-
-      // 4. 更新其他欄位（is_urgent, tags）如果有值
-      if (result.wish && (isUrgent || tags.length > 0)) {
-        try {
-          const { supabase } = await import('@/src/lib/supabase');
-          const updateData: any = {};
-
-          if (isUrgent) {
-            updateData.is_urgent = true;
-          }
-
-          if (tags.length > 0) {
-            updateData.tags = tags;
-          }
-
-          if (Object.keys(updateData).length > 0) {
-            const { error: updateError } = await supabase
-              .from('wish_requests')
-              .update(updateData)
-              .eq('id', result.wish.id);
-
-            if (updateError) {
-              console.error('[CreateWishScreen] Failed to update additional fields:', updateError);
-            } else {
-              console.log('[CreateWishScreen] Additional fields updated successfully');
-            }
-          }
-        } catch (updateErr) {
-          console.error('[CreateWishScreen] Error updating additional fields:', updateErr);
-        }
-      }
-
+      setLoading(false);
       setUploading(false);
 
-      // 4. 成功提示
+      // Debug: 验证创建结果
+      console.log('[CreateWishScreen] Wish created successfully:', {
+        id: result.wish?.id,
+        title: result.wish?.title,
+        imagesCount: result.wish?.images?.length || 0,
+        images: result.wish?.images,
+      });
+
+      // 成功提示
       Alert.alert('已發布許願單', '你的許願單已成功發布！', [
         {
           text: '查看許願單',
@@ -399,10 +309,10 @@ export default function CreateWishScreen() {
         >
           {/* 圖片區塊 */}
           <Card style={styles.card}>
-            <ImagePickerPreview
-              images={images}
+            <WishImagePicker
+              assets={imageAssets}
               maxImages={6}
-              onImagesChange={setImages}
+              onAssetsChange={setImageAssets}
             />
           </Card>
 

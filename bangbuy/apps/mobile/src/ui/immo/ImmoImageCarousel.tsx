@@ -79,14 +79,33 @@ export function ImmoImageCarousel({
 
   // 若只有一張圖片，不顯示 indicator
   if (images.length === 1) {
+    const imageUri = images[0];
+    const isValidUri = imageUri && (imageUri.startsWith('http://') || imageUri.startsWith('https://'));
+
     return (
       <View style={[styles.container, { aspectRatio }]} onLayout={handleLayout}>
-        <ExpoImage
-          source={{ uri: images[0] }}
-          style={styles.image}
-          contentFit="cover"
-          transition={200}
-        />
+        {isValidUri ? (
+          <ExpoImage
+            source={{ uri: imageUri }}
+            style={styles.image}
+            contentFit="cover"
+            transition={200}
+            placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+            onError={(error) => {
+              console.error('[ImmoImageCarousel] Image load error:', {
+                uri: imageUri,
+                error: error.nativeEvent?.error || error,
+              });
+            }}
+            onLoad={() => {
+              console.log('[ImmoImageCarousel] Image loaded successfully:', imageUri);
+            }}
+          />
+        ) : (
+          <View style={styles.placeholder}>
+            <Ionicons name="image-outline" size={placeholderIconSize} color={immoColors.textMuted} />
+          </View>
+        )}
       </View>
     );
   }
@@ -104,16 +123,37 @@ export function ImmoImageCarousel({
         bounces={false}
         decelerationRate="fast"
       >
-        {images.map((uri, index) => (
-          <View key={`${uri}-${index}`} style={{ width: containerWidth }}>
-            <ExpoImage
-              source={{ uri }}
-              style={styles.image}
-              contentFit="cover"
-              transition={200}
-            />
-          </View>
-        ))}
+        {images.map((uri, index) => {
+          const isValidUri = uri && (uri.startsWith('http://') || uri.startsWith('https://'));
+          
+          return (
+            <View key={`${uri}-${index}`} style={{ width: containerWidth }}>
+              {isValidUri ? (
+                <ExpoImage
+                  source={{ uri }}
+                  style={styles.image}
+                  contentFit="cover"
+                  transition={200}
+                  placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+                  onError={(error) => {
+                    console.error('[ImmoImageCarousel] Image load error:', {
+                      uri,
+                      index,
+                      error: error.nativeEvent?.error || error,
+                    });
+                  }}
+                  onLoad={() => {
+                    console.log('[ImmoImageCarousel] Image loaded successfully:', uri);
+                  }}
+                />
+              ) : (
+                <View style={styles.placeholder}>
+                  <Ionicons name="image-outline" size={placeholderIconSize} color={immoColors.textMuted} />
+                </View>
+              )}
+            </View>
+          );
+        })}
       </ScrollView>
 
       {/* Indicator */}

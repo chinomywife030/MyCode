@@ -46,11 +46,27 @@ export async function getProfileStats(): Promise<ProfileStats> {
         .select('id', { count: 'exact', head: true })
         .eq('buyer_id', userId),
       
-      // 我的行程 count
-      supabase
-        .from('trips')
-        .select('id', { count: 'exact', head: true })
-        .eq('shopper_id', userId),
+      // 我的行程 count（排除已刪除的行程）
+      (async () => {
+        try {
+          const { data, error } = await supabase
+            .from('trips')
+            .select('id, description')
+            .eq('shopper_id', userId);
+          
+          if (error) throw error;
+          
+          // 過濾掉已刪除的行程（description 以 "[DELETED]" 開頭）
+          const validTrips = (data || []).filter((trip: any) => {
+            const desc = trip.description || '';
+            return !desc.startsWith('[DELETED]');
+          });
+          
+          return { count: validTrips.length, error: null };
+        } catch (err: any) {
+          return { count: 0, error: err };
+        }
+      })(),
       
       // 已完成 count
       // 判斷欄位優先順序：

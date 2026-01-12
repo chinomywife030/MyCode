@@ -10,6 +10,7 @@ import { getDiscoveries, type Discovery } from '@/src/lib/discoveries';
 import { getNotificationPermission, registerPushToken } from '@/src/lib/push';
 import { signOut, getCurrentUser, getSession } from '@/src/lib/auth';
 import { getCurrentProfile } from '@/src/lib/profile';
+import { supabase } from '@/src/lib/supabase';
 import { startChat } from '@/src/lib/chat';
 // ✅ 保留原有 UI 組件（確保可編譯）
 import { Screen, TopBar, HeroBanner, SearchRow, WishCard, TripCard, StateView, FilterModal, type FilterOptions, type Mode } from '@/src/ui';
@@ -184,7 +185,13 @@ export default function HomeScreen() {
       }
       setError(null);
       
-      const queryOptions = {
+      // 注意：filters.sortBy 是 wishes 的类型 ('newest' | 'price_low' | 'price_high')
+      // 但 getTrips 需要 trips 的类型 ('newest' | 'date_asc' | 'date_desc')
+      // 这里只处理 'newest'，其他值忽略
+      const queryOptions: {
+        keyword?: string;
+        sortBy?: 'newest' | 'date_asc' | 'date_desc';
+      } = {
         keyword: searchQuery.trim() || undefined,
         sortBy: filters.sortBy === 'newest' ? 'newest' : undefined,
       };
@@ -259,10 +266,14 @@ export default function HomeScreen() {
         // 即使 profile 載入失敗，也不影響其他功能
       }
 
+      // 確保 session 存在後才註冊 push token
       try {
-        const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
-        await registerPushTokenToSupabase();
-        console.log('[HomeScreen] Push token re-registered for logged-in user');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
+          await registerPushTokenToSupabase();
+          console.log('[HomeScreen] Push token re-registered for logged-in user');
+        }
       } catch (pushError) {
         console.warn('[HomeScreen] Failed to re-register push token:', pushError);
       }

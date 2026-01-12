@@ -75,10 +75,15 @@ export default function LoginScreen() {
 
         if (error) throw error;
 
-        // 登入成功後，重新註冊 push token
+        // 登入成功後，等待 session 恢復再註冊 push token
+        // 注意：這裡不直接註冊，因為 auth state change 監聽器會處理
+        // 但為了確保，我們也檢查 session 後再註冊
         try {
-          const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
-          await registerPushTokenToSupabase();
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && session.user) {
+            const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
+            await registerPushTokenToSupabase();
+          }
         } catch (pushError) {
           console.warn('[LoginScreen] Failed to register push token:', pushError);
         }
@@ -267,10 +272,13 @@ export default function LoginScreen() {
         return;
       }
 
-      // 註冊成功後，重新註冊 push token
+      // 註冊成功後，等待 session 恢復再註冊 push token
       try {
-        const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
-        await registerPushTokenToSupabase();
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
+          await registerPushTokenToSupabase();
+        }
       } catch (pushError) {
         console.warn('[LoginScreen] Failed to register push token:', pushError);
       }

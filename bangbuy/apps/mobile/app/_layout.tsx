@@ -14,6 +14,7 @@ import { supabase } from '@/src/lib/supabase';
 import { checkIfFirstLaunch } from '@/src/lib/onboarding';
 import SplashAnimation from '@/components/SplashAnimation';
 import { UnreadCountProvider } from '@/components/unread/UnreadCountProvider';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -54,6 +55,35 @@ export default function RootLayout() {
     didInitRef.current = true;
     
     console.log('[RootLayout] 🔄 Starting one-time initialization');
+    
+    // 深度重置：清除所有 Auth token 和 session（確保完全未登入狀態）
+    (async () => {
+      try {
+        // 清除 Supabase session
+        await supabase.auth.signOut();
+        
+        // 清除 AsyncStorage 中所有 Supabase 相關的 key
+        // Supabase 使用 AsyncStorage 存儲 session，key 格式為：sb-{project-ref}-auth-token
+        const keys = await AsyncStorage.getAllKeys();
+        const supabaseKeys = keys.filter(key => 
+          key.includes('supabase') || 
+          key.includes('sb-') || 
+          key.includes('auth-token')
+        );
+        if (supabaseKeys.length > 0) {
+          await AsyncStorage.multiRemove(supabaseKeys);
+          console.log('[RootLayout] 🗑️ Cleared Supabase auth tokens:', supabaseKeys);
+        }
+        
+        // 可選：清除所有 AsyncStorage（更徹底的重置）
+        // await AsyncStorage.clear();
+        // console.log('[RootLayout] 🗑️ Cleared all AsyncStorage');
+        
+        console.log('[RootLayout] ✅ Auth reset completed - user is now logged out');
+      } catch (error) {
+        console.error('[RootLayout] Error clearing auth tokens:', error);
+      }
+    })();
     
     // 初始化 core layer
     initializeCore();
@@ -109,13 +139,13 @@ export default function RootLayout() {
     }
   }, [shouldShowOnboarding, ready]); // 只依賴狀態，不依賴 router/segments
 
-  // Push Token 註冊：只在用戶登入後且未註冊過時執行一次
+  // Push Token 註冊：等待 session 恢復後才註冊（啟動時）
   useEffect(() => {
     if (didRegisterPushTokenRef.current) return;
     
     const checkAndRegister = async () => {
       try {
-        // Session Guard：先檢查 session，避免 AuthSessionMissingError
+        // 必須先等待 session 恢復完成
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
@@ -124,12 +154,13 @@ export default function RootLayout() {
               !sessionError.message?.includes('AuthSessionMissingError')) {
             console.error('[RootLayout] Session error:', sessionError);
           }
-          console.log('[RootLayout] Push token registration skipped: no session');
+          console.log('[RootLayout] Push token registration skipped: session error');
           return;
         }
         
-        if (!session) {
-          console.log('[RootLayout] Push token registration skipped: user not logged in');
+        // 必須有 session 且 session.user 存在才註冊
+        if (!session || !session.user) {
+          console.log('[RootLayout] Push token registration skipped: no session or user');
           return;
         }
 
@@ -140,7 +171,7 @@ export default function RootLayout() {
         }
 
         didRegisterPushTokenRef.current = true;
-        console.log('[RootLayout] Registering push token for logged-in user');
+        console.log('[RootLayout] Session restored, registering push token');
         
         const result = await registerPushTokenToSupabase();
         if (result.success) {
@@ -250,35 +281,37 @@ export default function RootLayout() {
         return;
       }
 
-      // 2. 如果是一般登入 (SIGNED_IN)
-      if (event === 'SIGNED_IN' && session) {
-        // 檢查當前是否已經在 "auth" 群組中
-        const inAuthGroup = currentSegments[0] === 'auth';
-        
-        console.log('[RootLayout] SIGNED_IN event, inAuthGroup:', inAuthGroup, 'segments:', currentSegments);
-        
-        // 如果使用者現在不在 Auth 流程中，才跳轉去首頁
-        if (!inAuthGroup) {
-          console.log('[RootLayout] User not in auth group, navigating to home');
-          currentRouter.replace('/(tabs)');
-        } else {
-          console.log('[RootLayout] User in auth group, skipping auto-navigation');
+      // 2. 處理 SIGNED_IN 和 TOKEN_REFRESHED 事件（session 已恢復）
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session && session.user) {
+        // 檢查當前是否已經在 "auth" 群組中（僅 SIGNED_IN 時處理導航）
+        if (event === 'SIGNED_IN') {
+          const inAuthGroup = currentSegments[0] === 'auth';
+          
+          console.log('[RootLayout] SIGNED_IN event, inAuthGroup:', inAuthGroup, 'segments:', currentSegments);
+          
+          // 如果使用者現在不在 Auth 流程中，才跳轉去首頁
+          if (!inAuthGroup) {
+            console.log('[RootLayout] User not in auth group, navigating to home');
+            currentRouter.replace('/(tabs)');
+          } else {
+            console.log('[RootLayout] User in auth group, skipping auto-navigation');
+          }
         }
 
-        // 登入後嘗試註冊 push token（如果尚未註冊）
+        // Session 已恢復（SIGNED_IN 或 TOKEN_REFRESHED），嘗試註冊 push token
         if (!didRegisterPushTokenRef.current) {
-          console.log('[RootLayout] User signed in, attempting to register push token');
+          console.log(`[RootLayout] ${event} event, session restored, attempting to register push token`);
           registerPushTokenToSupabase()
             .then((result) => {
               if (result.success) {
                 didRegisterPushTokenRef.current = true;
-                console.log('[RootLayout] Push token registered after sign-in');
+                console.log(`[RootLayout] Push token registered after ${event}`);
               } else {
-                console.log('[RootLayout] Push token registration skipped after sign-in:', result.error);
+                console.log(`[RootLayout] Push token registration skipped after ${event}:`, result.error);
               }
             })
             .catch((error) => {
-              console.error('[RootLayout] Error registering push token after sign-in:', error);
+              console.error(`[RootLayout] Error registering push token after ${event}:`, error);
             });
         }
       }

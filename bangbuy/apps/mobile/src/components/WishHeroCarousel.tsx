@@ -30,16 +30,39 @@ export function WishHeroCarousel({ images }: { images: string[] }) {
           horizontal
           pagingEnabled
           showsHorizontalScrollIndicator={false}
-          renderItem={({ item }) => (
-            <View style={styles.imageWrapper}>
-              <Image
-                source={{ uri: item }}
-                style={styles.image}
-                contentFit="cover"
-                transition={150}
-              />
-            </View>
-          )}
+          renderItem={({ item }) => {
+            // Debug: 验证 URL 格式
+            if (!item || !item.startsWith('http://') && !item.startsWith('https://')) {
+              console.warn('[WishHeroCarousel] Invalid image URL:', item);
+            }
+
+            return (
+              <View style={styles.imageWrapper}>
+                {item && (item.startsWith('http://') || item.startsWith('https://')) ? (
+                  <Image
+                    source={{ uri: item }}
+                    style={styles.image}
+                    contentFit="cover"
+                    transition={150}
+                    placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+                    onError={(error) => {
+                      console.error('[WishHeroCarousel] Image load error:', {
+                        uri: item,
+                        error: error.nativeEvent?.error || error,
+                      });
+                    }}
+                    onLoad={() => {
+                      console.log('[WishHeroCarousel] Image loaded successfully:', item);
+                    }}
+                  />
+                ) : (
+                  <View style={styles.placeholder}>
+                    <Text style={styles.placeholderText}>圖片無法載入</Text>
+                  </View>
+                )}
+              </View>
+            );
+          }}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           getItemLayout={(_, index) => ({
@@ -87,6 +110,17 @@ const styles = StyleSheet.create({
     aspectRatio: 4 / 3,
     borderRadius: RADIUS,
     backgroundColor: "#F2F4F7",
+  },
+  placeholder: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#F2F4F7",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  placeholderText: {
+    color: "#999",
+    fontSize: 14,
   },
   counter: {
     position: "absolute",

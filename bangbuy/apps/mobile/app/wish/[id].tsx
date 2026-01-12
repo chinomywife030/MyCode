@@ -91,6 +91,25 @@ export default function WishDetailScreen() {
         setNotFound(true);
       } else {
         setWish(data);
+        
+        // Debug: 验证图片 URL
+        if (data.images && data.images.length > 0) {
+          console.log('[WishDetailScreen] Wish images URLs:', {
+            wishId: data.id,
+            imageCount: data.images.length,
+            urls: data.images,
+            // 提示：可以在浏览器中打开这些 URL 验证图片是否可访问
+            // 如果无法访问，请检查 Supabase Storage RLS Policy
+          });
+          
+          data.images.forEach((url: string, index: number) => {
+            const isValidUrl = url?.startsWith('http://') || url?.startsWith('https://');
+            if (!isValidUrl) {
+              console.warn(`[WishDetailScreen] Invalid image URL at index ${index}:`, url);
+            }
+          });
+        }
+        
         fetchLatestReply();
       }
     } catch (err) {
@@ -138,10 +157,14 @@ export default function WishDetailScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (id && wish) {
-        fetchLatestReply();
+      if (id) {
+        // 刷新 wish 数据（避免显示旧缓存）
+        fetchWish();
+        if (wish) {
+          fetchLatestReply();
+        }
       }
-    }, [id, wish])
+    }, [id])
   );
 
   const handleRetry = () => {

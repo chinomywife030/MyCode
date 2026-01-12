@@ -188,11 +188,18 @@ export default function TripDetailScreen() {
             try {
               const result = await deleteTrip(trip.id);
               if (result.success) {
+                // 刪除成功後，立即返回並觸發列表刷新
+                // 使用 router.replace 確保頁面刷新，或使用 router.back() 讓 useFocusEffect 觸發刷新
                 Alert.alert('成功', '行程已刪除', [
                   {
                     text: '確定',
                     onPress: () => {
-                      router.back();
+                      // 返回上一頁，useFocusEffect 會自動觸發刷新
+                      if (router.canGoBack()) {
+                        router.back();
+                      } else {
+                        router.replace('/(tabs)');
+                      }
                     },
                   },
                 ]);

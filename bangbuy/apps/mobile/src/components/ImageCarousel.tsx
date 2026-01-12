@@ -50,14 +50,33 @@ export function ImageCarousel({
 
   // 若只有一張圖片，不顯示 carousel 和 indicator
   if (images.length === 1) {
+    const imageUri = images[0];
+    const isValidUri = imageUri && (imageUri.startsWith('http://') || imageUri.startsWith('https://'));
+    
     return (
       <View style={styles.container}>
-        <ExpoImage
-          source={{ uri: images[0] }}
-          style={styles.image}
-          contentFit="cover"
-          transition={200}
-        />
+        {isValidUri ? (
+          <ExpoImage
+            source={{ uri: imageUri }}
+            style={styles.image}
+            contentFit="cover"
+            transition={200}
+            placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+            onError={(error) => {
+              console.error('[ImageCarousel] Image load error:', {
+                uri: imageUri,
+                error: error.nativeEvent?.error || error,
+              });
+            }}
+            onLoad={() => {
+              console.log('[ImageCarousel] Image loaded successfully:', imageUri);
+            }}
+          />
+        ) : (
+          <View style={styles.placeholder}>
+            <Ionicons name="image-outline" size={placeholderIconSize} color={colors.textMuted} />
+          </View>
+        )}
       </View>
     );
   }
@@ -79,16 +98,36 @@ export function ImageCarousel({
         height={height}
         data={images}
         onSnapToItem={(index) => setCurrentIndex(index)}
-        renderItem={({ item }) => (
-          <View style={{ width, height }}>
-            <ExpoImage
-              source={{ uri: item }}
-              style={styles.image}
-              contentFit="cover"
-              transition={200}
-            />
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const isValidUri = item && (item.startsWith('http://') || item.startsWith('https://'));
+          
+          return (
+            <View style={{ width, height }}>
+              {isValidUri ? (
+                <ExpoImage
+                  source={{ uri: item }}
+                  style={styles.image}
+                  contentFit="cover"
+                  transition={200}
+                  placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+                  onError={(error) => {
+                    console.error('[ImageCarousel] Image load error:', {
+                      uri: item,
+                      error: error.nativeEvent?.error || error,
+                    });
+                  }}
+                  onLoad={() => {
+                    console.log('[ImageCarousel] Image loaded successfully:', item);
+                  }}
+                />
+              ) : (
+                <View style={styles.placeholder}>
+                  <Ionicons name="image-outline" size={placeholderIconSize} color={colors.textMuted} />
+                </View>
+              )}
+            </View>
+          );
+        }}
         enabled
       />
 

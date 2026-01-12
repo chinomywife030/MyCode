@@ -9,6 +9,7 @@
     "./wish": "./src/wish/index.ts",
     "./trips": "./src/trips/index.ts",
     "./messaging": "./src/messaging/index.ts",
+    "./notifications": "./src/notifications.ts",
     "./types": "./src/types.ts"
   },
   "peerDependencies": {

@@ -11,6 +11,9 @@
       ],
       "@bangbuy/core/*": [
         "../../packages/core/src/*"
+      ],
+      "@core/*": [
+        "../../packages/core/src/*"
       ]
     }
   },

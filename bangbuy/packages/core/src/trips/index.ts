@@ -73,7 +73,13 @@ export async function getTrips(options?: {
       throw new Error(`載入失敗：${error.message || '無法連接到伺服器'}`);
     }
 
-    const trips: Trip[] = (data || []).map((item: any) => ({
+    // 過濾掉已刪除的行程（description 以 "[DELETED]" 開頭）
+    const validTrips = (data || []).filter((item: any) => {
+      const desc = item.description || '';
+      return !desc.startsWith('[DELETED]');
+    });
+
+    const trips: Trip[] = validTrips.map((item: any) => ({
       id: item.id,
       shopperId: item.shopper_id,
       destination: item.destination || '',

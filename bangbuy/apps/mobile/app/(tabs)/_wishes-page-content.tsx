@@ -5,6 +5,7 @@ import * as Haptics from 'expo-haptics';
 import { getWishes, type Wish } from '@/src/lib/wishes';
 import { getNotificationPermission, registerPushToken } from '@/src/lib/push';
 import { signOut, getCurrentUser } from '@/src/lib/auth';
+import { supabase } from '@/src/lib/supabase';
 import { Screen, TopBar, HeroBanner, SearchRow, WishCard, StateView, FilterModal, type FilterOptions } from '@/src/ui';
 import { colors, spacing, fontSize, fontWeight } from '@/src/theme/tokens';
 
@@ -53,10 +54,14 @@ export function WishesPageContent() {
     const currentUser = await getCurrentUser();
     setUser(currentUser);
     
+    // 確保 session 存在後才註冊 push token
     if (currentUser) {
       try {
-        await registerPushToken();
-        console.log('[WishesPageContent] Push token re-registered for logged-in user');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session && session.user) {
+          await registerPushToken();
+          console.log('[WishesPageContent] Push token re-registered for logged-in user');
+        }
       } catch (pushError) {
         console.warn('[WishesPageContent] Failed to re-register push token:', pushError);
       }
@@ -108,6 +113,11 @@ export function WishesPageContent() {
 
   const handleWishPress = (wishId: string) => {
     router.push(`/wish/${wishId}` as any);
+  };
+
+  const handleWishMessagePress = (wish: Wish) => {
+    // TODO: 实现消息功能
+    console.log('[WishesPageContent] Message pressed for wish:', wish.id);
   };
 
   // 過濾 wishes（根據搜尋關鍵字和篩選條件）
@@ -178,8 +188,12 @@ export function WishesPageContent() {
       id={item.id}
       title={item.title}
       country={item.targetCountry}
-      imageUrl={item.images && item.images.length > 0 ? item.images[0] : undefined}
+      images={item.images}
+      budget={item.budget}
+      buyer={item.buyer}
+      status={item.status}
       onPress={() => handleWishPress(item.id)}
+      onMessagePress={() => handleWishMessagePress(item)}
     />
   );
 

@@ -70,12 +70,26 @@ export function WishCard({
         onPress={onPress}
         activeOpacity={0.9}
       >
-        {firstImage ? (
+        {firstImage && (firstImage.startsWith('http://') || firstImage.startsWith('https://')) ? (
           <ExpoImage
             source={{ uri: firstImage }}
             style={styles.image}
             contentFit="cover"
             transition={200}
+            placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
+            onError={(error) => {
+              console.error('[WishCard] Image load error:', {
+                id,
+                uri: firstImage,
+                error: error.nativeEvent?.error || error,
+              });
+            }}
+            onLoad={() => {
+              console.log('[WishCard] Image loaded successfully:', {
+                id,
+                uri: firstImage,
+              });
+            }}
           />
         ) : (
           <View style={styles.imagePlaceholder}>
