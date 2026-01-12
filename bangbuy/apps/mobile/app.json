@@ -19,6 +19,9 @@
       "eas": {
         "projectId": "78c4b356-1098-4582-befc-f2001348628e"
       }
+    },
+    "android": {
+      "package": "com.williamshih.bangbuy"
     }
   }
 }
