@@ -1,7 +1,7 @@
 import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { colors, spacing, radius } from '@/src/theme/tokens';
+import { colors, spacing } from '@/src/theme/tokens';
 import { type Mode } from './ModeToggle';
 import { UserAvatar } from '@/src/components/UserAvatar';
 
@@ -13,12 +13,13 @@ interface TopBarProps {
   userName?: string;
   userAvatarUrl?: string | null;
   mode?: Mode; // 模式：'shopper' (代購) 或 'buyer' (買家)
+  showBell?: boolean; // 是否顯示通知鈴鐺，預設為 false（底部 Tab 已有通知入口）
 }
 
 /**
- * 頂部導航欄：左側 hamburger/Logo 區、右側 bell + avatar
+ * 頂部導航欄：左側 hamburger/Logo 區、右側 avatar（可選：通知鈴鐺）
  */
-export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail, userName, userAvatarUrl, mode }: TopBarProps) {
+export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail, userName, userAvatarUrl, mode, showBell = false }: TopBarProps) {
   console.count('HEADER_RENDER');
   
   // 根據模式動態設定 Logo 顏色
@@ -36,16 +37,8 @@ export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail, use
         <Text style={[styles.logo, { color: logoColor }]}>BangBuy 幫買</Text>
       </TouchableOpacity>
 
-      {/* 右側：通知 + 頭像 */}
+      {/* 右側：頭像（可選：通知鈴鐺） */}
       <View style={styles.rightSection}>
-        <TouchableOpacity
-          style={styles.iconButton}
-          onPress={onBellPress || (() => {})}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="notifications-outline" size={24} color={colors.text} />
-        </TouchableOpacity>
-
         {userEmail || userName ? (
           <UserAvatar
             avatarUrl={userAvatarUrl}
@@ -90,10 +83,6 @@ const styles = StyleSheet.create({
   rightSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-  },
-  iconButton: {
-    padding: spacing.xs,
   },
   avatarButton: {
     padding: spacing.xs,

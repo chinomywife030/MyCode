@@ -28,6 +28,7 @@ import { CountryPickerField } from '@/src/components/CountryPickerField';
 import { CategoryChips } from '@/src/components/CategoryChips';
 import { DateField } from '@/src/components/DateField';
 import { TagsInput } from '@/src/components/TagsInput';
+import { ShippingHelpLink } from '@/src/components/ShippingHelpLink';
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -582,6 +583,9 @@ export default function CreateWishScreen() {
               onChange={setTags}
               placeholder="例如：jellycat, selfridges, 限定版"
             />
+
+            {/* 運回台灣方式說明連結 */}
+            <ShippingHelpLink variant="create" />
           </Card>
         </ScrollView>
 

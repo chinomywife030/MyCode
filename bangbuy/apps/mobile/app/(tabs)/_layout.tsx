@@ -1,18 +1,34 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { View, StyleSheet } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { colors } from '@/src/theme/tokens';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { IconWithBadge } from '@/src/components/NotificationIconWithBadge';
+import { useUnreadCount as useMessagesUnreadCountFromContext } from '@/components/unread/UnreadCountProvider';
 
 // 简单的 TabBarIcon 包装器
 function TabBarIcon({ name, color, size = 24 }: { name: keyof typeof Ionicons.glyphMap; color: string; size?: number }) {
   return <Ionicons name={name} size={size} color={color} />;
 }
 
+// 只顯示紅點的圖標組件
+function IconWithDot({ icon, showDot }: { icon: React.ReactNode; showDot: boolean }) {
+  return (
+    <View style={styles.iconContainer}>
+      {icon}
+      {showDot && <View style={styles.redDot} />}
+    </View>
+  );
+}
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  
+  // 取得未讀通知數和未讀訊息數（從 Context Provider，即時更新）
+  const { unreadCount: messagesUnreadCount, unreadNotificationsCount } = useMessagesUnreadCountFromContext();
 
   // Tab Bar 顏色設定
   // Active 顏色：固定使用品牌橘（代購模式）
@@ -55,7 +71,12 @@ export default function TabLayout() {
         name="notifications"
         options={{
           title: '通知',
-          tabBarIcon: ({ color }) => <TabBarIcon name="notifications-outline" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <IconWithDot
+              icon={<TabBarIcon name="notifications-outline" color={color} />}
+              showDot={unreadNotificationsCount > 0}
+            />
+          ),
         }}
       />
 
@@ -64,7 +85,13 @@ export default function TabLayout() {
         name="messages"
         options={{
           title: '訊息',
-          tabBarIcon: ({ color }) => <TabBarIcon name="chatbubbles-outline" color={color} />,
+          tabBarIcon: ({ color }) => (
+            <IconWithBadge
+              icon={<TabBarIcon name="chatbubbles-outline" color={color} />}
+              count={messagesUnreadCount}
+              size={24}
+            />
+          ),
         }}
       />
 
@@ -83,3 +110,22 @@ export default function TabLayout() {
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  iconContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  redDot: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#EF4444', // 紅色
+    borderWidth: 1.5,
+    borderColor: '#FFFFFF', // 白色邊框
+  },
+});

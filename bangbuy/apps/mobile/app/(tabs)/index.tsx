@@ -281,19 +281,8 @@ export default function HomeScreen() {
   // ============================================
 
   // 1. 確保通知 Handler 已設定（前台顯示通知）
-  useEffect(() => {
-    try {
-      Notifications.setNotificationHandler({
-        handleNotification: async () => ({
-          shouldShowAlert: true,
-          shouldPlaySound: true,
-          shouldSetBadge: true,
-        }),
-      });
-    } catch (error) {
-      console.error('[HomeScreen] Error setting notification handler:', error);
-    }
-  }, []);
+  // 注意：通知 handler 已在 src/lib/push.ts 中統一設定，這裡不需要重複設定
+  // 如果需要在這裡設定，請確保與 push.ts 中的邏輯一致（包含未讀數更新）
 
   // 2. 請求通知權限並獲取 Token（背景執行）
   useEffect(() => {
@@ -445,11 +434,6 @@ export default function HomeScreen() {
       fetchTrips(true);
     }
   }, [mode, fetchWishes, fetchTrips]);
-
-  const handleBellPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push('/(tabs)/notifications');
-  };
 
   const handleAvatarPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -779,9 +763,9 @@ export default function HomeScreen() {
         userEmail={user?.email}
         userName={userProfile?.name}
         userAvatarUrl={userProfile?.avatar_url}
-        onBellPress={handleBellPress}
         onAvatarPress={handleAvatarPress}
         mode={mode}
+        showBell={false}
       />
       
       <FlatList

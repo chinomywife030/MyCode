@@ -1,12 +1,13 @@
 import { StyleSheet, FlatList, RefreshControl, View, Text, TouchableOpacity } from 'react-native';
-import { useEffect, useState } from 'react';
-import { router } from 'expo-router';
+import { useEffect, useState, useCallback } from 'react';
+import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, TopBar, Card, StateView, Button } from '@/src/ui';
 import { colors, spacing, radius, fontSize, fontWeight, shadows } from '@/src/theme/tokens';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, type Notification } from '@/src/lib/notifications';
 import { getCurrentUser } from '@/src/lib/auth';
 import { handleNotificationPress } from '@/src/lib/notifications/navigation';
+import { useUnreadCount as useUnreadCountFromContext } from '@/components/unread/UnreadCountProvider';
 
 export default function NotificationsScreen() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -14,6 +15,9 @@ export default function NotificationsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  
+  // 取得未讀通知數控制（從 Context Provider）
+  const { refreshUnreadNotifications } = useUnreadCountFromContext();
 
   const fetchNotifications = async (isRefresh = false) => {
     try {
@@ -47,6 +51,28 @@ export default function NotificationsScreen() {
     }
   }, [user]);
 
+  // 當頁面獲得焦點時，標記所有通知為已讀並刷新
+  useFocusEffect(
+    useCallback(() => {
+      const markAllAsReadAndRefresh = async () => {
+        try {
+          // 標記所有通知為已讀
+          await markAllNotificationsAsRead();
+          // 刷新未讀通知數（會立即更新紅點）
+          await refreshUnreadNotifications();
+        } catch (err) {
+          console.error('[NotificationsScreen] Error marking all as read on focus:', err);
+          // 即使失敗也嘗試刷新
+          await refreshUnreadNotifications();
+        }
+      };
+
+      if (user) {
+        markAllAsReadAndRefresh();
+      }
+    }, [user, refreshUnreadNotifications])
+  );
+
   const loadUser = async () => {
     const currentUser = await getCurrentUser();
     setUser(currentUser);
@@ -73,6 +99,8 @@ export default function NotificationsScreen() {
               : n
           )
         );
+        // 刷新未讀通知數（會立即更新紅點）
+        await refreshUnreadNotifications();
       } catch (err) {
         console.error('[NotificationsScreen] markAsRead error:', err);
         // 失敗不影響跳頁，繼續執行
@@ -97,6 +125,8 @@ export default function NotificationsScreen() {
           read_at: n.read_at || new Date().toISOString(),
         }))
       );
+      // 刷新未讀通知數（會立即更新紅點）
+      await refreshUnreadNotifications();
     } catch (err) {
       console.error('[NotificationsScreen] markAllRead error:', err);
     }

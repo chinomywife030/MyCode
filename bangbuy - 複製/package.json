@@ -1,0 +1,34 @@
+{
+  "name": "bangbuy",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "build:skip-lint": "SKIP_LINT=true next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/auth-helpers-nextjs": "^0.15.0",
+    "@supabase/supabase-js": "^2.86.0",
+    "dotenv": "^17.2.3",
+    "expo-image-manipulator": "~14.0.8",
+    "expo-linear-gradient": "^15.0.8",
+    "next": "^16.0.8",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "resend": "^6.5.2",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "^16.0.8",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

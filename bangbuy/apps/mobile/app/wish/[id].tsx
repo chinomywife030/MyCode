@@ -16,6 +16,7 @@ import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/token
 import { WishHeroCarousel } from '@/src/components/WishHeroCarousel';
 import { getCountryFlag } from '@/src/utils/countryFlag';
 import { startChat } from '@/src/lib/chat';
+import { ShippingHelpLink } from '@/src/components/ShippingHelpLink';
 
 /**
  * 安全地開啟 URL
@@ -499,6 +500,9 @@ export default function WishDetailScreen() {
             <Text style={styles.replyCountText}>已有 {replyCount} 人報價</Text>
           </Card>
         ) : null}
+
+        {/* 運回台灣方式說明連結 */}
+        <ShippingHelpLink variant="detail" />
 
         {/* 底部留白，避免被固定行動列遮擋 */}
         <View style={styles.bottomSpacer} />

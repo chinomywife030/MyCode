@@ -9,6 +9,7 @@ import { startChat } from '@/src/lib/chat';
 import { Screen } from '@/src/ui/Screen';
 import { Card } from '@/src/ui/Card';
 import { colors, spacing, radius, fontSize, fontWeight, shadows } from '@/src/theme/tokens';
+import { ShippingHelpLink } from '@/src/components/ShippingHelpLink';
 
 export default function TripDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -283,6 +284,9 @@ export default function TripDetailScreen() {
             </View>
           </View>
         </Card>
+
+        {/* 運回台灣方式說明連結 */}
+        <ShippingHelpLink variant="detail" />
 
         {/* 私訊按鈕 */}
         <View style={styles.buttonContainer}>
