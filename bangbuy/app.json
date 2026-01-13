@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "78c4b356-1098-4582-befc-f2001348628e"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.williamshih.bangbuy",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    }
+  }
+}
