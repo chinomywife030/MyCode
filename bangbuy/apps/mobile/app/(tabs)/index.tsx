@@ -21,23 +21,12 @@ import { QuickWishModal } from '@/src/components/QuickWishModal';
 import { DiscoveryCard } from '@/src/components/DiscoveryCard';
 import { StableSearchBar } from '@/src/components/StableSearchBar';
 
-// ✅ 新增 ImmoScout 風格 UI 組件
-import {
-  ImmoScoutSearchBar,
-  ImmoScoutFilterChips,
-  defaultFilterChips,
-  ImmoScoutWishCard,
-  ImmoScoutWishCardSkeleton,
-  normalizeWishForCard,
-  ImmoScoutTripCard,
-  ImmoScoutTripCardSkeleton,
-  normalizeTripForCard,
-  immoColors,
-  immoSpacing,
-  immoRadius,
-  immoTypography,
-  immoShadows,
-} from '@/src/ui/immo';
+// ✅ 新增 ImmoScout 風格 UI 組件（直接引用檔案，避免循環引用）
+import { immoColors, immoSpacing, immoRadius, immoTypography, immoShadows } from '@/src/ui/immo/theme';
+import { ImmoScoutSearchBar } from '@/src/ui/immo/ImmoScoutSearchBar';
+import { ImmoScoutFilterChips, defaultFilterChips } from '@/src/ui/immo/ImmoScoutFilterChips';
+import { ImmoScoutWishCard, ImmoScoutWishCardSkeleton, normalizeWishForCard } from '@/src/ui/immo/ImmoScoutWishCard';
+import { ImmoScoutTripCard, ImmoScoutTripCardSkeleton, normalizeTripForCard } from '@/src/ui/immo/ImmoScoutTripCard';
 // ✅ 新增：從 components 導入新的 ImmoScoutDiscoveryCard
 import {
   ImmoScoutDiscoveryCard,
