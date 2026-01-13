@@ -1,6 +1,7 @@
 import { StyleSheet, FlatList, RefreshControl, View, Text, TouchableOpacity, Alert } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { getTrips, getMoments, formatDateRange, type Trip, type TravelMoment } from '@/src/lib/trips';
 import { getCurrentUser } from '@/src/lib/auth';

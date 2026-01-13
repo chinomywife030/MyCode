@@ -1,6 +1,7 @@
 import { StyleSheet, FlatList, RefreshControl, View, Text, TouchableOpacity } from 'react-native';
 import { useEffect, useState, useCallback } from 'react';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Screen, TopBar, Card, StateView, Button } from '@/src/ui';
 import { colors, spacing, radius, fontSize, fontWeight, shadows } from '@/src/theme/tokens';

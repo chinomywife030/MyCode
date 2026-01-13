@@ -1,7 +1,8 @@
 import { StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, Text, View, Modal, TextInput, Platform, KeyboardAvoidingView, AppState, AppStateStatus } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useLocalSearchParams, Link, useFocusEffect, router as expoRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, Link, router as expoRouter, Stack } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getWishById, deleteWish, type Wish } from '@/src/lib/wishes';
@@ -239,7 +240,7 @@ export default function WishDetailScreen() {
     });
 
     return () => {
-      subscription.remove();
+      subscription?.remove?.();
     };
   }, [id, refreshOffers]);
 

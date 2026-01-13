@@ -162,7 +162,7 @@ export function UnreadCountProvider({ children }: UnreadCountProviderProps) {
     });
 
     return () => {
-      subscription.remove();
+      subscription?.remove?.();
     };
   }, [refreshUnreadCount, refreshUnreadNotifications]);
 

@@ -1,6 +1,7 @@
 import { StyleSheet, View, Text, FlatList, KeyboardAvoidingView, Platform, Alert, SafeAreaView, TouchableOpacity } from 'react-native';
 import { useEffect, useState, useRef, useCallback } from 'react';
-import { useLocalSearchParams, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { Screen } from '@/src/ui';
 import { colors, spacing } from '@/src/theme/tokens';

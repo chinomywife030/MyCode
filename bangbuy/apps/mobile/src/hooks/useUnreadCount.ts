@@ -72,7 +72,7 @@ export function useUnreadCount() {
     });
 
     return () => {
-      subscription.remove();
+      subscription?.remove?.();
     };
   }, [refresh]);
 
@@ -84,7 +84,7 @@ export function useUnreadCount() {
     });
 
     return () => {
-      subscription.remove();
+      subscription?.remove?.();
     };
   }, [refresh]);
 

@@ -1,9 +1,11 @@
+import 'react-native-reanimated';
+
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import 'react-native-reanimated';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import * as Notifications from 'expo-notifications';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -29,25 +31,150 @@ interface ErrorBoundaryState {
 class GlobalErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { hasError: false, error: null };
 
+  /**
+   * 從 error.stack 中提取第一個包含專案路徑的 frame
+   */
+  private extractFirstProjectFrame(stack: string | undefined): string {
+    if (!stack) return '(not found)';
+    
+    const lines = stack.split('\n');
+    for (const line of lines) {
+      if (line.includes('/app/') || line.includes('/src/') || line.includes('apps/mobile')) {
+        return line.trim();
+      }
+    }
+    return '(not found)';
+  }
+
+  /**
+   * 提取 stack 前 20 行
+   */
+  private extractStackFirst20(stack: string | undefined): string {
+    if (!stack) return '(無堆疊資訊)';
+    const lines = stack.split('\n');
+    return lines.slice(0, 20).join('\n');
+  }
+
+  /**
+   * 提取診斷資訊
+   */
+  private extractDiagnostics(error: Error | null) {
+    if (!error) {
+      return {
+        name: '(unknown)',
+        message: '(unknown)',
+        firstProjectFrame: '(not found)',
+        stackFirst20: '(無堆疊資訊)',
+      };
+    }
+
+    return {
+      name: error.name || '(unknown)',
+      message: error.message || '(unknown)',
+      firstProjectFrame: this.extractFirstProjectFrame(error.stack),
+      stackFirst20: this.extractStackFirst20(error.stack),
+    };
+  }
+
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // 提取診斷資訊
+    const diagnostics = this.extractDiagnostics(error);
+    
     // 在 release 中這會被捕獲而不是閃退
     console.error('[GlobalErrorBoundary] Caught error:', error);
     console.error('[GlobalErrorBoundary] Error info:', errorInfo);
+    
+    // 輸出結構化診斷資訊（確保在 release 也能看到）
+    console.error('[GlobalErrorBoundary] Diagnostics:', JSON.stringify(diagnostics, null, 2));
   }
+
+  handleCopyError = async () => {
+    const error = this.state.error;
+    if (!error) return;
+
+    const diagnostics = this.extractDiagnostics(error);
+    
+    const errorText = [
+      `錯誤名稱: ${diagnostics.name}`,
+      `錯誤訊息: ${diagnostics.message}`,
+      '',
+      '第一個專案 Frame:',
+      diagnostics.firstProjectFrame,
+      '',
+      '堆疊前 20 行:',
+      diagnostics.stackFirst20,
+    ].join('\n');
+
+    try {
+      await Clipboard.setStringAsync(errorText);
+      Alert.alert('已複製', '錯誤資訊已複製到剪貼簿');
+    } catch (copyError) {
+      console.error('[GlobalErrorBoundary] Failed to copy error:', copyError);
+      Alert.alert('複製失敗', '無法複製錯誤資訊');
+    }
+  };
 
   render() {
     if (this.state.hasError) {
+      const error = this.state.error;
+      const diagnostics = this.extractDiagnostics(error);
+      const errorStack = error?.stack || '(無堆疊資訊)';
+      
+      // 限制堆疊顯示為前 40 行
+      const stackLines = errorStack.split('\n');
+      const limitedStack = stackLines.slice(0, 40).join('\n');
+      const hasMoreLines = stackLines.length > 40;
+
       return (
         <View style={errorStyles.container}>
-          <Text style={errorStyles.title}>發生錯誤</Text>
-          <Text style={errorStyles.message}>
-            {this.state.error?.message || '未知錯誤'}
-          </Text>
-          <Text style={errorStyles.hint}>請重新啟動 App</Text>
+          <ScrollView 
+            style={errorStyles.scrollView}
+            contentContainerStyle={errorStyles.scrollContent}
+            showsVerticalScrollIndicator={true}
+          >
+            <Text style={errorStyles.title}>發生錯誤</Text>
+            
+            {/* 診斷資訊區塊 */}
+            <View style={errorStyles.section}>
+              <Text style={errorStyles.sectionTitle}>診斷資訊:</Text>
+              <View style={errorStyles.diagnosticBox}>
+                <Text style={errorStyles.diagnosticLabel}>錯誤名稱:</Text>
+                <Text style={errorStyles.diagnosticValue}>{diagnostics.name}</Text>
+                
+                <Text style={errorStyles.diagnosticLabel}>錯誤訊息:</Text>
+                <Text style={errorStyles.diagnosticValue}>{diagnostics.message}</Text>
+                
+                <Text style={errorStyles.diagnosticLabel}>第一個專案 Frame:</Text>
+                <Text style={errorStyles.diagnosticValue}>{diagnostics.firstProjectFrame}</Text>
+                
+                <Text style={errorStyles.diagnosticLabel}>堆疊前 20 行:</Text>
+                <Text style={errorStyles.stackSmall}>{diagnostics.stackFirst20}</Text>
+              </View>
+            </View>
+
+            {/* 完整堆疊（最多 40 行） */}
+            <View style={errorStyles.section}>
+              <Text style={errorStyles.sectionTitle}>完整錯誤堆疊:</Text>
+              <Text style={errorStyles.stack}>
+                {limitedStack}
+                {hasMoreLines && '\n...(已省略更多行)'}
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              style={errorStyles.copyButton}
+              onPress={this.handleCopyError}
+              activeOpacity={0.7}
+            >
+              <Text style={errorStyles.copyButtonText}>複製錯誤</Text>
+            </TouchableOpacity>
+
+            <Text style={errorStyles.hint}>請重新啟動 App</Text>
+          </ScrollView>
         </View>
       );
     }
@@ -59,26 +186,96 @@ class GlobalErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBound
 const errorStyles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: '#fff',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  scrollContent: {
     padding: 20,
+    paddingBottom: 40,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#ff4444',
-    marginBottom: 16,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  section: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
   },
   message: {
     fontSize: 14,
     color: '#666',
-    textAlign: 'center',
-    marginBottom: 24,
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  diagnosticBox: {
+    backgroundColor: '#f9f9f9',
+    padding: 12,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  diagnosticLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#555',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  diagnosticValue: {
+    fontSize: 12,
+    color: '#333',
+    lineHeight: 18,
+    marginBottom: 4,
+  },
+  stackSmall: {
+    fontSize: 10,
+    color: '#666',
+    fontFamily: 'monospace',
+    lineHeight: 16,
+    backgroundColor: '#f0f0f0',
+    padding: 8,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  stack: {
+    fontSize: 12,
+    color: '#888',
+    fontFamily: 'monospace',
+    lineHeight: 18,
+    backgroundColor: '#f5f5f5',
+    padding: 12,
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   hint: {
     fontSize: 12,
     color: '#999',
+    textAlign: 'center',
+    marginTop: 8,
   },
 });
 // ============ 全域錯誤邊界結束 ============
@@ -290,7 +487,7 @@ export default function RootLayout() {
       }
     })();
 
-    return () => sub.remove();
+    return () => sub?.remove?.();
   }, [navigationState?.key]);
 
   // Auth 狀態監聽：只設置一次，使用 ref 訪問 router 和 segments

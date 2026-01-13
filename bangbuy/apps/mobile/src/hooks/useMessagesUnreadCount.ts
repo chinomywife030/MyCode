@@ -76,7 +76,7 @@ export function useMessagesUnreadCount() {
     });
 
     return () => {
-      subscription.remove();
+      subscription?.remove?.();
     };
   }, [refresh]);
 
@@ -98,7 +98,7 @@ export function useMessagesUnreadCount() {
     });
 
     return () => {
-      subscription.remove();
+      subscription?.remove?.();
     };
   }, [refresh]);
 
