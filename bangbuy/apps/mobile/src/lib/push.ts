@@ -163,7 +163,7 @@ export async function registerPushToken(): Promise<{
         error: '請先登入後再註冊推播通知',
       };
     }
-    
+
     const userId = session.user.id;
 
     // 3. Upsert 到 Supabase（使用 user_id,expo_push_token 作為唯一鍵）
@@ -221,7 +221,7 @@ async function handleNotificationResponse(response: Notifications.NotificationRe
       const notificationId: string = 
         (typeof notification.request.identifier === 'string' ? notification.request.identifier : '') ||
         (typeof data?.notificationId === 'string' ? data.notificationId : '') ||
-        `${Date.now()}_${Math.random()}`;
+                            `${Date.now()}_${Math.random()}`;
       
       // 檢查是否已處理過（避免重複累加）
       const isProcessed = await isNotificationProcessed(notificationId);
@@ -306,7 +306,7 @@ function setupNotificationHandlers() {
         const notificationId: string = 
           (typeof notification.request.identifier === 'string' ? notification.request.identifier : '') ||
           (typeof notification.request.content.data?.notificationId === 'string' ? notification.request.content.data.notificationId : '') ||
-          `${Date.now()}_${Math.random()}`;
+                              `${Date.now()}_${Math.random()}`;
         
         // 檢查是否已處理過（避免重複累加）
         const isProcessed = await isNotificationProcessed(notificationId);
@@ -342,7 +342,7 @@ function setupNotificationHandlers() {
           const notificationId: string = 
             (typeof notification.request.identifier === 'string' ? notification.request.identifier : '') ||
             (typeof notification.request.content.data?.notificationId === 'string' ? notification.request.content.data.notificationId : '') ||
-            `${Date.now()}_${Math.random()}`;
+                              `${Date.now()}_${Math.random()}`;
           
           // 檢查是否已處理過（避免重複累加）
           const isProcessed = await isMessageNotificationProcessed(notificationId);

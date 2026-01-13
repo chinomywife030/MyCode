@@ -56,11 +56,11 @@ export function ImageCarousel({
     return (
       <View style={styles.container}>
         {isValidUri ? (
-          <ExpoImage
+        <ExpoImage
             source={{ uri: imageUri }}
-            style={styles.image}
-            contentFit="cover"
-            transition={200}
+          style={styles.image}
+          contentFit="cover"
+          transition={200}
             placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
             onError={(error) => {
               console.error('[ImageCarousel] Image load error:', {
@@ -102,13 +102,13 @@ export function ImageCarousel({
           const isValidUri = item && (item.startsWith('http://') || item.startsWith('https://'));
           
           return (
-            <View style={{ width, height }}>
+          <View style={{ width, height }}>
               {isValidUri ? (
-                <ExpoImage
-                  source={{ uri: item }}
-                  style={styles.image}
-                  contentFit="cover"
-                  transition={200}
+            <ExpoImage
+              source={{ uri: item }}
+              style={styles.image}
+              contentFit="cover"
+              transition={200}
                   placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
                   onError={(error) => {
                     console.error('[ImageCarousel] Image load error:', {
@@ -123,8 +123,8 @@ export function ImageCarousel({
               ) : (
                 <View style={styles.placeholder}>
                   <Ionicons name="image-outline" size={placeholderIconSize} color={colors.textMuted} />
-                </View>
-              )}
+          </View>
+        )}
             </View>
           );
         }}

@@ -37,13 +37,13 @@ export function WishHeroCarousel({ images }: { images: string[] }) {
             }
 
             return (
-              <View style={styles.imageWrapper}>
+            <View style={styles.imageWrapper}>
                 {item && (item.startsWith('http://') || item.startsWith('https://')) ? (
-                  <Image
-                    source={{ uri: item }}
-                    style={styles.image}
-                    contentFit="cover"
-                    transition={150}
+              <Image
+                source={{ uri: item }}
+                style={styles.image}
+                contentFit="cover"
+                transition={150}
                     placeholder={{ blurhash: 'LGF5]+Yk^6#M@-5c,1J5@[or[Q6.' }}
                     onError={(error) => {
                       console.error('[WishHeroCarousel] Image load error:', {
@@ -58,8 +58,8 @@ export function WishHeroCarousel({ images }: { images: string[] }) {
                 ) : (
                   <View style={styles.placeholder}>
                     <Text style={styles.placeholderText}>圖片無法載入</Text>
-                  </View>
-                )}
+            </View>
+          )}
               </View>
             );
           }}

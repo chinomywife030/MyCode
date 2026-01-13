@@ -59,8 +59,8 @@ export function WishesPageContent() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session && session.user) {
-          await registerPushToken();
-          console.log('[WishesPageContent] Push token re-registered for logged-in user');
+        await registerPushToken();
+        console.log('[WishesPageContent] Push token re-registered for logged-in user');
         }
       } catch (pushError) {
         console.warn('[WishesPageContent] Failed to re-register push token:', pushError);

@@ -14,7 +14,6 @@ import { supabase } from '@/src/lib/supabase';
 import { checkIfFirstLaunch } from '@/src/lib/onboarding';
 import SplashAnimation from '@/components/SplashAnimation';
 import { UnreadCountProvider } from '@/components/unread/UnreadCountProvider';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -55,35 +54,6 @@ export default function RootLayout() {
     didInitRef.current = true;
     
     console.log('[RootLayout] 🔄 Starting one-time initialization');
-    
-    // 深度重置：清除所有 Auth token 和 session（確保完全未登入狀態）
-    (async () => {
-      try {
-        // 清除 Supabase session
-        await supabase.auth.signOut();
-        
-        // 清除 AsyncStorage 中所有 Supabase 相關的 key
-        // Supabase 使用 AsyncStorage 存儲 session，key 格式為：sb-{project-ref}-auth-token
-        const keys = await AsyncStorage.getAllKeys();
-        const supabaseKeys = keys.filter(key => 
-          key.includes('supabase') || 
-          key.includes('sb-') || 
-          key.includes('auth-token')
-        );
-        if (supabaseKeys.length > 0) {
-          await AsyncStorage.multiRemove(supabaseKeys);
-          console.log('[RootLayout] 🗑️ Cleared Supabase auth tokens:', supabaseKeys);
-        }
-        
-        // 可選：清除所有 AsyncStorage（更徹底的重置）
-        // await AsyncStorage.clear();
-        // console.log('[RootLayout] 🗑️ Cleared all AsyncStorage');
-        
-        console.log('[RootLayout] ✅ Auth reset completed - user is now logged out');
-      } catch (error) {
-        console.error('[RootLayout] Error clearing auth tokens:', error);
-      }
-    })();
     
     // 初始化 core layer
     initializeCore();

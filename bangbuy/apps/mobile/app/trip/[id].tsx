@@ -196,7 +196,7 @@ export default function TripDetailScreen() {
                     onPress: () => {
                       // 返回上一頁，useFocusEffect 會自動觸發刷新
                       if (router.canGoBack()) {
-                        router.back();
+                      router.back();
                       } else {
                         router.replace('/(tabs)');
                       }

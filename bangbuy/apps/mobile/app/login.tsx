@@ -14,6 +14,7 @@ export default function LoginScreen() {
   const { next } = useLocalSearchParams<{ next?: string }>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
   const [name, setName] = useState('');
@@ -334,7 +335,7 @@ export default function LoginScreen() {
           {/* Logo 和歡迎標語 */}
           <View style={styles.brandingContainer}>
             <Image
-              source={require('@/assets/images/icon.png')}
+              source={require('@/assets/images/logo-transparent.png')}
               style={styles.logo}
               contentFit="contain"
             />
@@ -455,9 +456,21 @@ export default function LoginScreen() {
                       value={password}
                       onChangeText={setPassword}
                       editable={!loading}
-                      secureTextEntry
+                      secureTextEntry={!showPassword}
                       autoCapitalize="none"
                     />
+                    <TouchableOpacity
+                      onPress={() => setShowPassword(!showPassword)}
+                      style={styles.passwordToggleButton}
+                      activeOpacity={0.7}
+                      disabled={loading}
+                    >
+                      <Ionicons
+                        name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+                        size={20}
+                        color="#6B7280"
+                      />
+                    </TouchableOpacity>
                   </View>
                   {!isSignUp && (
                     <TouchableOpacity
@@ -762,8 +775,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   logo: {
-    width: 56,
-    height: 56,
+    width: 80,
+    height: 80,
     marginBottom: spacing.xs, // 縮小間距，讓 Logo 和文字更緊湊
   },
   welcomeText: {
@@ -827,6 +840,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     padding: 0,
     margin: 0,
+    paddingRight: spacing.xs, // 為右側眼睛圖標留出空間
+  },
+  passwordToggleButton: {
+    padding: spacing.xs,
+    marginLeft: spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loginButton: {
     width: '100%',

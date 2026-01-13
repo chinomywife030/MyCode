@@ -270,9 +270,9 @@ export default function HomeScreen() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session && session.user) {
-          const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
-          await registerPushTokenToSupabase();
-          console.log('[HomeScreen] Push token re-registered for logged-in user');
+        const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
+        await registerPushTokenToSupabase();
+        console.log('[HomeScreen] Push token re-registered for logged-in user');
         }
       } catch (pushError) {
         console.warn('[HomeScreen] Failed to re-register push token:', pushError);

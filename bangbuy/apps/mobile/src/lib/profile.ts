@@ -50,7 +50,7 @@ export async function getProfileStats(): Promise<ProfileStats> {
       (async () => {
         try {
           const { data, error } = await supabase
-            .from('trips')
+        .from('trips')
             .select('id, description')
             .eq('shopper_id', userId);
           

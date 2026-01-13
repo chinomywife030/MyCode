@@ -199,6 +199,41 @@ export async function getLatestWishReply(
 }
 
 /**
+ * 獲取某個 wish 的所有 replies（用於 debug 和排序）
+ */
+export async function getAllWishReplies(
+  wishId: string
+): Promise<WishReply[]> {
+  try {
+    const { data, error } = await supabase
+      .from('wish_replies')
+      .select('id, wish_id, user_id, message, created_at')
+      .eq('wish_id', wishId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('[getAllWishReplies] Error:', error);
+      return [];
+    }
+
+    if (!data || data.length === 0) {
+      return [];
+    }
+
+    return data.map((item) => ({
+      id: item.id,
+      wish_id: item.wish_id,
+      user_id: item.user_id,
+      message: item.message,
+      created_at: item.created_at,
+    }));
+  } catch (error) {
+    console.error('[getAllWishReplies] Exception:', error);
+    return [];
+  }
+}
+
+/**
  * 獲取某個 wish 的報價數量
  */
 export async function getWishReplyCount(wishId: string): Promise<number> {

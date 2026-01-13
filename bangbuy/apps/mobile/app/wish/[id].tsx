@@ -1,11 +1,11 @@
-import { StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, Text, View, Modal, TextInput, Platform, KeyboardAvoidingView } from 'react-native';
+import { StyleSheet, ScrollView, TouchableOpacity, Linking, Alert, Text, View, Modal, TextInput, Platform, KeyboardAvoidingView, AppState, AppStateStatus } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocalSearchParams, Link, useFocusEffect, router as expoRouter, Stack } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getWishById, deleteWish, type Wish } from '@/src/lib/wishes';
-import { getLatestWishReply, getWishReplyCount, createWishReply, type WishReply } from '@/src/lib/replies';
+import { getOffersForWish, createOffer, formatAmount, type Offer } from '@/src/lib/offers';
 import { getCurrentUser } from '@/src/lib/auth';
 import { navigateToRoute } from '@/src/lib/navigation';
 import { Screen } from '@/src/ui/Screen';
@@ -44,11 +44,15 @@ export default function WishDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [latestReply, setLatestReply] = useState<WishReply | undefined>(undefined);
-  const [replyLoading, setReplyLoading] = useState(false);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [offersLoading, setOffersLoading] = useState(false);
+  const [offersIsBuyer, setOffersIsBuyer] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [replyCount, setReplyCount] = useState<number>(0);
+  
+  // 報價刷新狀態：避免重複請求
+  const isFetchingOffersRef = useRef(false);
+  const appStateRef = useRef(AppState.currentState);
   
   // 報價 Modal 狀態
   const [offerModalVisible, setOfferModalVisible] = useState(false);
@@ -110,7 +114,7 @@ export default function WishDetailScreen() {
           });
         }
         
-        fetchLatestReply();
+        refreshOffers();
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : '載入失敗：發生未知錯誤';
@@ -121,23 +125,73 @@ export default function WishDetailScreen() {
     }
   };
 
-  const fetchLatestReply = async () => {
-    if (!id) return;
+  /**
+   * 刷新報價（從 offers 表獲取，與 Web 一致）
+   */
+  const refreshOffers = useCallback(async () => {
+    if (!id) {
+      console.log('[WishDetail] refreshOffers skipped: no id');
+      return;
+    }
+    
+    // 防重入保護：如果正在 fetch，直接返回
+    if (isFetchingOffersRef.current) {
+      console.log('[WishDetail] refreshOffers skipped: already fetching');
+      return;
+    }
+    
+    const wishId = id as string;
+    console.log(`[WishDetail] refreshOffers start wishId=${wishId}`);
     
     try {
-      setReplyLoading(true);
-      const [reply, count] = await Promise.all([
-        getLatestWishReply(id as string),
-        getWishReplyCount(id as string),
-      ]);
-      setLatestReply(reply);
-      setReplyCount(count);
+      isFetchingOffersRef.current = true;
+      setOffersLoading(true);
+      
+      // 使用 offers 表（與 Web 一致）
+      const result = await getOffersForWish(wishId);
+      
+      console.log(`[WishDetail] offers fetched:`, {
+        success: result.success,
+        count: result.offers.length,
+        isBuyer: result.isBuyer,
+        error: result.error,
+      });
+      
+      if (result.success) {
+        setOffers(result.offers);
+        setOffersIsBuyer(result.isBuyer || false);
+        
+        // Debug: 輸出報價詳情
+        if (result.offers.length > 0) {
+          const amounts = result.offers.map(o => o.amount);
+          console.log(`[WishDetail] offer amounts (first 5):`, amounts.slice(0, 5));
+          
+          const latestOffer = result.offers[0];
+          console.log(`[WishDetail] latest offer:`, {
+            id: latestOffer.id,
+            amount: latestOffer.amount,
+            created_at: latestOffer.created_at,
+            status: latestOffer.status,
+            shopper_name: latestOffer.shopper_name,
+          });
+        }
+        
+        console.log(`[WishDetail] refreshOffers completed: ${result.offers.length} offers`);
+      } else {
+        console.error('[WishDetail] refreshOffers failed:', result.error);
+      }
     } catch (err) {
-      console.error('[WishDetailScreen] fetchLatestReply error:', err);
+      console.error('[WishDetail] refreshOffers error:', {
+        error: err,
+        message: err instanceof Error ? err.message : 'Unknown error',
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+      // 錯誤時不清空現有數據，保持顯示
     } finally {
-      setReplyLoading(false);
+      setOffersLoading(false);
+      isFetchingOffersRef.current = false;
     }
-  };
+  }, [id]);
 
   const fetchCurrentUser = async () => {
     try {
@@ -155,17 +209,39 @@ export default function WishDetailScreen() {
     }
   }, [id, checkingAuth]);
 
+  // Focus 時自動刷新報價：當頁面獲得焦點時觸發
   useFocusEffect(
     useCallback(() => {
       if (id) {
         // 刷新 wish 数据（避免显示旧缓存）
         fetchWish();
-        if (wish) {
-          fetchLatestReply();
-        }
+        // 無論 wish 是否存在，都刷新報價（因為報價可能在其他地方更新）
+        refreshOffers();
       }
-    }, [id])
+    }, [id, refreshOffers])
   );
+
+  // AppState 監聽：當 App 從背景回到前景時，如果此頁面仍為 focus，則刷新報價
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState: AppStateStatus) => {
+      const previousAppState = appStateRef.current;
+      appStateRef.current = nextAppState;
+
+      // 當 App 從 background/inactive 回到 active，且頁面有 id 時，刷新報價
+      if (
+        previousAppState.match(/inactive|background/) &&
+        nextAppState === 'active' &&
+        id
+      ) {
+        console.log('[WishDetail] App returned to foreground, refreshing offers');
+        refreshOffers();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [id, refreshOffers]);
 
   const handleRetry = () => {
     fetchWish();
@@ -242,7 +318,7 @@ export default function WishDetailScreen() {
     }
   };
 
-  // 提交報價
+  // 提交報價（使用 offers 表，與 Web 一致）
   const handleSubmitOffer = async () => {
     if (!id) {
       Alert.alert('錯誤', '找不到需求 ID');
@@ -263,14 +339,14 @@ export default function WishDetailScreen() {
     setSubmittingOffer(true);
 
     try {
-      // 組合訊息：代購費 + 留言
-      const messageParts = [`代購費：NT$ ${priceValue.toLocaleString()}`];
-      if (offerMessage.trim()) {
-        messageParts.push(offerMessage.trim());
-      }
-      const fullMessage = messageParts.join('\n\n');
+      // 使用 createOffer（與 Web 一致，寫入 offers 表）
+      const result = await createOffer({
+        wishId: id as string,
+        amount: priceValue,
+        message: offerMessage.trim() || undefined,
+      });
 
-      const result = await createWishReply(id as string, fullMessage);
+      console.log('[WishDetailScreen] createOffer result:', result);
 
       if (result.success) {
         setOfferModalVisible(false);
@@ -278,7 +354,7 @@ export default function WishDetailScreen() {
         setOfferMessage('');
         
         // 刷新報價列表
-        await fetchLatestReply();
+        await refreshOffers();
 
         // 導向聊天室
         if (wish?.buyerId) {
@@ -508,19 +584,52 @@ export default function WishDetailScreen() {
           </Card>
         )}
 
-        {/* 已收到的報價區塊 */}
-        {isOwner && latestReply ? (
+        {/* 已收到的報價區塊（從 offers 表獲取，與 Web 一致） */}
+        {isOwner && offers.length > 0 ? (
           <Card style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>已收到的報價</Text>
-            <View style={styles.replyCard}>
-              <Text style={styles.replyMessage}>{latestReply.message}</Text>
-              <Text style={styles.replyDate}>{formatDate(latestReply.created_at)}</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>已收到的報價</Text>
+              <TouchableOpacity
+                onPress={refreshOffers}
+                disabled={offersLoading || isFetchingOffersRef.current}
+                style={styles.refreshButton}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.refreshButtonText}>
+                  {offersLoading ? '刷新中...' : '刷新'}
+                </Text>
+              </TouchableOpacity>
             </View>
+            {/* 顯示所有報價 */}
+            {offers.map((offer: Offer, index: number) => (
+              <View key={offer.id} style={[styles.offerCard, index > 0 && styles.offerCardMarginTop]}>
+                <View style={styles.offerHeader}>
+                  <Text style={styles.offerShopperName}>{offer.shopper_name || '代購者'}</Text>
+                  <Text style={styles.offerAmount}>{formatAmount(offer.amount)}</Text>
+                </View>
+                {offer.message && (
+                  <Text style={styles.offerMessage}>{offer.message}</Text>
+                )}
+                <Text style={styles.offerDate}>{formatDate(offer.created_at)}</Text>
+              </View>
+            ))}
           </Card>
-        ) : !isOwner && replyCount > 0 ? (
+        ) : !isOwner && offers.length > 0 ? (
           <Card style={styles.sectionCard}>
-            <Text style={styles.sectionTitle}>已收到的報價</Text>
-            <Text style={styles.replyCountText}>已有 {replyCount} 人報價</Text>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>已收到的報價</Text>
+              <TouchableOpacity
+                onPress={refreshOffers}
+                disabled={offersLoading || isFetchingOffersRef.current}
+                style={styles.refreshButton}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.refreshButtonText}>
+                  {offersLoading ? '刷新中...' : '刷新'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.replyCountText}>已有 {offers.length} 人報價</Text>
           </Card>
         ) : null}
 
@@ -739,11 +848,26 @@ const styles = StyleSheet.create({
   sectionCard: {
     marginBottom: spacing.lg,
   },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
   sectionTitle: {
     fontSize: fontSize.lg,
     fontWeight: fontWeight.semibold,
     color: colors.text,
-    marginBottom: spacing.md,
+    flex: 1,
+  },
+  refreshButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  refreshButtonText: {
+    fontSize: fontSize.sm,
+    color: colors.brandOrange,
+    fontWeight: fontWeight.medium,
   },
   descriptionText: {
     fontSize: fontSize.base,
@@ -814,6 +938,44 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.semibold,
   },
+  // 報價卡片樣式（新增）
+  offerCard: {
+    backgroundColor: colors.bg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  offerCardMarginTop: {
+    marginTop: spacing.sm,
+  },
+  offerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  offerShopperName: {
+    fontSize: fontSize.base,
+    fontWeight: fontWeight.semibold,
+    color: colors.text,
+  },
+  offerAmount: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    color: colors.brandOrange,
+  },
+  offerMessage: {
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
+    lineHeight: 20,
+    marginBottom: spacing.sm,
+  },
+  offerDate: {
+    fontSize: fontSize.xs,
+    color: colors.textMuted,
+  },
+  // 舊的 reply 樣式（保留以備用）
   replyCard: {
     backgroundColor: colors.bg,
     padding: spacing.md,
