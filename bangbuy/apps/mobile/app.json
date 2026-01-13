@@ -12,7 +12,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.williamshih.bangbuy",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSPhotoLibraryUsageDescription": "此應用需要存取您的相簿，以便選擇圖片上傳至許願單。",
+        "NSPhotoLibraryAddUsageDescription": "此應用需要存取您的相簿，以便儲存圖片。"
       }
     },
     "extra": {
