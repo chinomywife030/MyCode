@@ -11,6 +11,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.williamshih.bangbuy",
+      "buildNumber": "2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "此應用需要存取您的相簿，以便選擇圖片上傳至許願單。",
@@ -23,7 +24,8 @@
       }
     },
     "android": {
-      "package": "com.williamshih.bangbuy"
+      "package": "com.williamshih.bangbuy",
+      "versionCode": 2
     }
   }
 }
