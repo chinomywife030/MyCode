@@ -21,8 +21,8 @@ import {
   type GetOrCreateConversationResult,
 } from '@bangbuy/core';
 
-// 確保 core 已初始化
-ensureCoreInitialized();
+// 不在模組頂層呼叫 ensureCoreInitialized()
+// 改在每個函數內呼叫，避免 import 時就觸發初始化（可能導致 release crash）
 
 // Re-export types
 export type {

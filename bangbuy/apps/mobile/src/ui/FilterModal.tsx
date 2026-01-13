@@ -3,7 +3,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, radius, fontSize, fontWeight, shadows } from '@/src/theme/tokens';
 import { Button } from './Button';
-import { getSupabaseClient } from '@bangbuy/core';
+import { supabase } from '@/src/lib/supabase';
 
 export interface FilterOptions {
   country?: string;
@@ -104,7 +104,7 @@ export function FilterModal({
   const loadCountries = async () => {
     try {
       setCountriesLoading(true);
-      const supabase = getSupabaseClient();
+      // 直接使用 import 的 supabase client
       
       const { data, error } = await supabase
         .from('countries')

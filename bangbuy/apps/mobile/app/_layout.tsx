@@ -1,7 +1,8 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 import * as Notifications from 'expo-notifications';
 
@@ -14,6 +15,73 @@ import { supabase } from '@/src/lib/supabase';
 import { checkIfFirstLaunch } from '@/src/lib/onboarding';
 import SplashAnimation from '@/components/SplashAnimation';
 import { UnreadCountProvider } from '@/components/unread/UnreadCountProvider';
+
+// ============ 全域錯誤邊界（防止 release crash 變白屏）============
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
+}
+
+class GlobalErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // 在 release 中這會被捕獲而不是閃退
+    console.error('[GlobalErrorBoundary] Caught error:', error);
+    console.error('[GlobalErrorBoundary] Error info:', errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={errorStyles.container}>
+          <Text style={errorStyles.title}>發生錯誤</Text>
+          <Text style={errorStyles.message}>
+            {this.state.error?.message || '未知錯誤'}
+          </Text>
+          <Text style={errorStyles.hint}>請重新啟動 App</Text>
+        </View>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+const errorStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    padding: 20,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#ff4444',
+    marginBottom: 16,
+  },
+  message: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  hint: {
+    fontSize: 12,
+    color: '#999',
+  },
+});
+// ============ 全域錯誤邊界結束 ============
 
 export const unstable_settings = {
   anchor: '(tabs)',
@@ -298,29 +366,32 @@ export default function RootLayout() {
   }
 
   // 動畫完成後，渲染原本的 App 結構
+  // 使用 GlobalErrorBoundary 包裹，防止 release crash
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <UnreadCountProvider>
-        <Stack>
-          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="login" options={{ headerShown: false, presentation: 'modal' }} />
-          <Stack.Screen name="create" options={{ title: '創建許願單' }} />
-          <Stack.Screen name="wish/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="trip/create" options={{ headerShown: false }} />
-          <Stack.Screen name="trip/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
-          <Stack.Screen name="me/wishes" options={{ title: '我的需求', headerShown: false }} />
-          <Stack.Screen name="me/trips" options={{ title: '我的行程', headerShown: false }} />
-          <Stack.Screen name="me/edit-profile" options={{ title: '編輯個人資料', headerShown: false }} />
-          <Stack.Screen name="settings" options={{ title: '設定', headerShown: false }} />
-          <Stack.Screen name="help" options={{ title: '聯絡我們', headerShown: false }} />
-          <Stack.Screen name="help/shipping" options={{ title: '運回台灣方式', headerShown: false }} />
-          <Stack.Screen name="help/shipping/risks" options={{ title: '風險與法規', headerShown: false }} />
-          <Stack.Screen name="auth/reset-password" options={{ title: '重設密碼', headerShown: false }} />
-        </Stack>
-        <StatusBar style="auto" />
-      </UnreadCountProvider>
-    </ThemeProvider>
+    <GlobalErrorBoundary>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <UnreadCountProvider>
+          <Stack>
+            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="login" options={{ headerShown: false, presentation: 'modal' }} />
+            <Stack.Screen name="create" options={{ title: '創建許願單' }} />
+            <Stack.Screen name="wish/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="trip/create" options={{ headerShown: false }} />
+            <Stack.Screen name="trip/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="chat/[id]" options={{ headerShown: false }} />
+            <Stack.Screen name="me/wishes" options={{ title: '我的需求', headerShown: false }} />
+            <Stack.Screen name="me/trips" options={{ title: '我的行程', headerShown: false }} />
+            <Stack.Screen name="me/edit-profile" options={{ title: '編輯個人資料', headerShown: false }} />
+            <Stack.Screen name="settings" options={{ title: '設定', headerShown: false }} />
+            <Stack.Screen name="help" options={{ title: '聯絡我們', headerShown: false }} />
+            <Stack.Screen name="help/shipping" options={{ title: '運回台灣方式', headerShown: false }} />
+            <Stack.Screen name="help/shipping/risks" options={{ title: '風險與法規', headerShown: false }} />
+            <Stack.Screen name="auth/reset-password" options={{ title: '重設密碼', headerShown: false }} />
+          </Stack>
+          <StatusBar style="auto" />
+        </UnreadCountProvider>
+      </ThemeProvider>
+    </GlobalErrorBoundary>
   );
 }

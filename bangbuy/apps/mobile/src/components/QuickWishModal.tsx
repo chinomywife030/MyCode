@@ -2,7 +2,7 @@ import { StyleSheet, View, Text, TextInput, TouchableOpacity, Modal, KeyboardAvo
 import { useState, useEffect, useRef } from 'react';
 import { colors, spacing, radius, fontSize, fontWeight } from '@/src/theme/tokens';
 import { CountryChip } from '@/src/components/CountryChip';
-import { createWish } from '@bangbuy/core';
+import { createWish } from '@/src/lib/wishes';
 import { getCurrentUser } from '@/src/lib/auth';
 
 interface QuickWishModalProps {

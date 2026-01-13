@@ -40,10 +40,18 @@ export function initializeCore(): boolean {
 
 /**
  * 確保 core 已初始化
+ * 注意：這個函數不會 throw，即使初始化失敗也只會 log 錯誤
  */
-export function ensureCoreInitialized(): void {
-  if (!initialized) {
-    initializeCore();
+export function ensureCoreInitialized(): boolean {
+  if (initialized) {
+    return true;
+  }
+  
+  try {
+    return initializeCore();
+  } catch (error) {
+    console.error('[ensureCoreInitialized] Failed to initialize core:', error);
+    return false;
   }
 }
 
