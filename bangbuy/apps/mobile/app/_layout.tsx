@@ -18,6 +18,9 @@ import { checkIfFirstLaunch } from '@/src/lib/onboarding';
 import SplashAnimation from '@/components/SplashAnimation';
 import { UnreadCountProvider } from '@/components/unread/UnreadCountProvider';
 
+// Build tag for TestFlight build identification
+const BUILD_TAG = "tf-regen-2026-01-14-01";
+
 // ============ 全域錯誤邊界（防止 release crash 變白屏）============
 interface ErrorBoundaryProps {
   children: React.ReactNode;
@@ -318,6 +321,7 @@ export default function RootLayout() {
     if (didInitRef.current) return;
     didInitRef.current = true;
     
+    console.log("[BangBuy] BUILD_TAG:", BUILD_TAG);
     console.log('[RootLayout] 🔄 Starting one-time initialization');
     
     // 初始化 core layer
