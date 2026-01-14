@@ -42,8 +42,90 @@ import {
  * - 權限/RLS 設定
  * - Navigation 路由結構
  * - 事件處理邏輯 (onPress, onMessagePress)
+ * 
+ * ============================================
+ * 🔍 診斷工具（Release Crash 診斷）
+ * ============================================
+ * 
+ * 目的：診斷 Release 模式下 "undefined is not a function" 錯誤
+ * 
+ * 1. Marker：確認此檔案是否為實際使用的 HomeScreen
+ *    - 若看到 "HOME_SCREEN_MARKER_2026_01_14" 錯誤，表示此檔案確實在 bundle 中
+ *    - 關閉方式：將下方 __DIAG_MARKER__ 設為 false
+ * 
+ * 2. assertFn：檢查所有被調用的函式/Hook 是否為 undefined
+ *    - 若某個函式是 undefined，會立即拋出明確錯誤訊息
+ *    - 錯誤訊息格式：[HomeScreen] xxx is not a function: undefined
+ * 
+ * 3. 使用完畢後請移除所有診斷碼
+ * 
+ * ============================================
  */
 export default function HomeScreen() {
+  // ============================================
+  // 🔍 診斷工具：Marker 與 assertFn
+  // ============================================
+  // 控制 Marker 是否啟用（設為 false 可快速關閉）
+  const __DIAG_MARKER__ = true;
+  
+  // Marker：確認此檔案是否為實際使用的 HomeScreen
+  if (__DIAG_MARKER__) {
+    throw new Error("HOME_SCREEN_MARKER_2026_01_14");
+  }
+  
+  // Helper：檢查函式是否為 undefined
+  const assertFn = (name: string, v: any) => {
+    if (typeof v !== "function") {
+      throw new Error(`[HomeScreen] ${name} is not a function: ` + String(v));
+    }
+  };
+  
+  // 檢查所有會被直接調用的外部 Hook/函式
+  // React Hooks（內建，通常不需要檢查，但為保險起見也檢查）
+  assertFn("useState", useState);
+  assertFn("useCallback", useCallback);
+  assertFn("useMemo", useMemo);
+  assertFn("useEffect", useEffect);
+  
+  // 外部 Hooks
+  assertFn("useFocusEffect", useFocusEffect);
+  
+  // Expo Router
+  assertFn("router", router);
+  if (router) {
+    assertFn("router.push", router.push);
+  }
+  
+  // Expo Notifications
+  if (Notifications) {
+    assertFn("Notifications.getPermissionsAsync", Notifications.getPermissionsAsync);
+    assertFn("Notifications.requestPermissionsAsync", Notifications.requestPermissionsAsync);
+    assertFn("Notifications.getExpoPushTokenAsync", Notifications.getExpoPushTokenAsync);
+  }
+  
+  // Expo Haptics
+  if (Haptics) {
+    assertFn("Haptics.impactAsync", Haptics.impactAsync);
+  }
+  
+  // 資料取得函式
+  assertFn("getWishes", getWishes);
+  assertFn("getTrips", getTrips);
+  assertFn("getDiscoveries", getDiscoveries);
+  assertFn("getNotificationPermission", getNotificationPermission);
+  assertFn("getCurrentUser", getCurrentUser);
+  assertFn("getCurrentProfile", getCurrentProfile);
+  assertFn("startChat", startChat);
+  assertFn("formatDateRange", formatDateRange);
+  
+  // Supabase（檢查關鍵方法）
+  if (supabase && supabase.auth) {
+    assertFn("supabase.auth.getSession", supabase.auth.getSession);
+  }
+  
+  // ============================================
+  // 原有邏輯開始
+  // ============================================
   console.count('SCREEN_RENDER:index');
   
   // ============================================
