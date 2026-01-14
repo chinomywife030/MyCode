@@ -51,6 +51,15 @@ export default function HomeScreen() {
   // ============================================
   const [mode, setMode] = useState<Mode>('shopper');
   
+  // ✅ 包裝 setMode，避免 Release 模式下 useState setter 引用問題
+  const handleModeChange = useCallback((newMode: Mode) => {
+    if (typeof setMode === 'function') {
+      setMode(newMode);
+    } else {
+      console.error('[HomeScreen] setMode is not a function:', typeof setMode);
+    }
+  }, []);
+  
   // ============================================
   // 資料狀態（保持原有邏輯不變）
   // ============================================
@@ -260,9 +269,14 @@ export default function HomeScreen() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session && session.user) {
-        const { registerPushTokenToSupabase } = await import('@/src/lib/pushService');
-        await registerPushTokenToSupabase();
-        console.log('[HomeScreen] Push token re-registered for logged-in user');
+          const pushServiceModule = await import('@/src/lib/pushService');
+          // ✅ 防護：確保模組和函數存在
+          if (pushServiceModule && typeof pushServiceModule.registerPushTokenToSupabase === 'function') {
+            await pushServiceModule.registerPushTokenToSupabase();
+            console.log('[HomeScreen] Push token re-registered for logged-in user');
+          } else {
+            console.warn('[HomeScreen] registerPushTokenToSupabase not found in module');
+          }
         }
       } catch (pushError) {
         console.warn('[HomeScreen] Failed to re-register push token:', pushError);
@@ -305,8 +319,13 @@ export default function HomeScreen() {
         const finalStatus = await Notifications.getPermissionsAsync();
         if (finalStatus.status === 'granted') {
           try {
-            const Constants = await import('expo-constants');
-            const projectId = Constants.default.expoConfig?.extra?.eas?.projectId as string | undefined;
+            const ConstantsModule = await import('expo-constants');
+            // ✅ 防護：確保模組存在
+            if (!ConstantsModule || !ConstantsModule.default) {
+              console.warn('[HomeScreen] expo-constants module not loaded properly');
+              return;
+            }
+            const projectId = ConstantsModule.default.expoConfig?.extra?.eas?.projectId as string | undefined;
             
             if (!projectId) {
               console.error('[HomeScreen] No projectId found in app.json');
@@ -318,16 +337,21 @@ export default function HomeScreen() {
             
             // 上傳 Token 到 Server（非阻塞）
             try {
-              const { registerPushTokenToServer } = await import('@/src/lib/pushToken');
-              registerPushTokenToServer(token)
-                .then((success) => {
-                  if (success) {
-                    console.log('[HomeScreen] Token uploaded to server successfully');
-                  }
-                })
-                .catch((error) => {
-                  console.warn('[HomeScreen] Token upload error:', error);
-                });
+              const pushTokenModule = await import('@/src/lib/pushToken');
+              // ✅ 防護：確保模組和函數存在
+              if (pushTokenModule && typeof pushTokenModule.registerPushTokenToServer === 'function') {
+                pushTokenModule.registerPushTokenToServer(token)
+                  .then((success) => {
+                    if (success) {
+                      console.log('[HomeScreen] Token uploaded to server successfully');
+                    }
+                  })
+                  .catch((error) => {
+                    console.warn('[HomeScreen] Token upload error:', error);
+                  });
+              } else {
+                console.warn('[HomeScreen] registerPushTokenToServer not found in module');
+              }
             } catch (importError) {
               console.warn('[HomeScreen] Failed to import registerPushTokenToServer:', importError);
             }
@@ -718,11 +742,6 @@ export default function HomeScreen() {
   // 注意：useMemo 返回 JSX 元素，可以直接用作 ListHeaderComponent
   // ============================================
   const renderHeader = useMemo(() => {
-    // 防禦性編程：確保所有依賴存在
-    if (!handleFilterPress || !handleFilterChipPress) {
-      console.warn('[HomeScreen] renderHeader: missing handlers');
-      return null;
-    }
     const sectionTitle = mode === 'shopper' ? '熱門需求' : '最新行程';
     const sectionSubtitle = mode === 'shopper' ? '正在找代購的需求' : '即將出發的代購行程';
 
@@ -730,7 +749,7 @@ export default function HomeScreen() {
       <View style={immoStyles.headerContainer}>
         {/* Role Switch */}
         <View style={immoStyles.roleSwitchContainer}>
-          <RoleSwitch mode={mode} onChange={setMode} />
+          <RoleSwitch mode={mode} onChange={handleModeChange} />
         </View>
         
         {/* Hero Banner */}
@@ -778,7 +797,7 @@ export default function HomeScreen() {
         </View>
       </View>
     );
-  }, [mode, searchQueryRaw, activeFilterChips, discoveries, isTripTab, handleFilterPress, handleFilterChipPress]);
+  }, [mode, searchQueryRaw, activeFilterChips, discoveries, isTripTab, handleFilterPress, handleFilterChipPress, handleModeChange]);
 
   // ============================================
   // Main Render

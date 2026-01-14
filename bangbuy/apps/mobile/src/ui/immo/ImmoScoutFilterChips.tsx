@@ -32,6 +32,14 @@ export function ImmoScoutFilterChips({
   onChipPress,
   activeChipIds = [],
 }: ImmoScoutFilterChipsProps) {
+  // ✅ 防護：確保 chips 是數組，避免 Release 模式下 undefined.map() 錯誤
+  const safeChips = Array.isArray(chips) ? chips : [];
+  const safeActiveChipIds = Array.isArray(activeChipIds) ? activeChipIds : [];
+  
+  if (safeChips.length === 0) {
+    return null;
+  }
+  
   return (
     <ScrollView
       horizontal
@@ -39,8 +47,11 @@ export function ImmoScoutFilterChips({
       contentContainerStyle={styles.container}
       style={styles.scrollView}
     >
-      {chips.map((chip) => {
-        const isActive = activeChipIds.includes(chip.id);
+      {safeChips.map((chip) => {
+        if (!chip || !chip.id) {
+          return null;
+        }
+        const isActive = safeActiveChipIds.includes(chip.id);
         
         return (
           <TouchableOpacity
