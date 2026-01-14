@@ -1,6 +1,6 @@
 import { StyleSheet, FlatList, RefreshControl, View, Text, TouchableOpacity, Platform, Alert, Dimensions } from 'react-native';
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -89,11 +89,18 @@ export default function HomeScreen() {
   
   // 外部 Hooks
   assertFn("useFocusEffect", useFocusEffect);
+  assertFn("useRouter", useRouter);
   
-  // Expo Router
-  assertFn("router", router);
+  // Expo Router - 使用 useRouter hook 取得 router 實例
+  const router = useRouter();
+  
+  // 檢查 router 物件的方法（router 是物件，不是函數）
   if (router) {
     assertFn("router.push", router.push);
+    assertFn("router.replace", router.replace);
+    assertFn("router.back", router.back);
+  } else {
+    throw new Error("[HomeScreen] useRouter() returned undefined or null");
   }
   
   // Expo Notifications
