@@ -66,7 +66,7 @@ export default function HomeScreen() {
   // 🔍 診斷工具：Marker 與 assertFn
   // ============================================
   // 控制 Marker 是否啟用（設為 false 可快速關閉）
-  const __DIAG_MARKER__ = true;
+  const __DIAG_MARKER__ = false;
   
   // Marker：確認此檔案是否為實際使用的 HomeScreen
   if (__DIAG_MARKER__) {
