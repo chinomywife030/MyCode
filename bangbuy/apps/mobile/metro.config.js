@@ -6,7 +6,7 @@ const path = require('path');
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '../..');
 
-// 使用 @expo/metro-config 的預設配置
+// 使用 expo/metro-config 的預設配置（包含 Expo Router 的標準設定）
 const config = getDefaultConfig(projectRoot);
 
 // 1. 擴展 watchFolders 到整個 Monorepo 根目錄
@@ -23,11 +23,7 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
-// 3. Force Metro to resolve (sub)dependencies only from the `nodeModulesPaths`
-// 這對 monorepo 很重要，確保依賴解析從指定路徑開始，避免重複解析問題
-config.resolver.disableHierarchicalLookup = true;
-
-// 4. 添加額外的 resolver 配置，確保能正確解析 workspace 包
+// 3. 添加額外的 resolver 配置，確保能正確解析 workspace 包
 // 支援 @bangbuy/core 和 @core 別名
 config.resolver.extraNodeModules = {
   '@bangbuy/core': path.resolve(workspaceRoot, 'packages/core'),
