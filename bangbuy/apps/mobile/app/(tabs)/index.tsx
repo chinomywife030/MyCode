@@ -408,7 +408,8 @@ export default function HomeScreen() {
   }, [mode, searchQuery, filters, fetchWishes, fetchTrips]);
 
   const filteredData = useMemo(() => {
-    return currentData;
+    // 確保返回的是數組，避免 Release 模式下 undefined 錯誤
+    return Array.isArray(currentData) ? currentData : [];
   }, [currentData]);
 
   const handleFilterPress = useCallback(() => {
@@ -560,8 +561,20 @@ export default function HomeScreen() {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={immoStyles.discoveriesHorizontalContent}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => {
+          keyExtractor={(item, index) => {
+            // 防禦性編程：確保 item 和 item.id 存在
+            if (!item) {
+              console.warn('[HomeScreen] DiscoveriesSection keyExtractor: item is undefined at index', index);
+              return `discovery-fallback-${index}`;
+            }
+            return item.id || `discovery-fallback-${index}`;
+          }}
+          renderItem={({ item, index }) => {
+            // 防禦性編程：確保 item 存在
+            if (!item) {
+              console.warn('[HomeScreen] DiscoveriesSection renderItem: item is undefined at index', index);
+              return null;
+            }
             const cardWidth = Dimensions.get('window').width * 0.85;
             const cardMargin = 16;
             return (
@@ -590,6 +603,12 @@ export default function HomeScreen() {
   // renderItem - 使用新 ImmoScout 風格卡片
   // ============================================
   const renderItem = useCallback(({ item, index }: { item: Wish | Trip; index: number }) => {
+    // 防禦性編程：確保 item 存在，避免 Release 模式下 undefined 錯誤
+    if (!item) {
+      console.warn('[HomeScreen] renderItem: item is undefined at index', index);
+      return null;
+    }
+    
     if (mode === 'shopper') {
       const wish = item as Wish;
       // 使用 UI 層適配器轉換資料
@@ -696,8 +715,14 @@ export default function HomeScreen() {
   // 渲染 Header - ImmoScout 風格
   // 使用 useMemo 穩定 ListHeaderComponent，避免每次 render 都重新創建導致 TextInput 失焦
   // 根因：原本 renderHeader 是函數，每次 render 都會重新創建，導致 FlatList 的 ListHeaderComponent 重新 mount
+  // 注意：useMemo 返回 JSX 元素，可以直接用作 ListHeaderComponent
   // ============================================
   const renderHeader = useMemo(() => {
+    // 防禦性編程：確保所有依賴存在
+    if (!handleFilterPress || !handleFilterChipPress) {
+      console.warn('[HomeScreen] renderHeader: missing handlers');
+      return null;
+    }
     const sectionTitle = mode === 'shopper' ? '熱門需求' : '最新行程';
     const sectionSubtitle = mode === 'shopper' ? '正在找代購的需求' : '即將出發的代購行程';
 
@@ -775,7 +800,14 @@ export default function HomeScreen() {
         extraData={mode}
         data={filteredData}
         renderItem={renderItem}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => {
+          // 防禦性編程：確保 item 和 item.id 存在，避免 Release 模式下 undefined 錯誤
+          if (!item) {
+            console.warn('[HomeScreen] keyExtractor: item is undefined at index', index);
+            return `fallback-${index}`;
+          }
+          return item.id || `fallback-${index}`;
+        }}
         ListHeaderComponent={renderHeader}
         contentContainerStyle={filteredData.length === 0 ? immoStyles.emptyList : immoStyles.list}
         showsVerticalScrollIndicator={false}
