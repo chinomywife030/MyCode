@@ -31,7 +31,15 @@ yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
-.env*
+# ⚠️ 注意：.env.example 應該被提交，但 .env.local 不應該
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+# 保留 .env.example 以供參考
+!.env.example
+!apps/mobile/.env.example
 
 # vercel
 .vercel
@@ -40,8 +48,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.vercel
-.env*.local
-
 # Expo
 **/.expo/
+
+# Disabled config files (monorepo root - do not use)
+*.disabled

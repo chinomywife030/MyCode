@@ -2,17 +2,30 @@
 
 This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
+## ⚠️ 重要：Monorepo 配置說明
+
+此專案是 monorepo 結構。**所有 Expo/EAS 相關指令必須在 `apps/mobile/` 目錄下執行**：
+
+```bash
+cd apps/mobile
+eas build --platform ios --profile preview
+eas build --platform ios --profile production
+eas submit --platform ios
+```
+
+**請勿在根目錄執行 EAS 指令**，根目錄的 `app.json` 和 `eas.json` 已被停用（改名為 `.disabled`）。
+
 ## Get started
 
 1. Install dependencies
 
    ```bash
-   npm install
+   pnpm install  # 在 monorepo 根目錄執行
    ```
 
 2. Set up environment variables
 
-   Create a `.env` file in `apps/mobile/` with the following variables:
+   Create a `.env.local` file in `apps/mobile/` with the following variables:
 
    ```env
    EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -20,10 +33,13 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    ```
 
    You can find these values in your Supabase project settings.
+   
+   > ⚠️ 對於 EAS Build，請在 EAS 網站上設定 secrets，或在 `eas.json` 中配置 `env`。
 
 3. Start the app
 
    ```bash
+   cd apps/mobile
    npx expo start
    ```
 
