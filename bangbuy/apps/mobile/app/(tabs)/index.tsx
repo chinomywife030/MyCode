@@ -683,26 +683,38 @@ export default function HomeScreen() {
             return item.id || `discovery-fallback-${index}`;
           }}
           renderItem={({ item, index }) => {
-            // 防禦性編程：確保 item 存在
-            if (!item) {
-              console.warn('[HomeScreen] DiscoveriesSection renderItem: item is undefined at index', index);
+            try {
+              // 防禦性編程：確保 item 存在
+              if (!item) {
+                console.warn('[HomeScreen] DiscoveriesSection renderItem: item is undefined at index', index);
+                return null;
+              }
+              
+              // SAFETY CHECK: 防止 normalizeDiscoveryForCard 未定義
+              if (typeof normalizeDiscoveryForCard !== 'function') {
+                console.error('[HomeScreen] normalizeDiscoveryForCard is not a function');
+                return null;
+              }
+
+              const cardWidth = Dimensions.get('window').width * 0.85;
+              const cardMargin = 16;
+              return (
+                <View style={[immoStyles.discoveryCardWrapper, { width: cardWidth, marginRight: cardMargin }]}>
+                  <ImmoScoutDiscoveryCard
+                    display={normalizeDiscoveryForCard(item)}
+                    onPress={() => router.push(`/discovery/${item.id}`)}
+                    onInterestPress={async () => {
+                      // 使用現有的 handleDiscoveryInterestPress 邏輯
+                      await handleDiscoveryInterestPress(item);
+                    }}
+                    currentUserId={user?.id}
+                  />
+                </View>
+              );
+            } catch (error) {
+              console.error('[HomeScreen] DiscoveriesSection renderItem error:', error);
               return null;
             }
-            const cardWidth = Dimensions.get('window').width * 0.85;
-            const cardMargin = 16;
-            return (
-              <View style={[immoStyles.discoveryCardWrapper, { width: cardWidth, marginRight: cardMargin }]}>
-                <ImmoScoutDiscoveryCard
-                  display={normalizeDiscoveryForCard(item)}
-                  onPress={() => router.push(`/discovery/${item.id}`)}
-                  onInterestPress={async () => {
-                    // 使用現有的 handleDiscoveryInterestPress 邏輯
-                    await handleDiscoveryInterestPress(item);
-                  }}
-                  currentUserId={user?.id}
-                />
-              </View>
-            );
           }}
           decelerationRate="fast"
           snapToInterval={Dimensions.get('window').width * 0.85 + 16}
