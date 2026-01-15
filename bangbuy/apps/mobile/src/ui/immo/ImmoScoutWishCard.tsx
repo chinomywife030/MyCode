@@ -25,65 +25,7 @@ import {
   immoTypography,
   immoShadows,
 } from './theme';
-
-// ============================================
-// Display Model Adapter (UI-only 資料轉換)
-// ============================================
-export interface ImmoWishDisplayModel {
-  id: string;
-  title: string;
-  country?: string;
-  /** 單張圖片（向後兼容） */
-  image?: string;
-  /** 多張圖片（用於輪播） */
-  images?: string[];
-  price: number;
-  priceFormatted: string;
-  userName: string;
-  status: string;
-  statusText: string;
-}
-
-/**
- * 將原始 Wish 資料轉換為 Display Model
- * 純 UI 格式化，不改變任何業務邏輯
- */
-export function normalizeWishForCard(wish: {
-  id: string;
-  title: string;
-  targetCountry?: string;
-  images?: string[];
-  budget?: number;
-  price?: number;
-  commission?: number;
-  buyer?: { name?: string; avatarUrl?: string };
-  status?: string;
-}): ImmoWishDisplayModel {
-  // 計算顯示價格（沿用原邏輯）
-  let displayPrice = 0;
-  if (wish.budget && wish.budget > 0) {
-    displayPrice = wish.budget;
-  } else if (wish.price && wish.commission) {
-    displayPrice = wish.price + wish.commission;
-  } else if (wish.price) {
-    displayPrice = wish.price;
-  }
-
-  return {
-    id: wish.id,
-    title: wish.title,
-    country: wish.targetCountry,
-    image: wish.images?.[0],
-    images: wish.images || [],
-    price: displayPrice,
-    priceFormatted: displayPrice > 0 
-      ? `NT$ ${displayPrice.toLocaleString()}`
-      : '價格洽詢',
-    userName: wish.buyer?.name || '使用者',
-    status: wish.status || 'open',
-    statusText: wish.status === 'open' ? '需求中' : wish.status || '需求中',
-  };
-}
+import { ImmoWishDisplayModel } from './immoAdapters';
 
 // ============================================
 // Component Props

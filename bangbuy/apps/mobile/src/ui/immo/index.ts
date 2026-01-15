@@ -12,22 +12,28 @@ export { ImmoCardActions } from './ImmoCardActions';
 // UI Components
 export { ImmoScoutSearchBar } from './ImmoScoutSearchBar';
 export { ImmoScoutFilterChips, defaultFilterChips, type FilterChip } from './ImmoScoutFilterChips';
+
 export { 
   ImmoScoutWishCard, 
-  ImmoScoutWishCardSkeleton,
-  normalizeWishForCard,
-  type ImmoWishDisplayModel,
+  ImmoScoutWishCardSkeleton, 
 } from './ImmoScoutWishCard';
+
 export { 
   ImmoScoutTripCard, 
   ImmoScoutTripCardSkeleton,
-  normalizeTripForCard,
-  type ImmoTripDisplayModel,
 } from './ImmoScoutTripCard';
+
 export { 
   ImmoScoutDiscoveryCard, 
-  ImmoScoutDiscoveryCardSkeleton,
-  normalizeDiscoveryForCard,
-  type ImmoDiscoveryDisplayModel,
+  // ImmoScoutDiscoveryCardSkeleton, // Temporarily removed as it was not provided in the refactor
 } from './ImmoScoutDiscoveryCard';
 
+// Adapters
+export {
+  normalizeWishForCard,
+  type ImmoWishDisplayModel,
+  normalizeTripForCard,
+  type ImmoTripDisplayModel,
+  normalizeDiscoveryForCard,
+  type ImmoDiscoveryDisplayModel,
+} from './immoAdapters';

@@ -25,13 +25,14 @@ import { StableSearchBar } from '@/src/components/StableSearchBar';
 import { immoColors, immoSpacing, immoRadius, immoTypography, immoShadows } from '@/src/ui/immo/theme';
 import { ImmoScoutSearchBar } from '@/src/ui/immo/ImmoScoutSearchBar';
 import { ImmoScoutFilterChips, defaultFilterChips } from '@/src/ui/immo/ImmoScoutFilterChips';
-import { ImmoScoutWishCard, ImmoScoutWishCardSkeleton, normalizeWishForCard } from '@/src/ui/immo/ImmoScoutWishCard';
-import { ImmoScoutTripCard, ImmoScoutTripCardSkeleton, normalizeTripForCard } from '@/src/ui/immo/ImmoScoutTripCard';
-// ✅ Refactored: 使用統一的 src/ui/immo 路徑，避免重複檔案引用
-import {
-  ImmoScoutDiscoveryCard,
-  normalizeDiscoveryForCard,
-} from '@/src/ui/immo/ImmoScoutDiscoveryCard';
+import { ImmoScoutWishCard, ImmoScoutWishCardSkeleton } from '@/src/ui/immo/ImmoScoutWishCard';
+import { ImmoScoutTripCard, ImmoScoutTripCardSkeleton } from '@/src/ui/immo/ImmoScoutTripCard';
+import { ImmoScoutDiscoveryCard } from '@/src/ui/immo/ImmoScoutDiscoveryCard';
+import { 
+  normalizeWishForCard, 
+  normalizeTripForCard, 
+  normalizeDiscoveryForCard 
+} from '@/src/ui/immo/immoAdapters';
 
 /**
  * Home 頁面 - ImmoScout 風格 UI

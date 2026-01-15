@@ -24,44 +24,7 @@ import {
   immoTypography,
   immoShadows,
 } from './theme';
-
-// ============================================
-// Display Model Adapter (UI-only 資料轉換)
-// ============================================
-export interface ImmoTripDisplayModel {
-  id: string;
-  destination: string;
-  description?: string;
-  dateRange?: string;
-  ownerName: string;
-  ownerAvatar?: string;
-  ownerInitial: string;
-}
-
-/**
- * 將原始 Trip 資料轉換為 Display Model
- * 純 UI 格式化，不改變任何業務邏輯
- */
-export function normalizeTripForCard(trip: {
-  id: string;
-  destination: string;
-  description?: string;
-  startDate?: string;
-  endDate?: string;
-  owner?: { name?: string; avatarUrl?: string };
-}, dateRange?: string): ImmoTripDisplayModel {
-  const ownerName = trip.owner?.name || '匿名用戶';
-  
-  return {
-    id: trip.id,
-    destination: trip.destination,
-    description: trip.description,
-    dateRange: dateRange,
-    ownerName,
-    ownerAvatar: trip.owner?.avatarUrl,
-    ownerInitial: ownerName.charAt(0).toUpperCase(),
-  };
-}
+import { ImmoTripDisplayModel } from './immoAdapters';
 
 // ============================================
 // Component Props
