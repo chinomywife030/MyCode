@@ -1,4 +1,8 @@
 import { StyleSheet, FlatList, RefreshControl, View, Text, TouchableOpacity, Platform, Alert, Dimensions } from 'react-native';
+
+// 🔍 最早期診斷：確認模塊開始載入
+console.log('[HomeScreen] Module loading started...');
+
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -33,6 +37,9 @@ import {
   normalizeTripForCard, 
   normalizeDiscoveryForCard 
 } from '@/src/ui/immo/immoAdapters';
+
+// 🔍 診斷：確認所有導入完成
+console.log('[HomeScreen] All imports completed');
 
 // ============================================
 // 🔍 Release Crash 診斷：模塊頂層安全檢查
@@ -108,6 +115,9 @@ const safeFormatDateRange = typeof formatDateRange === 'function'
  * ============================================
  */
 export default function HomeScreen() {
+  // 🔍 最早期診斷：確認函式開始執行
+  console.log('[HomeScreen] Function start');
+  
   // ============================================
   // Release 驗證標記（僅在 Release 模式下可見）
   // ============================================
@@ -116,17 +126,21 @@ export default function HomeScreen() {
   }
   
   // Expo Router - 使用 useRouter hook 取得 router 實例
+  console.log('[HomeScreen] Before useRouter');
   const router = useRouter();
+  console.log('[HomeScreen] After useRouter, router:', typeof router);
   
   // ============================================
   // 原有邏輯開始
   // ============================================
-  console.count('SCREEN_RENDER:index');
+  // console.count('SCREEN_RENDER:index'); // 暫時移除，避免可能的問題
   
   // ============================================
   // 模式狀態（預設為代購模式，與網站一致）
   // ============================================
+  console.log('[HomeScreen] Before useState');
   const [mode, setMode] = useState<Mode>('shopper');
+  console.log('[HomeScreen] After useState, mode:', mode);
   
   // ✅ 包裝 setMode，避免 Release 模式下 useState setter 引用問題
   const handleModeChange = useCallback((newMode: Mode) => {
