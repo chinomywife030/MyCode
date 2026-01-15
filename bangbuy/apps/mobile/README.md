@@ -25,16 +25,26 @@ eas submit --platform ios
 
 2. Set up environment variables
 
-   Create a `.env.local` file in `apps/mobile/` with the following variables:
+   **本地開發：** 創建 `.env.local` 檔案在 `apps/mobile/`：
 
    ```env
-   EXPO_PUBLIC_SUPABASE_URL=your_supabase_url
+   EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
    EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
 
-   You can find these values in your Supabase project settings.
+   **EAS Build（必要！）：** 在終端執行以下命令設定 secrets：
+
+   ```bash
+   cd apps/mobile
    
-   > ⚠️ 對於 EAS Build，請在 EAS 網站上設定 secrets，或在 `eas.json` 中配置 `env`。
+   # 設定 Supabase URL（替換為你的實際值）
+   eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_URL --value "https://your-project.supabase.co"
+   
+   # 設定 Supabase Anon Key（替換為你的實際值）
+   eas secret:create --scope project --name EXPO_PUBLIC_SUPABASE_ANON_KEY --value "your-anon-key-here"
+   ```
+
+   > 💡 EAS Secrets 會自動在 Build 時注入，`eas.json` 中已配置 `@EXPO_PUBLIC_SUPABASE_URL` 等引用。
 
 3. Start the app
 
