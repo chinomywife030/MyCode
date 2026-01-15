@@ -63,72 +63,14 @@ import {
  */
 export default function HomeScreen() {
   // ============================================
-  // 🔍 診斷工具：Marker 與 assertFn
+  // Release 驗證標記（僅在 Release 模式下可見）
   // ============================================
-  // 控制 Marker 是否啟用（設為 false 可快速關閉）
-  const __DIAG_MARKER__ = false;
-  
-  // Marker：確認此檔案是否為實際使用的 HomeScreen
-  if (__DIAG_MARKER__) {
-    throw new Error("HOME_SCREEN_MARKER_2026_01_14");
+  if (!__DEV__) {
+    console.log('[HomeScreen] RELEASE_BUILD_2026_01_14 - HomeScreen loaded successfully');
   }
-  
-  // Helper：檢查函式是否為 undefined
-  const assertFn = (name: string, v: any) => {
-    if (typeof v !== "function") {
-      throw new Error(`[HomeScreen] ${name} is not a function: ` + String(v));
-    }
-  };
-  
-  // 檢查所有會被直接調用的外部 Hook/函式
-  // React Hooks（內建，通常不需要檢查，但為保險起見也檢查）
-  assertFn("useState", useState);
-  assertFn("useCallback", useCallback);
-  assertFn("useMemo", useMemo);
-  assertFn("useEffect", useEffect);
-  
-  // 外部 Hooks
-  assertFn("useFocusEffect", useFocusEffect);
-  assertFn("useRouter", useRouter);
   
   // Expo Router - 使用 useRouter hook 取得 router 實例
   const router = useRouter();
-  
-  // 檢查 router 物件的方法（router 是物件，不是函數）
-  if (router) {
-    assertFn("router.push", router.push);
-    assertFn("router.replace", router.replace);
-    assertFn("router.back", router.back);
-  } else {
-    throw new Error("[HomeScreen] useRouter() returned undefined or null");
-  }
-  
-  // Expo Notifications
-  if (Notifications) {
-    assertFn("Notifications.getPermissionsAsync", Notifications.getPermissionsAsync);
-    assertFn("Notifications.requestPermissionsAsync", Notifications.requestPermissionsAsync);
-    assertFn("Notifications.getExpoPushTokenAsync", Notifications.getExpoPushTokenAsync);
-  }
-  
-  // Expo Haptics
-  if (Haptics) {
-    assertFn("Haptics.impactAsync", Haptics.impactAsync);
-  }
-  
-  // 資料取得函式
-  assertFn("getWishes", getWishes);
-  assertFn("getTrips", getTrips);
-  assertFn("getDiscoveries", getDiscoveries);
-  assertFn("getNotificationPermission", getNotificationPermission);
-  assertFn("getCurrentUser", getCurrentUser);
-  assertFn("getCurrentProfile", getCurrentProfile);
-  assertFn("startChat", startChat);
-  assertFn("formatDateRange", formatDateRange);
-  
-  // Supabase（檢查關鍵方法）
-  if (supabase && supabase.auth) {
-    assertFn("supabase.auth.getSession", supabase.auth.getSession);
-  }
   
   // ============================================
   // 原有邏輯開始
