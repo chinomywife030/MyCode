@@ -16,6 +16,10 @@ import {
   Text,
   View,
 } from "react-native";
+import { useDebugMount } from '@/src/lib/debugMount';
+
+// Module-level guard (Singleton pattern for app session)
+let hasSplashPlayed = false;
 
 const BAG_EMPTY = require("../assets/images/bag-empty.png");
 const BAG_FINAL = require("../assets/images/bag-final.png");
@@ -126,6 +130,7 @@ interface SplashAnimationProps {
 }
 
 export default function App(props: SplashAnimationProps = {}) {
+  useDebugMount('SplashAnimation');
   const { onFinish } = props;
   // Headline animation
   const bangReveal = useRef(new Animated.Value(0)).current;
@@ -483,7 +488,17 @@ export default function App(props: SplashAnimationProps = {}) {
 
     // StrictMode protection: prevent duplicate animation starts
     if (startedRef.current) return;
+    
+    // Prevent re-playing if component is re-mounted
+    if (hasSplashPlayed) {
+      console.log('[Splash] Animation already played in this session, skipping and finishing immediately');
+      if (onFinish) onFinish();
+      return;
+    }
+
     startedRef.current = true;
+    hasSplashPlayed = true;
+    console.log('[Splash] startAnimation');
 
     // Record animation start time
     startTimeRef.current = Date.now();

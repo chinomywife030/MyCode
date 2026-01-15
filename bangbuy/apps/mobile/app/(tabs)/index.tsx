@@ -33,6 +33,7 @@ import {
   normalizeTripForCard, 
   normalizeDiscoveryForCard 
 } from '@/src/ui/immo/immoAdapters';
+import { useDebugMount } from '@/src/lib/debugMount';
 
 /**
  * Home 頁面 - ImmoScout 風格 UI
@@ -63,6 +64,7 @@ import {
  * ============================================
  */
 export default function HomeScreen() {
+  useDebugMount('HomeScreen');
   // ============================================
   // Release 驗證標記（僅在 Release 模式下可見）
   // ============================================
