@@ -1,6 +1,6 @@
 import { StyleSheet, TouchableOpacity, View, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { colors, spacing } from '@/src/theme/tokens';
 import { type Mode } from './ModeToggle';
 import { UserAvatar } from '@/src/components/UserAvatar';
@@ -20,6 +20,9 @@ interface TopBarProps {
  * 頂部導航欄：左側 hamburger/Logo 區、右側 avatar（可選：通知鈴鐺）
  */
 export function TopBar({ onMenuPress, onBellPress, onAvatarPress, userEmail, userName, userAvatarUrl, mode, showBell = false }: TopBarProps) {
+  // ✅ 使用 useRouter hook 取得 router 實例，避免 Release 模式下 router 是 undefined
+  const router = useRouter();
+  
   console.count('HEADER_RENDER');
   
   // 根據模式動態設定 Logo 顏色

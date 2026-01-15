@@ -1,8 +1,4 @@
 import { StyleSheet, FlatList, RefreshControl, View, Text, TouchableOpacity, Platform, Alert, Dimensions } from 'react-native';
-
-// 🔍 最早期診斷：確認模塊開始載入
-console.log('[HomeScreen] Module loading started...');
-
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -38,35 +34,6 @@ import {
   normalizeDiscoveryForCard 
 } from '@/src/ui/immo/immoAdapters';
 
-// 🔍 診斷：確認所有導入完成
-console.log('[HomeScreen] All imports completed');
-
-// ============================================
-// 🔍 Release Crash 診斷：模塊頂層安全檢查
-// ============================================
-// 在組件外檢查所有可能 undefined 的導入
-const _checkImport = (name: string, fn: any) => {
-  if (typeof fn !== 'function') {
-    console.error(`[HomeScreen] CRITICAL: ${name} is not a function, got:`, typeof fn);
-    return false;
-  }
-  return true;
-};
-
-// 診斷標記：如果任何導入失敗，記錄到 console
-if (!__DEV__) {
-  console.log('[HomeScreen] Checking imports...');
-  _checkImport('normalizeWishForCard', normalizeWishForCard);
-  _checkImport('normalizeTripForCard', normalizeTripForCard);
-  _checkImport('normalizeDiscoveryForCard', normalizeDiscoveryForCard);
-  _checkImport('formatDateRange', formatDateRange);
-  _checkImport('getWishes', getWishes);
-  _checkImport('getTrips', getTrips);
-  _checkImport('getDiscoveries', getDiscoveries);
-  _checkImport('startChat', startChat);
-  console.log('[HomeScreen] Import check complete');
-}
-
 // ============================================
 // 🛡️ Safe Wrappers：確保函式存在，否則使用 fallback
 // ============================================
@@ -95,52 +62,17 @@ const safeFormatDateRange = typeof formatDateRange === 'function'
  * - 權限/RLS 設定
  * - Navigation 路由結構
  * - 事件處理邏輯 (onPress, onMessagePress)
- * 
- * ============================================
- * 🔍 診斷工具（Release Crash 診斷）
- * ============================================
- * 
- * 目的：診斷 Release 模式下 "undefined is not a function" 錯誤
- * 
- * 1. Marker：確認此檔案是否為實際使用的 HomeScreen
- *    - 若看到 "HOME_SCREEN_MARKER_2026_01_14" 錯誤，表示此檔案確實在 bundle 中
- *    - 關閉方式：將下方 __DIAG_MARKER__ 設為 false
- * 
- * 2. assertFn：檢查所有被調用的函式/Hook 是否為 undefined
- *    - 若某個函式是 undefined，會立即拋出明確錯誤訊息
- *    - 錯誤訊息格式：[HomeScreen] xxx is not a function: undefined
- * 
- * 3. 使用完畢後請移除所有診斷碼
- * 
- * ============================================
  */
 export default function HomeScreen() {
-  // 🔍 最早期診斷：確認函式開始執行
-  console.log('[HomeScreen] Function start');
-  
-  // ============================================
-  // Release 驗證標記（僅在 Release 模式下可見）
-  // ============================================
-  if (!__DEV__) {
-    console.log('[HomeScreen] RELEASE_BUILD_2026_01_16 - HomeScreen loaded successfully');
-  }
-  
   // Expo Router - 使用 useRouter hook 取得 router 實例
-  console.log('[HomeScreen] Before useRouter');
   const router = useRouter();
-  console.log('[HomeScreen] After useRouter, router:', typeof router);
   
-  // ============================================
-  // 原有邏輯開始
-  // ============================================
-  // console.count('SCREEN_RENDER:index'); // 暫時移除，避免可能的問題
+  console.count('SCREEN_RENDER:index');
   
   // ============================================
   // 模式狀態（預設為代購模式，與網站一致）
   // ============================================
-  console.log('[HomeScreen] Before useState');
   const [mode, setMode] = useState<Mode>('shopper');
-  console.log('[HomeScreen] After useState, mode:', mode);
   
   // ✅ 包裝 setMode，避免 Release 模式下 useState setter 引用問題
   const handleModeChange = useCallback((newMode: Mode) => {

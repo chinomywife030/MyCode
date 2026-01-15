@@ -2,16 +2,16 @@
   "expo": {
     "name": "bangbuy",
     "slug": "bangbuy",
-    "version": "1.0.41" ,
+    "version": "1.0.44",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "bangbuy",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.williamshih.bangbuy",
-      "buildNumber": "41",
+      "buildNumber": "44",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSPhotoLibraryUsageDescription": "此應用需要存取您的相簿，以便選擇圖片上傳至許願單。",
@@ -25,7 +25,7 @@
     },
     "android": {
       "package": "com.williamshih.bangbuy",
-      "versionCode": 42
+      "versionCode": 44
     }
   }
 }
