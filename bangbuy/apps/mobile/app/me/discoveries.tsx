@@ -6,7 +6,8 @@ import { Screen, StateView } from '@/src/ui';
 import { colors, spacing, fontSize, fontWeight, radius, shadows } from '@/src/theme/tokens';
 import { getCurrentUser } from '@/src/lib/auth';
 import { getMyDiscoveries, deleteDiscovery, type Discovery } from '@/src/lib/discoveries';
-import { ImmoScoutDiscoveryCard, normalizeDiscoveryForCard } from '@/src/components/ImmoScoutDiscoveryCard';
+import { ImmoScoutDiscoveryCard } from '@/src/ui/immo/ImmoScoutDiscoveryCard';
+import { normalizeDiscoveryForCard } from '@/src/ui/immo/immoAdapters';
 
 export default function MyDiscoveriesScreen() {
   const [discoveries, setDiscoveries] = useState<Discovery[]>([]);
