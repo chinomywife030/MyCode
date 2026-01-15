@@ -27,11 +27,11 @@ import { ImmoScoutSearchBar } from '@/src/ui/immo/ImmoScoutSearchBar';
 import { ImmoScoutFilterChips, defaultFilterChips } from '@/src/ui/immo/ImmoScoutFilterChips';
 import { ImmoScoutWishCard, ImmoScoutWishCardSkeleton, normalizeWishForCard } from '@/src/ui/immo/ImmoScoutWishCard';
 import { ImmoScoutTripCard, ImmoScoutTripCardSkeleton, normalizeTripForCard } from '@/src/ui/immo/ImmoScoutTripCard';
-// ✅ 新增：從 components 導入新的 ImmoScoutDiscoveryCard
+// ✅ Refactored: 使用統一的 src/ui/immo 路徑，避免重複檔案引用
 import {
   ImmoScoutDiscoveryCard,
   normalizeDiscoveryForCard,
-} from '@/src/components/ImmoScoutDiscoveryCard';
+} from '@/src/ui/immo/ImmoScoutDiscoveryCard';
 
 /**
  * Home 頁面 - ImmoScout 風格 UI
@@ -470,11 +470,11 @@ export default function HomeScreen() {
 
   const handleWishPress = useCallback((wishId: string) => {
     router.push(`/wish/${wishId}` as any);
-  }, []);
+  }, [router]);
 
   const handleTripPress = useCallback((tripId: string) => {
     router.push(`/trip/${tripId}` as any);
-  }, []);
+  }, [router]);
 
   const handleMessagePress = useCallback(async (trip: Trip) => {
     if (messageLoading) return;
@@ -585,7 +585,7 @@ export default function HomeScreen() {
 
   const handleDiscoveryPress = useCallback((discoveryId: string) => {
     router.push(`/discovery/${discoveryId}`);
-  }, []);
+  }, [router]);
 
   // 處理「我有興趣」按鈕點擊（直接跳私訊作者）
   // 處理「我有興趣」按鈕點擊（直接跳私訊作者）
@@ -716,58 +716,77 @@ export default function HomeScreen() {
   // renderItem - 使用新 ImmoScout 風格卡片
   // ============================================
   const renderItem = useCallback(({ item, index }: { item: Wish | Trip; index: number }) => {
-    // 防禦性編程：確保 item 存在，避免 Release 模式下 undefined 錯誤
-    if (!item) {
-      console.warn('[HomeScreen] renderItem: item is undefined at index', index);
+    try {
+      // 防禦性編程：確保 item 存在，避免 Release 模式下 undefined 錯誤
+      if (!item) {
+        console.warn('[HomeScreen] renderItem: item is undefined at index', index);
+        return null;
+      }
+      
+      if (mode === 'shopper') {
+        const wish = item as Wish;
+        
+        // SAFETY CHECK: 防止 normalizeWishForCard 未定義導致崩潰
+        if (typeof normalizeWishForCard !== 'function') {
+          console.error('[HomeScreen] normalizeWishForCard is not a function');
+          return null;
+        }
+
+        // 使用 UI 層適配器轉換資料
+        const display = normalizeWishForCard({
+          id: wish.id,
+          title: wish.title,
+          targetCountry: wish.targetCountry,
+          images: wish.images,
+          budget: wish.budget,
+          price: wish.price,
+          commission: wish.commission,
+          buyer: wish.buyer,
+          status: wish.status,
+        });
+        
+        return (
+          <ImmoScoutWishCard
+            display={display}
+            onPress={() => handleWishPress(wish.id)}
+            onMessagePress={() => handleWishMessagePress(wish)}
+            isLoading={messageLoading === wish.id}
+          />
+        );
+      } else {
+        const trip = item as Trip;
+        
+        // SAFETY CHECK: 防止 normalizeTripForCard 未定義導致崩潰
+        if (typeof normalizeTripForCard !== 'function') {
+          console.error('[HomeScreen] normalizeTripForCard is not a function');
+          return null;
+        }
+
+        // 使用 UI 層適配器轉換資料
+        const display = normalizeTripForCard(
+          {
+            id: trip.id,
+            destination: trip.destination,
+            description: trip.description,
+            startDate: trip.startDate,
+            endDate: trip.endDate,
+            owner: trip.owner,
+          },
+          formatDateRange(trip.startDate, trip.endDate)
+        );
+        
+        return (
+          <ImmoScoutTripCard
+            display={display}
+            onPress={() => handleTripPress(trip.id)}
+            onMessagePress={() => handleMessagePress(trip)}
+            isLoading={messageLoading === trip.id}
+          />
+        );
+      }
+    } catch (error) {
+      console.error('[HomeScreen] renderItem error:', error);
       return null;
-    }
-    
-    if (mode === 'shopper') {
-      const wish = item as Wish;
-      // 使用 UI 層適配器轉換資料
-      const display = normalizeWishForCard({
-        id: wish.id,
-        title: wish.title,
-        targetCountry: wish.targetCountry,
-        images: wish.images,
-        budget: wish.budget,
-        price: wish.price,
-        commission: wish.commission,
-        buyer: wish.buyer,
-        status: wish.status,
-      });
-      
-      return (
-        <ImmoScoutWishCard
-          display={display}
-          onPress={() => handleWishPress(wish.id)}
-          onMessagePress={() => handleWishMessagePress(wish)}
-          isLoading={messageLoading === wish.id}
-        />
-      );
-    } else {
-      const trip = item as Trip;
-      // 使用 UI 層適配器轉換資料
-      const display = normalizeTripForCard(
-        {
-          id: trip.id,
-          destination: trip.destination,
-          description: trip.description,
-          startDate: trip.startDate,
-          endDate: trip.endDate,
-          owner: trip.owner,
-        },
-        formatDateRange(trip.startDate, trip.endDate)
-      );
-      
-      return (
-        <ImmoScoutTripCard
-          display={display}
-          onPress={() => handleTripPress(trip.id)}
-          onMessagePress={() => handleMessagePress(trip)}
-          isLoading={messageLoading === trip.id}
-        />
-      );
     }
   }, [mode, handleWishPress, handleWishMessagePress, handleTripPress, handleMessagePress, messageLoading]);
 
