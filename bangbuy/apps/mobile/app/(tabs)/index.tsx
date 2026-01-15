@@ -33,7 +33,51 @@ import {
   normalizeTripForCard, 
   normalizeDiscoveryForCard 
 } from '@/src/ui/immo/immoAdapters';
-import { useDebugMount } from '@/src/lib/debugMount';
+
+// ============================================
+// 🔍 Release Crash 診斷：模塊頂層安全檢查
+// ============================================
+// 在組件外檢查所有可能 undefined 的導入
+const _checkImport = (name: string, fn: any) => {
+  if (typeof fn !== 'function') {
+    console.error(`[HomeScreen] CRITICAL: ${name} is not a function, got:`, typeof fn);
+    return false;
+  }
+  return true;
+};
+
+// 診斷標記：如果任何導入失敗，記錄到 console
+if (!__DEV__) {
+  console.log('[HomeScreen] Checking imports...');
+  _checkImport('normalizeWishForCard', normalizeWishForCard);
+  _checkImport('normalizeTripForCard', normalizeTripForCard);
+  _checkImport('normalizeDiscoveryForCard', normalizeDiscoveryForCard);
+  _checkImport('formatDateRange', formatDateRange);
+  _checkImport('getWishes', getWishes);
+  _checkImport('getTrips', getTrips);
+  _checkImport('getDiscoveries', getDiscoveries);
+  _checkImport('startChat', startChat);
+  console.log('[HomeScreen] Import check complete');
+}
+
+// ============================================
+// 🛡️ Safe Wrappers：確保函式存在，否則使用 fallback
+// ============================================
+const safeNormalizeWishForCard = typeof normalizeWishForCard === 'function' 
+  ? normalizeWishForCard 
+  : (wish: any) => ({ id: wish?.id || '', title: wish?.title || '', country: '', image: '', images: [], price: 0, priceFormatted: '', userName: '', status: '', statusText: '' });
+
+const safeNormalizeTripForCard = typeof normalizeTripForCard === 'function'
+  ? normalizeTripForCard
+  : (trip: any, dateRange?: string) => ({ id: trip?.id || '', destination: trip?.destination || '', description: '', dateRange: dateRange || '', ownerName: '', ownerAvatar: '', ownerInitial: '' });
+
+const safeNormalizeDiscoveryForCard = typeof normalizeDiscoveryForCard === 'function'
+  ? normalizeDiscoveryForCard
+  : (discovery: any) => ({ id: discovery?.id || '', title: discovery?.title || '', country: '', city: '', image: '', images: [], authorName: '', authorInitial: '', authorId: '' });
+
+const safeFormatDateRange = typeof formatDateRange === 'function'
+  ? formatDateRange
+  : (startDate?: string, endDate?: string) => startDate || '';
 
 /**
  * Home 頁面 - ImmoScout 風格 UI
@@ -64,12 +108,11 @@ import { useDebugMount } from '@/src/lib/debugMount';
  * ============================================
  */
 export default function HomeScreen() {
-  useDebugMount('HomeScreen');
   // ============================================
   // Release 驗證標記（僅在 Release 模式下可見）
   // ============================================
   if (!__DEV__) {
-    console.log('[HomeScreen] RELEASE_BUILD_2026_01_14 - HomeScreen loaded successfully');
+    console.log('[HomeScreen] RELEASE_BUILD_2026_01_16 - HomeScreen loaded successfully');
   }
   
   // Expo Router - 使用 useRouter hook 取得 router 實例
@@ -646,7 +689,7 @@ export default function HomeScreen() {
               return (
                 <View style={[immoStyles.discoveryCardWrapper, { width: cardWidth, marginRight: cardMargin }]}>
                   <ImmoScoutDiscoveryCard
-                    display={normalizeDiscoveryForCard(item)}
+                    display={safeNormalizeDiscoveryForCard(item)}
                     onPress={() => router.push(`/discovery/${item.id}`)}
                     onInterestPress={async () => {
                       // 使用現有的 handleDiscoveryInterestPress 邏輯
@@ -690,7 +733,7 @@ export default function HomeScreen() {
         }
 
         // 使用 UI 層適配器轉換資料
-        const display = normalizeWishForCard({
+        const display = safeNormalizeWishForCard({
           id: wish.id,
           title: wish.title,
           targetCountry: wish.targetCountry,
@@ -720,7 +763,7 @@ export default function HomeScreen() {
         }
 
         // 使用 UI 層適配器轉換資料
-        const display = normalizeTripForCard(
+        const display = safeNormalizeTripForCard(
           {
             id: trip.id,
             destination: trip.destination,
@@ -729,7 +772,7 @@ export default function HomeScreen() {
             endDate: trip.endDate,
             owner: trip.owner,
           },
-          formatDateRange(trip.startDate, trip.endDate)
+          safeFormatDateRange(trip.startDate, trip.endDate)
         );
         
         return (

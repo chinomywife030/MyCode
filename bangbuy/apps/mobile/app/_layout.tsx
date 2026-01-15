@@ -17,7 +17,6 @@ import { supabase } from '@/src/lib/supabase';
 import { checkIfFirstLaunch } from '@/src/lib/onboarding';
 import SplashAnimation from '@/components/SplashAnimation';
 import { UnreadCountProvider } from '@/components/unread/UnreadCountProvider';
-import { useDebugMount } from '@/src/lib/debugMount';
 
 // Build tag for TestFlight build identification
 const BUILD_TAG = "tf-regen-2026-01-14-01";
@@ -289,7 +288,6 @@ export const unstable_settings = {
 };
 
 export default function RootLayout() {
-  useDebugMount('RootLayout');
   const colorScheme = useColorScheme();
   const router = useRouter();
   const segments = useSegments();

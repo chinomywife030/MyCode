@@ -16,7 +16,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { useDebugMount } from '@/src/lib/debugMount';
 
 // Module-level guard (Singleton pattern for app session)
 let hasSplashPlayed = false;
@@ -130,7 +129,6 @@ interface SplashAnimationProps {
 }
 
 export default function App(props: SplashAnimationProps = {}) {
-  useDebugMount('SplashAnimation');
   const { onFinish } = props;
   // Headline animation
   const bangReveal = useRef(new Animated.Value(0)).current;
