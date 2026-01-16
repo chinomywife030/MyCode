@@ -1,10 +1,25 @@
 import { StyleSheet, FlatList, RefreshControl, View, Text, TouchableOpacity, Platform, Alert, Dimensions } from 'react-native';
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useRouter } from 'expo-router';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter, useFocusEffect as useRouterFocusEffect } from 'expo-router';
+// import { useFocusEffect } from '@react-navigation/native'; // Removed to avoid undefined crash
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as Notifications from 'expo-notifications';
+
+// ============================================
+// 🛡️ Safe Focus Effect Wrapper
+// ============================================
+// Prevents "undefined is not a function" crash in production if expo-router's export is missing
+const useSafeFocusEffect = (effect: () => void) => {
+  if (typeof useRouterFocusEffect === 'function') {
+    useRouterFocusEffect(effect);
+  } else {
+    // Safe fallback: behave like a normal useEffect on mount
+    useEffect(effect, []);
+  }
+};
+// ============================================
+
 import { getWishes, type Wish } from '@/src/lib/wishes';
 import { getTrips, formatDateRange, type Trip } from '@/src/lib/trips';
 import { getDiscoveries, type Discovery } from '@/src/lib/discoveries';
@@ -28,17 +43,17 @@ import { ImmoScoutFilterChips, defaultFilterChips } from '@/src/ui/immo/ImmoScou
 import { ImmoScoutWishCard, ImmoScoutWishCardSkeleton } from '@/src/ui/immo/ImmoScoutWishCard';
 import { ImmoScoutTripCard, ImmoScoutTripCardSkeleton } from '@/src/ui/immo/ImmoScoutTripCard';
 import { ImmoScoutDiscoveryCard } from '@/src/ui/immo/ImmoScoutDiscoveryCard';
-import { 
-  normalizeWishForCard, 
-  normalizeTripForCard, 
-  normalizeDiscoveryForCard 
+import {
+  normalizeWishForCard,
+  normalizeTripForCard,
+  normalizeDiscoveryForCard
 } from '@/src/ui/immo/immoAdapters';
 
 // ============================================
 // 🛡️ Safe Wrappers：確保函式存在，否則使用 fallback
 // ============================================
-const safeNormalizeWishForCard = typeof normalizeWishForCard === 'function' 
-  ? normalizeWishForCard 
+const safeNormalizeWishForCard = typeof normalizeWishForCard === 'function'
+  ? normalizeWishForCard
   : (wish: any) => ({ id: wish?.id || '', title: wish?.title || '', country: '', image: '', images: [], price: 0, priceFormatted: '', userName: '', status: '', statusText: '' });
 
 const safeNormalizeTripForCard = typeof normalizeTripForCard === 'function'
@@ -66,14 +81,14 @@ const safeFormatDateRange = typeof formatDateRange === 'function'
 export default function HomeScreen() {
   // Expo Router - 使用 useRouter hook 取得 router 實例
   const router = useRouter();
-  
+
   console.count('SCREEN_RENDER:index');
-  
+
   // ============================================
   // 模式狀態（預設為代購模式，與網站一致）
   // ============================================
   const [mode, setMode] = useState<Mode>('shopper');
-  
+
   // ✅ 包裝 setMode，避免 Release 模式下 useState setter 引用問題
   const handleModeChange = useCallback((newMode: Mode) => {
     if (typeof setMode === 'function') {
@@ -82,7 +97,7 @@ export default function HomeScreen() {
       console.error('[HomeScreen] setMode is not a function:', typeof setMode);
     }
   }, []);
-  
+
   // ============================================
   // 資料狀態（保持原有邏輯不變）
   // ============================================
@@ -92,7 +107,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // ============================================
   // UI 狀態
   // ============================================
@@ -132,13 +147,13 @@ export default function HomeScreen() {
         }
       }
       setError(null);
-      
+
       const statusValue = filters.status;
       let finalStatus: any = undefined;
       if (statusValue && statusValue !== 'all') {
         finalStatus = statusValue;
       }
-      
+
       const queryOptions = {
         keyword: searchQuery.trim() || undefined,
         country: filters.country,
@@ -149,7 +164,7 @@ export default function HomeScreen() {
         maxPrice: filters.maxPrice,
         isUrgent: filters.isUrgent,
       };
-      
+
       const data = await getWishes(queryOptions);
       setWishes(data);
     } catch (err) {
@@ -178,7 +193,7 @@ export default function HomeScreen() {
         });
       }
       setError(null);
-      
+
       const data = await getDiscoveries({ limit: 10 });
       // Debug log（驗收後可移除）
       console.log("[Discoveries] fetched:", data?.length, "error:", null);
@@ -206,7 +221,7 @@ export default function HomeScreen() {
         }
       }
       setError(null);
-      
+
       // 注意：filters.sortBy 是 wishes 的类型 ('newest' | 'price_low' | 'price_high')
       // 但 getTrips 需要 trips 的类型 ('newest' | 'date_asc' | 'date_desc')
       // 这里只处理 'newest'，其他值忽略
@@ -217,7 +232,7 @@ export default function HomeScreen() {
         keyword: searchQuery.trim() || undefined,
         sortBy: filters.sortBy === 'newest' ? 'newest' : undefined,
       };
-      
+
       const data = await getTrips(queryOptions);
       setTrips(data);
     } catch (err) {
@@ -258,8 +273,13 @@ export default function HomeScreen() {
     fetchDiscoveries(false);
   }, [mode, fetchWishes, fetchTrips, fetchDiscoveries]);
 
-  useFocusEffect(
+  // ✅ 使用 Safe Wrapper 替換 useFocusEffect
+  useSafeFocusEffect(
     useCallback(() => {
+      // 這裡的邏輯與原本一致：當 Focus 時重新 fetch
+      // 注意：為了避免過度 fetch，只有在需要時才強制刷新
+      // (原本的逻辑是在 render 里有 useEffect，这里是 focus 时的额外 fetch)
+      // 如果 useEffect 已经涵盖了 initial fetch，这里主要是为了从其他 tab 回来时更新
       if (mode === 'shopper') {
         fetchWishes(false);
       } else {
@@ -272,7 +292,7 @@ export default function HomeScreen() {
   const loadCurrentUser = async () => {
     const currentUser = await getCurrentUser();
     setUser(currentUser);
-    
+
     if (currentUser) {
       // 載入 profile 資料（包含 avatar_url）
       try {
@@ -349,7 +369,7 @@ export default function HomeScreen() {
               return;
             }
             const projectId = ConstantsModule.default.expoConfig?.extra?.eas?.projectId as string | undefined;
-            
+
             if (!projectId) {
               console.error('[HomeScreen] No projectId found in app.json');
               return;
@@ -357,7 +377,7 @@ export default function HomeScreen() {
 
             const tokenData = await Notifications.getExpoPushTokenAsync({ projectId });
             const token = tokenData.data;
-            
+
             // 上傳 Token 到 Server（非阻塞）
             try {
               const pushTokenModule = await import('@/src/lib/pushToken');
@@ -386,7 +406,7 @@ export default function HomeScreen() {
         console.error('[HomeScreen] Error in permission request flow:', error);
       }
     };
-    
+
     requestPermission();
   }, []);
 
@@ -534,8 +554,8 @@ export default function HomeScreen() {
           '登入後才能私訊作者',
           [
             { text: '取消', style: 'cancel' },
-            { 
-              text: '前往登入', 
+            {
+              text: '前往登入',
               onPress: () => router.push('/login')
             },
           ]
@@ -571,8 +591,8 @@ export default function HomeScreen() {
 
   const handleFilterChipPress = useCallback((chipId: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setActiveFilterChips(prev => 
-      prev.includes(chipId) 
+    setActiveFilterChips(prev =>
+      prev.includes(chipId)
         ? prev.filter(id => id !== chipId)
         : [...prev, chipId]
     );
@@ -601,7 +621,7 @@ export default function HomeScreen() {
           <Text style={immoStyles.sectionTitle}>旅途發現</Text>
           <Text style={immoStyles.sectionSubtitle}>看看大家發現了什麼</Text>
         </View>
-        
+
         {/* 水平 FlatList 使用新的 ImmoScoutDiscoveryCard */}
         <FlatList
           data={data}
@@ -623,7 +643,7 @@ export default function HomeScreen() {
                 console.warn('[HomeScreen] DiscoveriesSection renderItem: item is undefined at index', index);
                 return null;
               }
-              
+
               // SAFETY CHECK: 防止 normalizeDiscoveryForCard 未定義
               if (typeof normalizeDiscoveryForCard !== 'function') {
                 console.error('[HomeScreen] normalizeDiscoveryForCard is not a function');
@@ -668,10 +688,10 @@ export default function HomeScreen() {
         console.warn('[HomeScreen] renderItem: item is undefined at index', index);
         return null;
       }
-      
+
       if (mode === 'shopper') {
         const wish = item as Wish;
-        
+
         // SAFETY CHECK: 防止 normalizeWishForCard 未定義導致崩潰
         if (typeof normalizeWishForCard !== 'function') {
           console.error('[HomeScreen] normalizeWishForCard is not a function');
@@ -690,7 +710,7 @@ export default function HomeScreen() {
           buyer: wish.buyer,
           status: wish.status,
         });
-        
+
         return (
           <ImmoScoutWishCard
             display={display}
@@ -701,7 +721,7 @@ export default function HomeScreen() {
         );
       } else {
         const trip = item as Trip;
-        
+
         // SAFETY CHECK: 防止 normalizeTripForCard 未定義導致崩潰
         if (typeof normalizeTripForCard !== 'function') {
           console.error('[HomeScreen] normalizeTripForCard is not a function');
@@ -720,7 +740,7 @@ export default function HomeScreen() {
           },
           safeFormatDateRange(trip.startDate, trip.endDate)
         );
-        
+
         return (
           <ImmoScoutTripCard
             display={display}
@@ -772,17 +792,17 @@ export default function HomeScreen() {
     }
     return (
       <View style={immoStyles.emptyContainer}>
-        <Ionicons 
-          name={mode === 'shopper' ? 'basket-outline' : 'airplane-outline'} 
-          size={48} 
-          color={immoColors.textMuted} 
+        <Ionicons
+          name={mode === 'shopper' ? 'basket-outline' : 'airplane-outline'}
+          size={48}
+          color={immoColors.textMuted}
         />
         <Text style={immoStyles.emptyTitle}>
           {mode === 'shopper' ? '目前沒有需求' : '目前沒有行程'}
         </Text>
         <Text style={immoStyles.emptyText}>
-          {mode === 'shopper' 
-            ? '試試發布你的行程，讓需要的人找到你！' 
+          {mode === 'shopper'
+            ? '試試發布你的行程，讓需要的人找到你！'
             : '看看有沒有代購正要出國，直接私訊問問'}
         </Text>
       </View>
@@ -805,13 +825,13 @@ export default function HomeScreen() {
         <View style={immoStyles.roleSwitchContainer}>
           <RoleSwitch mode={mode} onChange={handleModeChange} />
         </View>
-        
+
         {/* Hero Banner */}
         {/* 代購（shopper）：橘色 | 買家（buyer）：藍色 */}
         <HeroBanner
           title={mode === 'shopper' ? '開始接單賺錢' : '快速找到代購'}
-          subtitle={mode === 'shopper' 
-            ? '發布你的行程，讓需要的人直接私訊你' 
+          subtitle={mode === 'shopper'
+            ? '發布你的行程，讓需要的人直接私訊你'
             : '看看誰近期要出國，直接私訊問能不能幫買'}
           buttonText={mode === 'shopper' ? '發布行程' : '發布需求'}
           onButtonPress={() => router.push(mode === 'shopper' ? '/trip/create' : '/create')}
@@ -866,7 +886,7 @@ export default function HomeScreen() {
         mode={mode}
         showBell={false}
       />
-      
+
       <FlatList
         // 移除 key={mode}，避免 mode 切換時整個 FlatList 重新 mount 導致 TextInput 失焦
         // 改用 extraData 來觸發重新渲染
@@ -885,8 +905,8 @@ export default function HomeScreen() {
         contentContainerStyle={filteredData.length === 0 ? immoStyles.emptyList : immoStyles.list}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={handleRefresh}
             tintColor={immoColors.primary}
           />
