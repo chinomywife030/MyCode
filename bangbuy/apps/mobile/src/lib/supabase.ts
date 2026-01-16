@@ -9,30 +9,44 @@ const supabaseKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUP
 // Fail-fast 檢查：確保環境變數已設定
 // ============================================
 // 這個檢查會在 App 啟動時立即執行，而不是等到 HomeScreen render 才報錯
+// ------------------------------------------------------------------
+// Defensive Configuration: Prevent Hard Crash
+// ------------------------------------------------------------------
+// Instead of throwing a fatal error and crashing the app on launch,
+// we log a critical warning and provide "dummy" credentials.
+// This allows the app to boot, and subsequent API calls will fail 
+// gracefully (caught by global error handlers) or show UI errors,
+// allowing the user to troubleshoot or at least see the Error Boundary.
+
+let validConfig = true;
+
 if (!supabaseUrl || !supabaseKey) {
+  validConfig = false;
   const errorMessage = `
 ============================================
-❌ 缺少 Supabase 環境變數
+⚠️ CRITICAL WARNING: Supabase Env Vars Missing
 ============================================
 
-請確保已設定以下環境變數：
+The app is running in "Defensive Mode" with dummy credentials.
+All Supabase calls WILL FAIL, but the app will not crash on launch.
+
+Please check:
   - EXPO_PUBLIC_SUPABASE_URL
   - EXPO_PUBLIC_SUPABASE_ANON_KEY
 
-設定方式：
-  1. 本地開發：在 apps/mobile/.env.local 中設定
-  2. EAS Build：在 EAS 網站的 Secrets 中設定，或在 eas.json 的 env 區塊設定
-
-目前讀取到的值：
-  - EXPO_PUBLIC_SUPABASE_URL: ${supabaseUrl ? '已設定' : '未設定'}
-  - EXPO_PUBLIC_SUPABASE_ANON_KEY: ${supabaseKey ? '已設定' : '未設定'}
+Values read:
+  - URL: ${supabaseUrl ? 'Set' : 'MISSING'}
+  - KEY: ${supabaseKey ? 'Set' : 'MISSING'}
 ============================================
 `;
   console.error(errorMessage);
-  throw new Error('Missing Supabase environment variables. See console for details.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
+// Use fallbacks to ensure createClient doesn't throw
+const finalUrl = supabaseUrl || 'https://placeholder.supabase.co';
+const finalKey = supabaseKey || 'placeholder-key';
+
+export const supabase = createClient(finalUrl, finalKey, {
   auth: {
     storage: AsyncStorage,
     autoRefreshToken: true,
