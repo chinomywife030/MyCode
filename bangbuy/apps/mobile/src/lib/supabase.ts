@@ -18,34 +18,59 @@ class SupabaseService {
   private _isConfigured: boolean = false;
 
   private constructor() {
-    const url = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-    const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+    // 1. Prioritize EXPO_PUBLIC_ vars (Standard for Expo 49+)
+    // 2. Note: process.env.EXPO_PUBLIC_* is statically replaced by Babel at build time.
+    //    We explicitly access them to ensure the bundler picks them up.
+    const rawUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+    const rawKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+
+    // 3. Robust Sanitization (Trim whitespace/newlines which cause "Invalid API Key")
+    const url = rawUrl.trim();
+    const key = rawKey.trim();
+
+    // 4. Safe Diagnostic Logging (Never log full secrets!)
+    console.log('[SupabaseService] Initializing...');
+    console.log(`[SupabaseService] URL provided: ${!!url} (Length: ${url.length})`);
+    console.log(`[SupabaseService] Key provided: ${!!key} (Length: ${key.length})`);
+
+    if (key.length > 5) {
+      console.log(`[SupabaseService] Key Prefix: ${key.substring(0, 5)}...`);
+    }
 
     if (url && key) {
-      this.client = createClient(url, key, {
-        auth: {
-          storage: AsyncStorage,
-          autoRefreshToken: true,
-          persistSession: true,
-          detectSessionInUrl: false,
-        },
-      });
-      this._isConfigured = true;
-      console.log('[SupabaseService] Initialized successfully.');
+      try {
+        this.client = createClient(url, key, {
+          auth: {
+            storage: AsyncStorage,
+            autoRefreshToken: true,
+            persistSession: true,
+            detectSessionInUrl: false,
+          },
+        });
+        this._isConfigured = true;
+        console.log('[SupabaseService] Client created successfully.');
+      } catch (e) {
+        console.error('[SupabaseService] Client creation failed:', e);
+        // Fallback below
+        this._isConfigured = false;
+        this.client = this.createFallbackClient();
+      }
     } else {
       console.warn('[SupabaseService] ⚠️ Missing Environment Variables. Running in Fallback Mode.');
-      // Initialize with dummy values so the app doesn't crash on `supabase.from(...)`
-      // Calls will simply fail with 404 or network errors, which the app handles safeley.
-      this.client = createClient('https://placeholder.supabase.co', 'placeholder-key', {
-        auth: {
-          storage: AsyncStorage,
-          autoRefreshToken: false,
-          persistSession: false,
-          detectSessionInUrl: false,
-        },
-      });
+      this.client = this.createFallbackClient();
       this._isConfigured = false;
     }
+  }
+
+  private createFallbackClient(): SupabaseClient {
+    return createClient('https://placeholder.supabase.co', 'placeholder-key-for-ui-safety', {
+      auth: {
+        storage: AsyncStorage,
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false,
+      },
+    });
   }
 
   public static getInstance(): SupabaseService {
