@@ -24,17 +24,25 @@ class SupabaseService {
     const rawUrl = process.env.EXPO_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
     const rawKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
-    // 3. Robust Sanitization (Trim whitespace/newlines which cause "Invalid API Key")
-    const url = rawUrl.trim();
-    const key = rawKey.trim();
+    // 3. Helper to sanitize input (Strip quotes ' " and trim whitespace/newlines)
+    const sanitize = (str: string) => str.replace(/^['"]|['"]$/g, '').trim();
+
+    const url = sanitize(rawUrl);
+    const key = sanitize(rawKey);
 
     // 4. Safe Diagnostic Logging (Never log full secrets!)
     console.log('[SupabaseService] Initializing...');
-    console.log(`[SupabaseService] URL provided: ${!!url} (Length: ${url.length})`);
-    console.log(`[SupabaseService] Key provided: ${!!key} (Length: ${key.length})`);
 
-    if (key.length > 5) {
+    // Debugging Hidden Characters: Print length and first/last char codes
+    if (key) {
+      console.log(`[SupabaseService] Key Length: ${key.length}`);
+      if (key.length > 0) {
+        console.log(`[SupabaseService] Key First Char Code: ${key.charCodeAt(0)}`);
+        console.log(`[SupabaseService] Key Last Char Code: ${key.charCodeAt(key.length - 1)}`);
+      }
       console.log(`[SupabaseService] Key Prefix: ${key.substring(0, 5)}...`);
+    } else {
+      console.error('[SupabaseService] ❌ Key is EMPTY after sanitization!');
     }
 
     if (url && key) {
