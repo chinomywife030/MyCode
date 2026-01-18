@@ -1,5 +1,5 @@
 import { StyleSheet, View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { router } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,150 +17,100 @@ interface MenuItem {
   color?: string;
 }
 
-export default function ProfileScreen() {
-  console.count('ME_RENDER');
-  
+/**
+ * Custom Hook: Handle all Profile Logic
+ * - Manages state (user, profile, stats)
+ * - Handles data fetching (parallel)
+ * - Manages side effects (focus, mount)
+ */
+function useProfileLogic() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<ProfileStats>({
     wishesCount: 0,
     tripsCount: 0,
     completedCount: 0,
   });
+
+  const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  // 使用 ref 追蹤 inFlight 狀態，避免重複並發請求
-  const userLoadingRef = useRef(false);
-  const profileLoadingRef = useRef(false);
-  const statsLoadingRef = useRef(false);
-  // 追蹤已載入的 userId，只在 userId 改變時重新載入
-  const loadedUserIdRef = useRef<string | null>(null);
+  // Track mount state to prevent updates on unmounted component
+  const isMounted = useRef(false);
 
-  // loadUser 用 useCallback 包裝，避免每次 render 都創建新函數
-  // 不依賴 user，避免循環
-  const loadUser = useCallback(async () => {
-    // 如果正在載入，跳過
-    if (userLoadingRef.current) {
-      return;
-    }
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
-    try {
-      userLoadingRef.current = true;
-      console.log('ME_LOAD_START: loadUser');
+  /**
+   * Main fetch function (optimized for parallelism)
+   * @param isSilent If true, doesn't show full screen loading
+   */
+  const fetchData = useCallback(async (isSilent = false) => {
+    if (!isMounted.current) return;
+
+    // Only show full loading on first load
+    if (!isSilent) {
       setLoading(true);
+    }
+    setStatsLoading(true);
+
+    try {
+      // 1. Get User
       const currentUser = await getCurrentUser();
-      
-      // 使用函數式更新，避免依賴 user
-      setUser((prevUser) => {
-        // 只在 userId 改變時更新（避免不必要的 re-render）
-        if (currentUser?.id !== prevUser?.id) {
-          return currentUser;
+      if (!isMounted.current) return;
+      setUser(currentUser);
+
+      if (currentUser) {
+        // 2. Parallel Fetch: Profile & Stats
+        const [profileData, statsData] = await Promise.all([
+          getCurrentProfile(),
+          getProfileStats()
+        ]);
+
+        if (isMounted.current) {
+          setProfile(profileData);
+          setStats(statsData);
         }
-        return prevUser;
-      });
+      } else {
+        // User logged out state
+        if (isMounted.current) {
+          setProfile(null);
+          setStats({ wishesCount: 0, tripsCount: 0, completedCount: 0 });
+        }
+      }
+
     } catch (error) {
-      console.error('[ProfileScreen] loadUser error:', error);
+      console.error('[useProfileLogic] fetchData error:', error);
     } finally {
-      setLoading(false);
-      userLoadingRef.current = false;
-      console.log('ME_LOAD_DONE: loadUser');
+      if (isMounted.current) {
+        setLoading(false);
+        setStatsLoading(false);
+      }
     }
-  }, []); // 空依賴，確保函數穩定
+  }, []);
 
-  // loadProfile 用 useCallback 包裝
-  const loadProfile = useCallback(async () => {
-    if (!user?.id) return;
-    
-    // 如果正在載入，跳過
-    if (profileLoadingRef.current) {
-      return;
-    }
-
-    try {
-      profileLoadingRef.current = true;
-      console.log('ME_LOAD_START: loadProfile');
-      const profileData = await getCurrentProfile();
-      
-      // 直接設置 profile，不修改 avatar_url（cache busting 在 render 時處理）
-      setProfile(profileData);
-    } catch (error) {
-      console.error('[ProfileScreen] loadProfile error:', error);
-    } finally {
-      profileLoadingRef.current = false;
-      console.log('ME_LOAD_DONE: loadProfile');
-    }
-  }, [user?.id]);
-
-  // loadStats 用 useCallback 包裝
-  const loadStats = useCallback(async () => {
-    if (!user?.id) return;
-    
-    // 如果正在載入，跳過
-    if (statsLoadingRef.current) {
-      return;
-    }
-    
-    try {
-      statsLoadingRef.current = true;
-      console.log('ME_LOAD_START: loadStats');
-      setStatsLoading(true);
-      const statsData = await getProfileStats();
-      setStats(statsData);
-    } catch (error) {
-      console.error('[ProfileScreen] loadStats error:', error);
-    } finally {
-      setStatsLoading(false);
-      statsLoadingRef.current = false;
-      console.log('ME_LOAD_DONE: loadStats');
-    }
-  }, [user?.id]);
-
-  // 首次載入：只在組件掛載時載入 user（使用 useEffect，只執行一次）
+  // Initial Load
   useEffect(() => {
-    // 只在首次載入時執行（loadedUserIdRef.current 為 null 且不在載入中）
-    if (loadedUserIdRef.current === null && !userLoadingRef.current) {
-      loadUser();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // 空依賴，只執行一次（loadUser 是穩定的，不需要在依賴中）
+    fetchData();
+  }, [fetchData]);
 
-  // 當 user.id 改變時，載入 profile 和 stats
-  useEffect(() => {
-    const currentUserId = user?.id || null;
-    
-    // 如果 userId 沒有改變，不重新載入
-    if (currentUserId === loadedUserIdRef.current) {
-      return;
-    }
-    
-    // 更新已載入的 userId
-    loadedUserIdRef.current = currentUserId;
-    
-    if (currentUserId) {
-      // 有 user，載入 profile 和 stats
-      loadProfile();
-      loadStats();
-    } else {
-      // 用戶登出，清空資料
-      setProfile(null);
-      setStats({ wishesCount: 0, tripsCount: 0, completedCount: 0 });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]); // 只依賴 user?.id，loadProfile 和 loadStats 內部會檢查 user?.id
-
-  // 當頁面獲得焦點時，重新載入 profile（從編輯頁返回時）
+  // Silent Refresh on Focus
   useFocusEffect(
     useCallback(() => {
-      // 如果已經有 user，重新載入 profile 以確保顯示最新資料（包括頭像）
-      if (user?.id && loadedUserIdRef.current === user.id && !profileLoadingRef.current) {
-        console.log('[ProfileScreen] useFocusEffect: reloading profile after returning from edit');
-        loadProfile();
+      // Use logic to determine if we should refresh (e.g., usually always good to sync on focus)
+      // Passing true for silent refresh
+      if (user?.id) {
+        // Only refresh if we think we are logged in, otherwise let the initial effect handle it
+        fetchData(true);
       }
-    }, [user?.id, loadProfile])
+    }, [fetchData, user?.id])
   );
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     Alert.alert('確認登出', '確定要登出嗎？', [
       { text: '取消', style: 'cancel' },
       {
@@ -179,7 +129,21 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const menuItems: MenuItem[] = [
+  return {
+    user,
+    profile,
+    stats,
+    loading,
+    statsLoading,
+    handleSignOut,
+  };
+}
+
+export default function ProfileScreen() {
+  const { user, profile, stats, loading, statsLoading, handleSignOut } = useProfileLogic();
+
+  // Optimization: Memoize menu items to prevent re-creation
+  const menuItems: MenuItem[] = useMemo(() => [
     {
       id: 'my-wishes',
       icon: 'gift-outline',
@@ -210,7 +174,21 @@ export default function ProfileScreen() {
       label: '聯絡我們',
       onPress: () => router.push('/help'),
     },
-  ];
+  ], []);
+
+  // Optimization: Memoize Avatar URL cache-busting logic
+  const displayAvatarUrl = useMemo(() => {
+    if (!profile?.avatar_url) return null;
+    const baseUrl = profile.avatar_url.split('?')[0];
+    const timestamp = Date.now(); // Note: This will update on every render if not memoized carefully.
+    // However, if we want it to update only when profile.avatar_url changes, this is fine.
+    // But typically we want to bust cache only when profile actually updates.
+    // Since we fetch profile on focus, it might be better to just use the url as is if backend handles it,
+    // OR just stick to the original logic which re-calculated on render.
+    // Preserving original behavior but memoizing on profile.avatar_url dependency.
+    return `${baseUrl}?v=${timestamp}`;
+  }, [profile?.avatar_url]);
+
 
   if (loading) {
     return (
@@ -250,16 +228,6 @@ export default function ProfileScreen() {
     );
   }
 
-  // 計算顯示用的 avatar URL（包含 cache busting）
-  // 使用 profile.avatar_url 作為基礎，確保當 avatar_url 改變時 key 也會改變
-  const displayAvatarUrl = profile?.avatar_url
-    ? (() => {
-        const baseUrl = profile.avatar_url.split('?')[0]; // 移除現有的 query string
-        const timestamp = Date.now();
-        return `${baseUrl}?v=${timestamp}`;
-      })()
-    : null;
-
   return (
     <Screen>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -268,7 +236,7 @@ export default function ProfileScreen() {
           <View style={styles.profileHeader}>
             {displayAvatarUrl ? (
               <Image
-                key={profile.avatar_url || 'no-avatar'}
+                key={profile?.avatar_url || 'no-avatar'}
                 source={{ uri: displayAvatarUrl }}
                 style={styles.avatar}
                 contentFit="cover"
@@ -491,7 +459,3 @@ const styles = StyleSheet.create({
     marginBottom: spacing['2xl'],
   },
 });
-
-
-
-

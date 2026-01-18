@@ -214,7 +214,9 @@ export default function HomeScreen() {
   const renderHeader = useMemo(() => (
     <View>
       <View style={styles.header}>
-        <RoleSwitch mode={mode} onModeChange={handleModeChange} />
+        <View style={{ flex: 1, paddingRight: 10 }}>
+          <RoleSwitch mode={mode} onModeChange={handleModeChange} />
+        </View>
         <TouchableOpacity style={styles.avatarButton} onPress={() => user ? router.push('/(tabs)/profile') : router.push('/login')}>
           <Ionicons name="person-circle-outline" size={32} color={colors.text.primary} />
         </TouchableOpacity>

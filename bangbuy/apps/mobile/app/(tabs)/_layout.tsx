@@ -37,27 +37,41 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: '#FF7A00', // Brand Orange
-        tabBarInactiveTintColor: '#9CA3AF',
+        tabBarInactiveTintColor: '#999999', // Grey
         headerShown: false,
         tabBarButton: HapticTab,
-        tabBarStyle: Platform.select({
-          ios: {
-            position: 'absolute',
-          },
-          default: {},
-        }),
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF',
+          borderTopColor: '#EEEEEE',
+          borderTopWidth: 1,
+          height: Platform.OS === 'ios' ? 88 : 60, // Ensure enough heigh for safe area
+          paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+          paddingTop: 8,
+          elevation: 0, // Remove Android shadow if using border
+        },
+        tabBarLabelStyle: {
+          fontSize: 10,
+          fontWeight: '500',
+        },
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: '首頁',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="trips"
+        options={{
+          title: '行程',
+          tabBarIcon: ({ color }) => <TabBarIcon name="airplane-outline" color={color} />,
         }}
       />
       <Tabs.Screen
         name="notifications"
         options={{
-          title: 'Notifications',
+          title: '通知',
           tabBarIcon: ({ color }) => (
             <NotificationIcon color={color} showDot={unreadNotificationsCount > 0} />
           ),
@@ -66,7 +80,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="messages"
         options={{
-          title: 'Messages',
+          title: '訊息',
           tabBarIcon: ({ color }) => (
             <IconWithBadge
               icon={<TabBarIcon name="chatbubbles-outline" color={color} />}
@@ -79,7 +93,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: '我的',
           tabBarIcon: ({ color }) => <TabBarIcon name="person-outline" color={color} />,
         }}
       />
