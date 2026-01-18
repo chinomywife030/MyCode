@@ -33,13 +33,23 @@ class SupabaseService {
     // 4. Safe Diagnostic Logging (Never log full secrets!)
     console.log('[SupabaseService] Initializing...');
 
-    // Debugging Hidden Characters: Print length and first/last char codes
+    // Determine which env var was used for logging purposes
+    let envVarName = 'UNKNOWN';
+    if (process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY) envVarName = 'EXPO_PUBLIC_SUPABASE_ANON_KEY';
+    else if (process.env.SUPABASE_ANON_KEY) envVarName = 'SUPABASE_ANON_KEY';
+
     if (key) {
+      console.log(`[SupabaseService] Key Source: ${envVarName}`);
       console.log(`[SupabaseService] Key Length: ${key.length}`);
+
+      const hasWhitespace = /\s/.test(key);
+      console.log(`[SupabaseService] Contains Whitespace/Newlines: ${hasWhitespace}`);
+
       if (key.length > 0) {
-        console.log(`[SupabaseService] Key First Char Code: ${key.charCodeAt(0)}`);
+        console.log(`[SupabaseService] Key First Char: ${key.charAt(0)}`);
         console.log(`[SupabaseService] Key Last Char Code: ${key.charCodeAt(key.length - 1)}`);
       }
+      // Safety: Only log a safe prefix
       console.log(`[SupabaseService] Key Prefix: ${key.substring(0, 5)}...`);
     } else {
       console.error('[SupabaseService] ❌ Key is EMPTY after sanitization!');

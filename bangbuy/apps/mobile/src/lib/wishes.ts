@@ -41,7 +41,32 @@ export async function getWishes(options?: {
   limit?: number;
 }): Promise<Wish[]> {
   ensureCoreInitialized();
-  return coreGetWishes(options);
+  try {
+    return await coreGetWishes(options);
+  } catch (error: any) {
+    console.error('[getWishes] Error:', error);
+
+    // Safety handling for UI
+    let errorMessage = '載入失敗';
+    if (error?.message?.includes('Invalid API key') || error?.status === 401 || error?.status === 403) {
+      errorMessage = '認證失敗/金鑰無效';
+    } else if (error?.message?.includes('Network request failed')) {
+      errorMessage = '網絡異常，請檢查連線';
+    } else if (error?.message) {
+      errorMessage = `載入錯誤: ${error.message}`;
+    }
+
+    // Non-crashing return or throw handled error
+    // Since the original signature is Promise<Wish[]>, returning empty array is safest to prevent crash,
+    // but the UI might need to know about the error.
+    // Assuming the UI handles empty array as "No items".
+    // Rethrowing a clean error might be better if the UI has an ErrorBoundary or try-catch.
+    // Based on the prompt "UI 不得崩溃", returning empty array might be safest immediate fix, but users won't see the error.
+    // BUT the screenshot shows error text! So the UI IS catching errors.
+    // I should throw a cleaner Error object.
+
+    throw new Error(errorMessage);
+  }
 }
 
 /**
