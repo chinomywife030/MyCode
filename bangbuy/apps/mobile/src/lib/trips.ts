@@ -55,28 +55,13 @@ export async function createTrip(params: CreateTripParams): Promise<CreateTripRe
 /**
  * 格式化日期範圍顯示
  */
+import { formatDateRange as safeFormatDateRange } from '@/src/utils/date';
+
+/**
+ * 格式化日期範圍顯示
+ */
 export function formatDateRange(startDate?: string, endDate?: string): string {
-  try {
-    if (!startDate) return '';
-    
-    // 簡單的安全實作，不依賴外部庫
-    const start = new Date(startDate);
-    if (isNaN(start.getTime())) return startDate;
-    
-    const startStr = `${start.getMonth() + 1}/${start.getDate()}`;
-    
-    if (!endDate) return startStr;
-    
-    const end = new Date(endDate);
-    if (isNaN(end.getTime())) return `${startStr} - ${endDate}`;
-    
-    const endStr = `${end.getMonth() + 1}/${end.getDate()}`;
-    return `${startStr} - ${endStr}`;
-  } catch (e) {
-    // 發生任何錯誤時返回原始字串或空字串，確保不崩潰
-    console.warn('[formatDateRange] Error formatting date:', e);
-    return startDate || '';
-  }
+  return safeFormatDateRange(startDate, endDate);
 }
 
 /**
@@ -195,9 +180,9 @@ export async function getMoments(options?: {
   limit?: number;
 }): Promise<TravelMoment[]> {
   ensureCoreInitialized();
-  
+
   const { supabase } = await import('./supabase');
-  
+
   try {
     let query = supabase
       .from('trip_moments')

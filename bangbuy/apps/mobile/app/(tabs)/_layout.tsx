@@ -54,11 +54,20 @@ export default function TabLayout() {
           fontWeight: '500',
         },
       }}>
+      {/* Hidden Index - Prevent it from showing up as a tab */}
       <Tabs.Screen
         name="index"
         options={{
-          title: '首頁',
-          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
+          href: null,
+        }}
+      />
+
+      {/* 5 Allowed Tabs */}
+      <Tabs.Screen
+        name="wishes"
+        options={{
+          title: '需求',
+          tabBarIcon: ({ color }) => <TabBarIcon name="gift-outline" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -66,13 +75,6 @@ export default function TabLayout() {
         options={{
           title: '行程',
           tabBarIcon: ({ color }) => <TabBarIcon name="airplane-outline" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="wishes"
-        options={{
-          title: '需求',
-          tabBarIcon: ({ color }) => <TabBarIcon name="gift-outline" color={color} />,
         }}
       />
       <Tabs.Screen

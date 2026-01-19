@@ -36,11 +36,7 @@ export function HeroBanner({
 
   // Defensive: Safe handler
   const handlePress = () => {
-    if (typeof onButtonPress === 'function') {
-      onButtonPress();
-    } else {
-      console.warn('[HeroBanner] onButtonPress is not defined or is not a function');
-    }
+    onButtonPress?.();
   };
 
   return (
