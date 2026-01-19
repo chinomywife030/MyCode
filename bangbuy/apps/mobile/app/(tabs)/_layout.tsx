@@ -69,6 +69,13 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="wishes"
+        options={{
+          title: '需求',
+          tabBarIcon: ({ color }) => <TabBarIcon name="gift-outline" color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="notifications"
         options={{
           title: '通知',
@@ -97,10 +104,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <TabBarIcon name="person-outline" color={color} />,
         }}
       />
-
-      {/* Hidden Routes */}
-      <Tabs.Screen name="_trips-page-content" options={{ href: null }} />
-      <Tabs.Screen name="_wishes-page-content" options={{ href: null }} />
     </Tabs>
   );
 }
