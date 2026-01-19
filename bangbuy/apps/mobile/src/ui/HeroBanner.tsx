@@ -8,28 +8,40 @@ interface HeroBannerProps {
   title: string;
   subtitle?: string;
   buttonText: string;
-  onButtonPress: () => void;
+  onButtonPress?: () => void;
   variant?: HeroBannerVariant;
 }
 
 /**
  * Hero Banner：支援橘色/藍色漸層背景，包含標題、副標題和白色圓角按鈕
  */
-export function HeroBanner({ 
-  title, 
+export function HeroBanner({
+  title,
   subtitle,
-  buttonText, 
-  onButtonPress, 
-  variant = 'orange' 
+  buttonText,
+  onButtonPress,
+  variant = 'orange'
 }: HeroBannerProps) {
-  console.count('HERO_RENDER');
-  const gradientColors = variant === 'blue' 
-    ? colors.brandBlueGradient 
-    : colors.brandOrangeGradient;
-  
-  const buttonTextColor = variant === 'blue' 
-    ? colors.brandBlue 
-    : colors.brandOrange;
+  // Defensive: Handle missing colors gracefully
+  const safeOrangeGradient = colors?.brandOrangeGradient || ['#FF7A00', '#FF9500'];
+  const safeBlueGradient = colors?.brandBlueGradient || ['#007AFF', '#00C6FF'];
+
+  const gradientColors = variant === 'blue'
+    ? safeBlueGradient
+    : safeOrangeGradient;
+
+  const buttonTextColor = variant === 'blue'
+    ? (colors?.brandBlue || '#007AFF')
+    : (colors?.brandOrange || '#FF7A00');
+
+  // Defensive: Safe handler
+  const handlePress = () => {
+    if (typeof onButtonPress === 'function') {
+      onButtonPress();
+    } else {
+      console.warn('[HeroBanner] onButtonPress is not defined or is not a function');
+    }
+  };
 
   return (
     <LinearGradient
@@ -39,10 +51,16 @@ export function HeroBanner({
       style={styles.container}
     >
       <View style={styles.content}>
-        <Text style={styles.title}>{title}</Text>
-        {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
-        <TouchableOpacity style={styles.button} onPress={onButtonPress} activeOpacity={0.8}>
-          <Text style={[styles.buttonText, { color: buttonTextColor }]}>{buttonText}</Text>
+        <Text style={styles.title}>{title || '標題'}</Text>
+        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        <TouchableOpacity
+          style={styles.button}
+          onPress={handlePress}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.buttonText, { color: buttonTextColor }]}>
+            {buttonText || '按鈕'}
+          </Text>
         </TouchableOpacity>
       </View>
     </LinearGradient>
