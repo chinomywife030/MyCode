@@ -1,85 +1,39 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { StyleSheet, FlatList, View, Text, TouchableOpacity, Alert, Dimensions, Platform } from 'react-native';
+import { StyleSheet, FlatList, View, Text, TouchableOpacity, Platform, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useIsFocused } from '@react-navigation/native'; // Standard Hook
+import { useIsFocused } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import * as Notifications from 'expo-notifications';
 
 // Libraries
 import { getWishes, type Wish } from '@/src/lib/wishes';
-import { getTrips, formatDateRange, type Trip } from '@/src/lib/trips';
 import { getDiscoveries, type Discovery } from '@/src/lib/discoveries';
-import { getNotificationPermission } from '@/src/lib/push';
 import { getCurrentUser } from '@/src/lib/auth';
-import { getCurrentProfile } from '@/src/lib/profile';
-import { supabaseService } from '@/src/lib/supabase'; // Use new service
-import { startChat } from '@/src/lib/chat';
+import { supabaseService } from '@/src/lib/supabase';
 
 // Components & UI
-import { Screen, TopBar, HeroBanner, SearchRow, WishCard, TripCard, StateView, FilterModal, type FilterOptions, type Mode } from '@/src/ui';
+import { Screen, TopBar, HeroBanner, SearchRow, WishCard, StateView, FilterModal, type FilterOptions } from '@/src/ui';
 import { RoleSwitch } from '@/src/components/RoleSwitch';
-import { colors } from '@/src/theme/tokens';
-import { QuickWishModal } from '@/src/components/QuickWishModal';
+import { colors, spacing, fontSize, fontWeight } from '@/src/theme/tokens';
 import { DiscoveryCard } from '@/src/components/DiscoveryCard';
-import { StableSearchBar } from '@/src/components/StableSearchBar';
-
-// ImmoScout UI
-import { immoColors } from '@/src/ui/immo/theme';
-import { ImmoScoutSearchBar } from '@/src/ui/immo/ImmoScoutSearchBar';
-import { ImmoScoutFilterChips } from '@/src/ui/immo/ImmoScoutFilterChips';
-import { ImmoScoutWishCard, ImmoScoutWishCardSkeleton } from '@/src/ui/immo/ImmoScoutWishCard';
-import { ImmoScoutTripCard, ImmoScoutTripCardSkeleton } from '@/src/ui/immo/ImmoScoutTripCard';
-import { ImmoScoutDiscoveryCard } from '@/src/ui/immo/ImmoScoutDiscoveryCard';
-import {
-  normalizeWishForCard,
-  normalizeTripForCard,
-  normalizeDiscoveryForCard
-} from '@/src/ui/immo/immoAdapters';
+import { type Mode } from '@/src/ui/ModeToggle';
 
 /**
  * ==================================================================================
- * SAFE ADAPTERS (Prevent invalid data crashes)
+ * HOME SCREEN (Restored Structure)
  * ==================================================================================
- */
-const safeNormalizeWishForCard = (wish: any) => {
-  try {
-    return normalizeWishForCard(wish);
-  } catch (e) {
-    return { id: wish?.id || 'error', title: 'Error loading item', country: '', image: '', images: [], price: 0, priceFormatted: '', userName: '', status: '', statusText: '' };
-  }
-};
-
-const safeNormalizeTripForCard = (trip: any, dateRange?: string) => {
-  try {
-    return normalizeTripForCard(trip, dateRange);
-  } catch (e) {
-    return { id: trip?.id || 'error', destination: 'Error', description: '', dateRange: '', ownerName: '', ownerAvatar: '', ownerInitial: '' };
-  }
-};
-
-const safeNormalizeDiscoveryForCard = (discovery: any) => {
-  try {
-    return normalizeDiscoveryForCard(discovery);
-  } catch (e) {
-    return { id: discovery?.id || 'error', title: 'Error', country: '', city: '', image: '', images: [], authorName: '', authorInitial: '', authorId: '' };
-  }
-};
-
-/**
- * ==================================================================================
- * HOME SCREEN (STABLE VERSION)
- * ==================================================================================
+ * - Agent Mode (shopper): Hero (Start Earning) + Hot Wishes
+ * - Buyer Mode (buyer): Discoveries + Trending Wishes
  */
 export default function HomeScreen() {
   const router = useRouter();
-  const isFocused = useIsFocused(); // Stable Focus tracking
+  const isFocused = useIsFocused();
 
   // State
-  const [mode, setMode] = useState<Mode>('shopper');
+  const [mode, setMode] = useState<Mode>('shopper'); // shopper = Agent (代購), buyer = Buyer (買家)
   const [wishes, setWishes] = useState<Wish[]>([]);
-  const [trips, setTrips] = useState<Trip[]>([]);
   const [discoveries, setDiscoveries] = useState<Discovery[]>([]);
+  const [user, setUser] = useState<any>(null);
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -90,41 +44,23 @@ export default function HomeScreen() {
   const [filters, setFilters] = useState<FilterOptions>({});
   const [filterModalVisible, setFilterModalVisible] = useState(false);
 
-  // User State
-  const [user, setUser] = useState<any>(null);
-  const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
-
-  /**
-   * Data Fetching - Wrapped in strict try/catch
-   */
+  // Load Data
   const loadData = useCallback(async (isRefresh = false) => {
-    if (!supabaseService.isConfigured()) {
-      setError("Configuration Missing");
-      setLoading(false);
-      return;
-    }
+    if (!supabaseService.isConfigured()) return;
 
     try {
       setError(null);
       if (isRefresh) setRefreshing(true);
-      else if (wishes.length === 0 && trips.length === 0) setLoading(true);
+      else if (wishes.length === 0) setLoading(true);
 
-      // 1. Fetch Main List
-      if (mode === 'shopper') {
-        const data = await getWishes({ keyword: searchQuery, ...filters });
-        setWishes(data || []);
-      } else {
-        const data = await getTrips({ keyword: searchQuery, sortBy: 'newest' }); // Simplified sort for stability
-        setTrips(data || []);
-      }
+      // Fetch Wishes (Used by both modes currently, or filtered)
+      const wishData = await getWishes({ keyword: searchQuery, ...filters });
+      setWishes(wishData || []);
 
-      // 2. Fetch Discoveries (Independent, safe)
-      try {
-        const discoveryData = await getDiscoveries({ limit: 10 });
+      // Fetch Discoveries (Only for Buyer typically, but safe to fetch)
+      if (mode === 'buyer') {
+        const discoveryData = await getDiscoveries({ limit: 5 });
         setDiscoveries(discoveryData || []);
-      } catch (discError) {
-        console.warn('Failed to load discoveries', discError);
-        // Do not block main content
       }
 
     } catch (err: any) {
@@ -134,33 +70,15 @@ export default function HomeScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [mode, searchQuery, filters]);
+  }, [mode, searchQuery, filters, wishes.length]);
 
-  /**
-   * Standard Effect for Focus & Mode Changes
-   * Replaces useFocusEffect
-   */
+  // Effects
   useEffect(() => {
-    if (isFocused) {
-      loadData();
-    }
+    if (isFocused) loadData();
   }, [isFocused, mode, loadData]);
 
-  // Load User once
   useEffect(() => {
-    const initUser = async () => {
-      try {
-        const u = await getCurrentUser();
-        setUser(u);
-        if (u) {
-          const p = await getCurrentProfile();
-          setCurrentUserProfile(p);
-        }
-      } catch (e) {
-        console.warn('User Init Error', e);
-      }
-    };
-    initUser();
+    getCurrentUser().then(setUser);
   }, []);
 
   // Handlers
@@ -168,136 +86,135 @@ export default function HomeScreen() {
 
   const handleModeChange = (newMode: Mode) => {
     setMode(newMode);
-    // Data load triggered by effect
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleWishPress = (id: string) => router.push(`/wish/${id}`);
-  const handleTripPress = (id: string) => router.push(`/trip/${id}`);
-
   const handleDiscoveryPress = (id: string) => router.push(`/discovery/${id}`);
+  const handleFilterPress = () => setFilterModalVisible(true);
+  const handlePostTrip = () => router.push('/trip/create');
 
-  /**
-   * UI: Discoveries Section
-   */
-  const DiscoveriesSection = useMemo(() => {
-    /* Only show if we have data */
-    if (!discoveries?.length) return null;
-
-    return (
-      <View style={{ marginBottom: 24 }}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Journey Finds</Text>
-        </View>
-        <FlatList
-          data={discoveries}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <View style={{ width: 300, marginRight: 16 }}>
-              <ImmoScoutDiscoveryCard
-                display={safeNormalizeDiscoveryForCard(item)}
-                onPress={() => handleDiscoveryPress(item.id)}
-                currentUserId={user?.id}
-              />
-            </View>
-          )}
-          contentContainerStyle={{ paddingHorizontal: 16 }}
-        />
-      </View>
-    );
-  }, [discoveries, user]);
-
-  /**
-   * UI: List Header
-   */
+  // Render Components
   const renderHeader = useMemo(() => (
-    <View>
-      <View style={styles.header}>
-        <View style={{ flex: 1, paddingRight: 10 }}>
-          <RoleSwitch mode={mode} onModeChange={handleModeChange} />
+    <View style={styles.headerContainer}>
+      {/* Top Bar with Role Switch */}
+      <View style={styles.topBar}>
+        <View style={styles.roleSwitchContainer}>
+          <RoleSwitch mode={mode} onChange={handleModeChange} />
         </View>
-        <TouchableOpacity style={styles.avatarButton} onPress={() => user ? router.push('/(tabs)/profile') : router.push('/login')}>
+        <TouchableOpacity
+          style={styles.avatarButton}
+          onPress={() => user ? router.push('/(tabs)/profile') : router.push('/login')}
+        >
           <Ionicons name="person-circle-outline" size={32} color={colors.text.primary} />
         </TouchableOpacity>
       </View>
 
-      <View style={styles.searchContainer}>
-        <ImmoScoutSearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery} // Debounce removed for simplicity/stability in this pass
-          placeholder={mode === 'shopper' ? "Search wishes..." : "Search trips..."}
-          onFilterPress={() => setFilterModalVisible(true)}
-        />
-      </View>
+      {/* AGENT HOME HERO */}
+      {mode === 'shopper' && (
+        <View style={{ marginBottom: spacing.md }}>
+          <HeroBanner
+            title="開始接單賺錢"
+            subtitle="發布你的行程，讓需要的人直接私訊你"
+            buttonText="發布行程"
+            onButtonPress={handlePostTrip}
+            variant="orange"
+          />
+        </View>
+      )}
 
-      {/* Discoveries Section */}
-      {DiscoveriesSection}
+      {/* Search Bar */}
+      <SearchRow
+        placeholder={mode === 'shopper' ? "搜尋目的地、商品..." : "搜尋需求..."}
+        value={searchQuery}
+        onChangeText={setSearchQuery}
+        onFilterPress={handleFilterPress}
+      />
 
-      <View style={styles.sectionHeader}>
+      {/* Helper Text */}
+      {mode === 'shopper' && (
+        <Text style={styles.hintText}>行程越清楚（城市/日期/可幫買品類）越容易成交</Text>
+      )}
+
+      {/* DISCOVERIES (Buyer Only) */}
+      {mode === 'buyer' && discoveries.length > 0 && (
+        <View style={styles.sectionContainer}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Journey Finds</Text>
+          </View>
+          <FlatList
+            data={discoveries}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={item => item.id}
+            contentContainerStyle={{ paddingHorizontal: spacing.lg }}
+            renderItem={({ item }) => (
+              <View style={{ width: 280, marginRight: spacing.md }}>
+                <DiscoveryCard
+                  id={item.id}
+                  title={item.title}
+                  image={item.image}
+                  country={item.country}
+                  city={item.city}
+                  authorName={item.authorName}
+                  authorAvatar={item.authorAvatar}
+                  onPress={() => handleDiscoveryPress(item.id)}
+                />
+              </View>
+            )}
+          />
+        </View>
+      )}
+
+      {/* Wishes Title */}
+      <View style={[styles.sectionHeader, { marginTop: spacing.xl }]}>
         <Text style={styles.sectionTitle}>
-          {mode === 'shopper' ? 'Trending Wishes' : 'Upcoming Trips'}
+          {mode === 'shopper' ? '熱門需求' : 'Trending Wishes'}
         </Text>
       </View>
     </View>
-  ), [mode, searchQuery, user, DiscoveriesSection]);
+  ), [mode, searchQuery, user, discoveries]);
 
-
-  /**
-   * UI: Render Item
-   */
-  const renderItem = ({ item }: { item: Wish | Trip }) => {
-    if (mode === 'shopper') {
-      const wish = item as Wish;
-      return (
-        <ImmoScoutWishCard
-          display={safeNormalizeWishForCard(wish)}
-          onPress={() => handleWishPress(wish.id)}
-        />
-      );
-    } else {
-      const trip = item as Trip;
-      return (
-        <ImmoScoutTripCard
-          display={safeNormalizeTripForCard(trip, formatDateRange(trip.startDate, trip.endDate))}
-          onPress={() => handleTripPress(trip.id)}
-        />
-      );
-    }
-  };
+  const renderItem = ({ item }: { item: Wish }) => (
+    <WishCard
+      id={item.id}
+      title={item.title}
+      country={item.targetCountry}
+      images={item.images}
+      budget={item.budget}
+      buyer={item.buyer}
+      status={item.status}
+      onPress={() => handleWishPress(item.id)}
+    />
+  );
 
   return (
     <Screen style={styles.container} preset="fixed">
       <FlatList
-        data={mode === 'shopper' ? wishes : trips}
+        data={wishes}
         renderItem={renderItem}
         keyExtractor={item => item.id}
         contentContainerStyle={{ paddingBottom: 100 }}
         ListHeaderComponent={renderHeader}
-        refreshing={refreshing}
-        onRefresh={handleRefresh}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+        }
         ListEmptyComponent={
-          loading ? (
-            <View style={{ padding: 20 }}>
-              <ImmoScoutWishCardSkeleton />
-              <ImmoScoutWishCardSkeleton />
-            </View>
-          ) : (
+          !loading ? (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No items found</Text>
-              {error && <Text style={{ color: 'red', marginTop: 10 }}>{error}</Text>}
+              <Text style={styles.emptyText}>暫無需求</Text>
             </View>
-          )
+          ) : <StateView type="loading" />
         }
       />
 
-      {/* Filter Modal */}
       <FilterModal
         visible={filterModalVisible}
         onClose={() => setFilterModalVisible(false)}
         onApply={(newFilters) => {
           setFilters(newFilters);
           setFilterModalVisible(false);
+          loadData(true);
         }}
         initialFilters={filters}
       />
@@ -310,36 +227,48 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#fff',
   },
-  header: {
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+  headerContainer: {
+    paddingBottom: spacing.sm,
+  },
+  topBar: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
-  searchContainer: {
-    paddingHorizontal: 16,
-    marginBottom: 20,
-  },
-  sectionHeader: {
-    paddingHorizontal: 16,
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+  roleSwitchContainer: {
+    flex: 1,
+    paddingRight: spacing.md,
   },
   avatarButton: {
     padding: 4,
   },
+  hintText: {
+    fontSize: fontSize.sm,
+    color: colors.textMuted,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+    marginTop: -spacing.sm,
+  },
+  sectionContainer: {
+    marginBottom: spacing.lg,
+  },
+  sectionHeader: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  sectionTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    color: colors.text,
+  },
   emptyContainer: {
+    padding: spacing.xl,
     alignItems: 'center',
-    padding: 40,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#666',
+    color: colors.textMuted,
+    fontSize: fontSize.md,
   },
 });
