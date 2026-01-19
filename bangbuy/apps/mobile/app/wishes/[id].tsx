@@ -24,11 +24,11 @@ import { ShippingHelpLink } from '@/src/components/ShippingHelpLink';
  */
 function openUrl(url: string) {
   let finalUrl = url.trim();
-  
+
   if (!finalUrl.match(/^https?:\/\//i)) {
     finalUrl = `https://${finalUrl}`;
   }
-  
+
   try {
     new URL(finalUrl);
     Linking.openURL(finalUrl).catch(() => {
@@ -50,11 +50,11 @@ export default function WishDetailScreen() {
   const [offersIsBuyer, setOffersIsBuyer] = useState(false);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  
+
   // 報價刷新狀態：避免重複請求
   const isFetchingOffersRef = useRef(false);
   const appStateRef = useRef(AppState.currentState);
-  
+
   // 報價 Modal 狀態
   const [offerModalVisible, setOfferModalVisible] = useState(false);
   const [offerPrice, setOfferPrice] = useState('');
@@ -96,7 +96,7 @@ export default function WishDetailScreen() {
         setNotFound(true);
       } else {
         setWish(data);
-        
+
         // Debug: 验证图片 URL
         if (data.images && data.images.length > 0) {
           console.log('[WishDetailScreen] Wish images URLs:', {
@@ -106,7 +106,7 @@ export default function WishDetailScreen() {
             // 提示：可以在浏览器中打开这些 URL 验证图片是否可访问
             // 如果无法访问，请检查 Supabase Storage RLS Policy
           });
-          
+
           data.images.forEach((url: string, index: number) => {
             const isValidUrl = url?.startsWith('http://') || url?.startsWith('https://');
             if (!isValidUrl) {
@@ -114,7 +114,7 @@ export default function WishDetailScreen() {
             }
           });
         }
-        
+
         refreshOffers();
       }
     } catch (err) {
@@ -134,39 +134,39 @@ export default function WishDetailScreen() {
       console.log('[WishDetail] refreshOffers skipped: no id');
       return;
     }
-    
+
     // 防重入保護：如果正在 fetch，直接返回
     if (isFetchingOffersRef.current) {
       console.log('[WishDetail] refreshOffers skipped: already fetching');
       return;
     }
-    
+
     const wishId = id as string;
     console.log(`[WishDetail] refreshOffers start wishId=${wishId}`);
-    
+
     try {
       isFetchingOffersRef.current = true;
       setOffersLoading(true);
-      
+
       // 使用 offers 表（與 Web 一致）
       const result = await getOffersForWish(wishId);
-      
+
       console.log(`[WishDetail] offers fetched:`, {
         success: result.success,
         count: result.offers.length,
         isBuyer: result.isBuyer,
         error: result.error,
       });
-      
+
       if (result.success) {
         setOffers(result.offers);
         setOffersIsBuyer(result.isBuyer || false);
-        
+
         // Debug: 輸出報價詳情
         if (result.offers.length > 0) {
           const amounts = result.offers.map(o => o.amount);
           console.log(`[WishDetail] offer amounts (first 5):`, amounts.slice(0, 5));
-          
+
           const latestOffer = result.offers[0];
           console.log(`[WishDetail] latest offer:`, {
             id: latestOffer.id,
@@ -176,7 +176,7 @@ export default function WishDetailScreen() {
             shopper_name: latestOffer.shopper_name,
           });
         }
-        
+
         console.log(`[WishDetail] refreshOffers completed: ${result.offers.length} offers`);
       } else {
         console.error('[WishDetail] refreshOffers failed:', result.error);
@@ -287,7 +287,7 @@ export default function WishDetailScreen() {
   // 處理報價按鈕點擊
   const handleOfferPress = async () => {
     if (!currentUser) {
-      const currentRoute = `/wish/${id}`;
+      const currentRoute = `/wishes/${id}`;
       navigateToRoute(currentRoute, true);
       return;
     }
@@ -297,7 +297,7 @@ export default function WishDetailScreen() {
   // 處理私訊按鈕點擊
   const handleMessagePress = async () => {
     if (!currentUser) {
-      const currentRoute = `/wish/${id}`;
+      const currentRoute = `/wishes/${id}`;
       navigateToRoute(currentRoute, true);
       return;
     }
@@ -353,7 +353,7 @@ export default function WishDetailScreen() {
         setOfferModalVisible(false);
         setOfferPrice('');
         setOfferMessage('');
-        
+
         // 刷新報價列表
         await refreshOffers();
 
@@ -397,7 +397,7 @@ export default function WishDetailScreen() {
           style: 'destructive',
           onPress: async () => {
             if (!wish?.id || deleting) return;
-            
+
             setDeleting(true);
             try {
               const result = await deleteWish(wish.id);

@@ -85,7 +85,7 @@ export default function MyTripsScreen() {
   const renderItem = ({ item }: { item: MyTrip }) => (
     <TouchableOpacity
       style={styles.tripItem}
-      onPress={() => router.push(`/trip/${item.id}`)}
+      onPress={() => router.push(`/trips/${item.id}`)}
       activeOpacity={0.7}
     >
       <View style={styles.tripContent}>
@@ -101,8 +101,8 @@ export default function MyTripsScreen() {
           {item.start_date || item.end_date
             ? formatDateRange(item.start_date, item.end_date)
             : item.date
-            ? new Date(item.date).toLocaleDateString('zh-TW')
-            : '未設定日期'}
+              ? new Date(item.date).toLocaleDateString('zh-TW')
+              : '未設定日期'}
         </Text>
         <Text style={styles.tripCreated}>
           發布於 {new Date(item.created_at).toLocaleDateString('zh-TW')}

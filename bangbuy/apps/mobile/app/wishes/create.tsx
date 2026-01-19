@@ -264,7 +264,7 @@ export default function CreateWishScreen() {
           text: '查看許願單',
           onPress: () => {
             if (result.wish) {
-              router.replace(`/wish/${result.wish.id}`);
+              router.replace(`/wishes/${result.wish.id}`);
             } else {
               router.back();
             }

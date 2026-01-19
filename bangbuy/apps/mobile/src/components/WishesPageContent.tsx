@@ -112,7 +112,7 @@ export function WishesPageContent() {
     };
 
     const handleWishPress = (wishId: string) => {
-        router.push(`/wish/${wishId}` as any);
+        router.push(`/wishes/${wishId}` as any);
     };
 
     const handleWishMessagePress = (wish: Wish) => {
@@ -213,7 +213,7 @@ export function WishesPageContent() {
                 title="找到可靠的代購"
                 subtitle="發布需求，讓在海外的代購者主動來報價"
                 buttonText="發布需求"
-                onButtonPress={() => router.push('/create')}
+                onButtonPress={() => router.push('/wishes/create')}
                 variant="orange"
             />
 

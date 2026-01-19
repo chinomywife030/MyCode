@@ -89,10 +89,10 @@ export default function HomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
-  const handleWishPress = (id: string) => router.push(`/wish/${id}`);
+  const handleWishPress = (id: string) => router.push(`/wishes/${id}`);
   const handleDiscoveryPress = (id: string) => router.push(`/discovery/${id}`);
   const handleFilterPress = () => setFilterModalVisible(true);
-  const handlePostTrip = () => router.push('/trip/create');
+  const handlePostTrip = () => router.push('/trips/create');
 
   // Render Components
   const renderHeader = useMemo(() => (

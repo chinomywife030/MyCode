@@ -110,7 +110,7 @@ export function TripsPageContent() {
     };
 
     const handleTripPress = (tripId: string) => {
-        router.push(`/trip/${tripId}` as any);
+        router.push(`/trips/${tripId}` as any);
     };
 
     const handleMessagePress = async (trip: Trip) => {
@@ -281,7 +281,7 @@ export function TripsPageContent() {
                 title="開始接單賺錢"
                 subtitle="發布你的行程，讓需要的人直接私訊你"
                 buttonText="發布行程"
-                onButtonPress={() => router.push('/trip/create')}
+                onButtonPress={() => router.push('/trips/create')}
                 variant="blue"
             />
 

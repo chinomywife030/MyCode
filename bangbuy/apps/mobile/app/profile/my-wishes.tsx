@@ -111,7 +111,7 @@ export default function MyWishesScreen() {
   const renderItem = ({ item }: { item: MyWish }) => (
     <TouchableOpacity
       style={styles.wishItem}
-      onPress={() => router.push(`/wish/${item.id}`)}
+      onPress={() => router.push(`/wishes/${item.id}`)}
       activeOpacity={0.7}
     >
       <View style={styles.wishContent}>
